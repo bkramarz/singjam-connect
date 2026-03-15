@@ -1,5 +1,7 @@
 import AuthPanel from "@/components/AuthPanel";
 
+export const dynamic = "force-dynamic";
+
 export default function AuthPage() {
   return (
     <div className="mx-auto max-w-md">
