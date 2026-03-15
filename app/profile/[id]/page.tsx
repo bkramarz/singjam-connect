@@ -1,8 +1,9 @@
 import { supabaseServer } from "@/lib/supabase/server";
 
-export default async function ProfilePage({ params }: { params: { id: string } }) {
+export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await supabaseServer();
-  const { data: p } = await supabase.from("profiles").select("*").eq("id", params.id).maybeSingle();
+  const { data: p } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
 
   return (
     <div className="space-y-4">

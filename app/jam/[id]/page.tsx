@@ -1,8 +1,9 @@
 import { supabaseServer } from "@/lib/supabase/server";
 
-export default async function JamPage({ params }: { params: { id: string } }) {
+export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await supabaseServer();
-  const { data: jam } = await supabase.from("jams").select("*").eq("id", params.id).maybeSingle();
+  const { data: jam } = await supabase.from("jams").select("*").eq("id", id).maybeSingle();
 
   return (
     <div className="space-y-4">
