@@ -96,11 +96,7 @@ export default function RepertoirePage() {
 
         if (error) {
           console.error("Repertoire load error:", error);
-          setErrorMsg(
-            [error.message, (error as any).details, (error as any).hint, (error as any).code]
-              .filter(Boolean)
-              .join(" | ")
-          );
+          setErrorMsg("Failed to load repertoire. Please try again.");
           setItems([]);
           return;
         }
@@ -120,7 +116,7 @@ export default function RepertoirePage() {
         setItems(flattened);
       } catch (e: any) {
         console.error("Repertoire load exception:", e);
-        setErrorMsg(e?.message ?? String(e));
+        setErrorMsg("Something went wrong. Please try again.");
         setItems([]);
       } finally {
         // release lock first so it can't get stuck true

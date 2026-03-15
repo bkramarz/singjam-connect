@@ -13,7 +13,9 @@ function AuthCallbackInner() {
     useEffect(() => {
         async function run() {
             const code = params.get("code");
-            const next = params.get("next") || "/onboarding";
+            const rawNext = params.get("next") ?? "";
+            // Only allow relative internal paths — prevent open redirect
+            const next = /^\/[^/]/.test(rawNext) ? rawNext : "/onboarding";
 
             // If there's a code, exchange it for a session
             if (code) {

@@ -48,7 +48,8 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     setLoading(false);
 
     if (error) {
-      setStatus(error.message);
+      console.error("Song search error:", error);
+      setStatus("Search failed. Please try again.");
       setResults([]);
       return;
     }
