@@ -27,7 +27,10 @@ export default function MatchesPage() {
         limit_n: 30,
       });
 
-      if (error) setError(error.message);
+      if (error) {
+        console.error("Matching error:", error);
+        setError("Could not load matches. Please try again.");
+      }
       setMatches((res as any[]) ?? []);
       setLoading(false);
     }
