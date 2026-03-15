@@ -105,7 +105,7 @@ export default function RepertoirePage() {
           return;
         }
 
-        const typed = (rows ?? []) as UserSongRow[];
+        const typed = (rows ?? []) as unknown as UserSongRow[];
         const flattened: Item[] = typed
           .filter((r) => r.songs)
           .map((r) => ({

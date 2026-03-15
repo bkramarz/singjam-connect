@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-export default function AuthCallbackPage() {
+function AuthCallbackInner() {
     const router = useRouter();
     const params = useSearchParams();
     const supabase = supabaseBrowser();
@@ -38,5 +38,13 @@ export default function AuthCallbackPage() {
         <div className="mx-auto max-w-md rounded-2xl border border-zinc-200 p-6 shadow-sm">
             <div className="text-sm text-zinc-700">{status}</div>
         </div>
+    );
+}
+
+export default function AuthCallbackPage() {
+    return (
+        <Suspense>
+            <AuthCallbackInner />
+        </Suspense>
     );
 }
