@@ -10,12 +10,10 @@ export default function TopNav() {
   const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    // Initial session check
     supabase.auth.getSession().then(({ data }) => {
       setSignedIn(!!data.session);
     });
 
-    // Live updates on auth changes
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setSignedIn(!!session);
     });
@@ -26,32 +24,34 @@ export default function TopNav() {
   }, [supabase]);
 
   return (
-    <nav className="flex items-center gap-3 text-sm">
-      <Link href="/songs" className="hover:underline">
+    <nav className="flex items-center gap-1 text-sm">
+      <Link href="/songs" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
         Songs
       </Link>
-      <Link href="/repertoire" className="hover:underline">
+      <Link href="/repertoire" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
         Repertoire
       </Link>
-      <Link href="/matches" className="hover:underline">
+      <Link href="/matches" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
         Find Jammers
       </Link>
-      <Link href="/jam/new" className="hover:underline">
+      <Link href="/jam/new" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
         Post a Jam
       </Link>
 
-      <span className="mx-1 text-zinc-300">|</span>
+      <div className="mx-2 h-4 w-px bg-slate-200" />
 
       {signedIn ? (
         <>
-          <Link href="/account" className="hover:underline">
+          <Link href="/account" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
             Account
           </Link>
-          <span className="text-zinc-300">·</span>
           <LogoutButton />
         </>
       ) : (
-        <Link href="/auth" className="hover:underline">
+        <Link
+          href="/auth"
+          className="rounded-lg bg-amber-500 px-3 py-1.5 font-medium text-white hover:bg-amber-600 transition-colors"
+        >
           Sign in
         </Link>
       )}
