@@ -13,15 +13,15 @@ export default function LogoutButton() {
       alert(error.message);
       return;
     }
-    router.refresh(); // ensures server-rendered auth state updates
-    router.push("/"); // or "/auth" if you prefer
+    router.refresh();
+    router.push("/");
   };
 
   return (
     <button
       type="button"
       onClick={onLogout}
-      className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors text-sm"
+      className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm"
     >
       Log out
     </button>

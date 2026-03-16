@@ -25,24 +25,24 @@ export default function TopNav() {
 
   return (
     <nav className="flex items-center gap-1 text-sm">
-      <Link href="/songs" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+      <Link href="/songs" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Songs
       </Link>
-      <Link href="/repertoire" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+      <Link href="/repertoire" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Repertoire
       </Link>
-      <Link href="/matches" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+      <Link href="/matches" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Find Jammers
       </Link>
-      <Link href="/jam/new" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+      <Link href="/jam/new" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Post a Jam
       </Link>
 
-      <div className="mx-2 h-4 w-px bg-slate-200" />
+      <div className="mx-2 h-4 w-px bg-slate-700" />
 
       {signedIn ? (
         <>
-          <Link href="/account" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <Link href="/account" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
             Account
           </Link>
           <LogoutButton />
@@ -50,7 +50,7 @@ export default function TopNav() {
       ) : (
         <Link
           href="/auth"
-          className="rounded-lg bg-amber-500 px-3 py-1.5 font-medium text-white hover:bg-amber-600 transition-colors"
+          className="rounded-lg bg-amber-500 px-3 py-1.5 font-medium text-white hover:bg-amber-400 transition-colors"
         >
           Sign in
         </Link>
