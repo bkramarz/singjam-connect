@@ -21,7 +21,6 @@ type Item = {
 
   title: string;
   display_artist: string | null;
-  tags: string[] | null;
 };
 
 type UserSongRow = {
@@ -30,8 +29,7 @@ type UserSongRow = {
   updated_at: string | null;
   songs: {
     title: string;
-    artist: string | null;
-    tags: string[] | null;
+    display_artist: string | null;
   } | null;
 };
 
@@ -84,8 +82,7 @@ export default function RepertoirePage() {
             updated_at,
             songs (
               title,
-              artist,
-              tags
+              display_artist
             )
           `
           )
@@ -109,8 +106,7 @@ export default function RepertoirePage() {
             confidence: r.confidence,
             updated_at: r.updated_at,
             title: r.songs!.title,
-            display_artist: r.songs!.artist,
-            tags: r.songs!.tags,
+            display_artist: r.songs!.display_artist,
           }));
 
         setItems(flattened);
@@ -144,7 +140,7 @@ export default function RepertoirePage() {
       if (!matchesConfidence) return false;
       if (!q) return true;
 
-      const hay = [it.title, it.display_artist ?? "", ...(it.tags ?? [])]
+      const hay = [it.title, it.display_artist ?? ""]
         .join(" ")
         .toLowerCase();
 
@@ -245,7 +241,7 @@ export default function RepertoirePage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search title / artist / tags…"
+              placeholder="Search title / artist…"
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
 
@@ -287,11 +283,6 @@ export default function RepertoirePage() {
                         {confidenceLabel(it.confidence)}
                       </span>
 
-                      {(it.tags ?? []).slice(0, 5).map((t) => (
-                        <span key={t} className="rounded-full border px-2 py-0.5">
-                          {t}
-                        </span>
-                      ))}
                     </div>
                   </div>
 
