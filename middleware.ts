@@ -27,7 +27,14 @@ export async function middleware(request: NextRequest) {
 
   // Refreshes the session token and writes updated cookies to the response.
   // Do not add logic between createServerClient and getUser.
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Protect /admin routes: must be signed in (is_admin checked in admin layout)
+  if (request.nextUrl.pathname.startsWith("/admin") && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }
