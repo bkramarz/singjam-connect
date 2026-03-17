@@ -210,6 +210,24 @@ alter table public.song_alternate_titles  enable row level security;
 alter table public.song_resources      enable row level security;
 
 -- Public read for all lookup and join tables
+drop policy if exists "read genres"               on public.genres;
+drop policy if exists "read themes"               on public.themes;
+drop policy if exists "read cultures"             on public.cultures;
+drop policy if exists "read languages"            on public.languages;
+drop policy if exists "read traditions"           on public.traditions;
+drop policy if exists "read people"               on public.people;
+drop policy if exists "read artists"              on public.artists;
+drop policy if exists "read song_genres"          on public.song_genres;
+drop policy if exists "read song_themes"          on public.song_themes;
+drop policy if exists "read song_cultures"        on public.song_cultures;
+drop policy if exists "read song_languages"       on public.song_languages;
+drop policy if exists "read song_traditions"      on public.song_traditions;
+drop policy if exists "read song_composers"       on public.song_composers;
+drop policy if exists "read song_lyricists"       on public.song_lyricists;
+drop policy if exists "read song_recording_artists" on public.song_recording_artists;
+drop policy if exists "read song_alternate_titles"  on public.song_alternate_titles;
+drop policy if exists "read song_resources"       on public.song_resources;
+
 create policy "read genres"               on public.genres              for select using (true);
 create policy "read themes"               on public.themes              for select using (true);
 create policy "read cultures"             on public.cultures            for select using (true);
@@ -231,6 +249,7 @@ create policy "read song_resources"       on public.song_resources      for sele
 
 -- ─────────────────────────────────────────
 -- Updated search_songs RPC
+drop function if exists public.search_songs(text, int);
 -- Searches: title, first_line, display_artist, alternate titles
 -- Supports trigram (partial match) + full-text scoring
 -- ─────────────────────────────────────────
