@@ -9,3 +9,7 @@ body {
 }
 
 a { @apply text-slate-900 no-underline; }
+
+.input {
+  @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400;
+}
