@@ -45,12 +45,17 @@ type Props = {
 
 type EnrichSuggestions = {
   musicbrainz?: {
+    title?: string;
     year?: number;
     display_artist?: string;
     languages?: string[];
     composers?: string[];
     lyricists?: string[];
     recording_artists?: string[];
+  };
+  wikidata?: {
+    composers?: string[];
+    lyricists?: string[];
   };
   spotify?: {
     popularity?: number;
@@ -151,6 +156,34 @@ export default function SongEditor({
     } finally {
       setEnriching(false);
     }
+  }
+
+  // Find or create a person/artist by canonical name, then toggle into the given set
+  async function applyPerson(
+    name: string,
+    table: "people" | "artists",
+    currentSet: Set<string>,
+    setFn: (s: Set<string>) => void,
+    allItems: Lookup[]
+  ) {
+    const normalised = name.trim().toLowerCase();
+    const existing = allItems.find((p) => p.name.toLowerCase() === normalised);
+    if (existing) {
+      const next = new Set(currentSet);
+      next.add(existing.id);
+      setFn(next);
+      return;
+    }
+    const { data, error } = await supabase
+      .from(table)
+      .insert({ name: name.trim() })
+      .select("id, name")
+      .single();
+    if (error) { setError(error.message); return; }
+    allItems.push(data);
+    const next = new Set(currentSet);
+    next.add(data.id);
+    setFn(next);
   }
 
   async function syncJoinTable(
@@ -307,6 +340,12 @@ export default function SongEditor({
             <div className="space-y-1">
               <div className="text-xs font-medium text-indigo-600 uppercase tracking-wide">MusicBrainz</div>
               <div className="flex flex-wrap gap-2">
+                {suggestions.musicbrainz.title && (
+                  <button onClick={() => setTitle(suggestions.musicbrainz!.title!)}
+                    className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100">
+                    Title: {suggestions.musicbrainz.title}
+                  </button>
+                )}
                 {suggestions.musicbrainz.year && (
                   <button onClick={() => setYear(suggestions.musicbrainz!.year!.toString())}
                     className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100">
@@ -325,6 +364,107 @@ export default function SongEditor({
                   </span>
                 ))}
               </div>
+              {!!suggestions.musicbrainz.composers?.length && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs text-indigo-500">Composers:</span>
+                  {suggestions.musicbrainz.composers.map((name) => {
+                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
+                      composers.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
+                    return (
+                      <button
+                        key={name}
+                        disabled={!!already}
+                        onClick={() => applyPerson(name, "people", composers, setComposers, allPeople)}
+                        className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100 disabled:opacity-40"
+                      >
+                        {already ? "✓ " : "+ "}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {!!suggestions.musicbrainz.lyricists?.length && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs text-indigo-500">Lyricists:</span>
+                  {suggestions.musicbrainz.lyricists.map((name) => {
+                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
+                      lyricists.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
+                    return (
+                      <button
+                        key={name}
+                        disabled={!!already}
+                        onClick={() => applyPerson(name, "people", lyricists, setLyricists, allPeople)}
+                        className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100 disabled:opacity-40"
+                      >
+                        {already ? "✓ " : "+ "}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {!!suggestions.musicbrainz.recording_artists?.length && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs text-indigo-500">Recording artists:</span>
+                  {suggestions.musicbrainz.recording_artists.map((name) => {
+                    const already = allArtists.find((a) => a.name.toLowerCase() === name.toLowerCase()) &&
+                      recordingArtists.has(allArtists.find((a) => a.name.toLowerCase() === name.toLowerCase())!.id);
+                    return (
+                      <button
+                        key={name}
+                        disabled={!!already}
+                        onClick={() => applyPerson(name, "artists", recordingArtists, setRecordingArtists, allArtists)}
+                        className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100 disabled:opacity-40"
+                      >
+                        {already ? "✓ " : "+ "}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {suggestions.wikidata && (suggestions.wikidata.composers?.length || suggestions.wikidata.lyricists?.length) && (
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-violet-600 uppercase tracking-wide">Wikidata</div>
+              {!!suggestions.wikidata.composers?.length && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-violet-500">Composers:</span>
+                  {suggestions.wikidata.composers.map((name) => {
+                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
+                      composers.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
+                    return (
+                      <button
+                        key={name}
+                        disabled={!!already}
+                        onClick={() => applyPerson(name, "people", composers, setComposers, allPeople)}
+                        className="rounded border border-violet-300 bg-white px-2 py-1 text-xs hover:bg-violet-100 disabled:opacity-40"
+                      >
+                        {already ? "✓ " : "+ "}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {!!suggestions.wikidata.lyricists?.length && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-violet-500">Lyricists:</span>
+                  {suggestions.wikidata.lyricists.map((name) => {
+                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
+                      lyricists.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
+                    return (
+                      <button
+                        key={name}
+                        disabled={!!already}
+                        onClick={() => applyPerson(name, "people", lyricists, setLyricists, allPeople)}
+                        className="rounded border border-violet-300 bg-white px-2 py-1 text-xs hover:bg-violet-100 disabled:opacity-40"
+                      >
+                        {already ? "✓ " : "+ "}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
