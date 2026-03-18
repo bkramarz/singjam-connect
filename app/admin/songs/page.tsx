@@ -13,9 +13,10 @@ export default async function AdminSongsPage({
   let query = supabase
     .from("songs")
     .select(`
-      id, title, display_artist, year, energy, difficulty, popularity,
+      id, title, display_artist, energy, difficulty, popularity,
       song_composers(people(name)),
-      song_lyricists(people(name))
+      song_lyricists(people(name)),
+      song_recording_artists(year)
     `)
     .order("title");
 
@@ -53,7 +54,7 @@ export default async function AdminSongsPage({
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Songwriters</th>
               <th className="px-4 py-3">Artist</th>
-              <th className="px-4 py-3">Year</th>
+              <th className="px-4 py-3">First recorded</th>
               <th className="px-4 py-3">E</th>
               <th className="px-4 py-3">D</th>
               <th className="px-4 py-3">Pop</th>
@@ -75,7 +76,14 @@ export default async function AdminSongsPage({
                   })()}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{s.display_artist ?? "—"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.year ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-500">{
+                  (() => {
+                    const years = (s.song_recording_artists ?? [])
+                      .map((r: any) => r.year)
+                      .filter((y: any): y is number => typeof y === "number");
+                    return years.length ? Math.min(...years) : "—";
+                  })()
+                }</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.energy ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.difficulty ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.popularity ?? "—"}</td>
