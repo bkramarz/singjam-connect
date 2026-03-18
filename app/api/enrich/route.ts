@@ -38,7 +38,7 @@ async function fetchMBWorkArtists(workId: string): Promise<{ name: string; year:
       seen.add(e.name.toLowerCase());
       result.push(e);
     }
-    if (result.length >= 3) break;
+    if (result.length >= 5) break;
   }
 
   return result;
