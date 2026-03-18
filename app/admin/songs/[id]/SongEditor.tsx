@@ -244,7 +244,9 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const mb = data.musicbrainz as { topArtists?: { name: string; year: number | null }[] } | null;
+      const mb = data.musicbrainz as { year?: number; topArtists?: { name: string; year: number | null }[] } | null;
+
+      if (mb?.year) setYear(mb.year.toString());
 
       if (mb?.topArtists?.length) {
         for (const artist of mb.topArtists) {
@@ -553,6 +555,10 @@ export default function SongEditor({
           <Field label="Hook / excerpt" className="sm:col-span-2">
             <input value={hook} onChange={(e) => setHook(e.target.value)}
               className="input" placeholder="Memorable lyric excerpt" />
+          </Field>
+          <Field label="Year">
+            <input type="number" value={year} onChange={(e) => setYear(e.target.value)}
+              className="input" placeholder="e.g. 1965" />
           </Field>
           <Field label="Tonality">
             <input value={tonality} onChange={(e) => setTonality(e.target.value)}
