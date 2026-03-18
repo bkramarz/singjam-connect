@@ -162,21 +162,22 @@ export default function SongEditor({
         year?: number;
         composers?: string[];
         lyricists?: string[];
+        topArtists?: { name: string; year: number | null }[];
       } | null;
 
       setStandardizedTitle(mb?.title ?? data.spotify?.title ?? title);
       setStandardizedArtist(mb?.display_artist ?? data.spotify?.artist ?? displayArtist);
 
-      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number; topArtists?: { name: string; year: number | null }[] } | null;
+      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number } | null;
 
       // Prefer SHS year — it tracks the earliest known recording
       const bestYear = shs?.year ?? mb?.year;
       if (bestYear) setYear(bestYear.toString());
 
-      // Resolve top artists from SHS into recording artist entries
-      if (shs?.topArtists?.length) {
+      // Resolve top artists from MB work recordings
+      if (mb?.topArtists?.length) {
         const entries: { id: string; year: number | null }[] = [];
-        for (const artist of shs.topArtists) {
+        for (const artist of (mb.topArtists as { name: string; year: number | null }[])) {
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) entries.push({ id: artistId, year: artist.year });
         }
@@ -270,10 +271,11 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const shs = data.secondhandsongs as { year?: number; topArtists?: { name: string; year: number | null }[] } | null;
+      const mb = data.musicbrainz as { topArtists?: { name: string; year: number | null }[] } | null;
+      const shs = data.secondhandsongs as { year?: number } | null;
 
-      if (shs?.topArtists?.length) {
-        for (const artist of shs.topArtists) {
+      if (mb?.topArtists?.length) {
+        for (const artist of mb.topArtists) {
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) {
             setRecordingArtists((prev) => {

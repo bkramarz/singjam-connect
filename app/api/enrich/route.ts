@@ -9,6 +9,41 @@ const MB_HEADERS = {
 
 type WorkData = { composers: string[]; lyricists: string[]; languages: string[] };
 
+async function fetchMBWorkArtists(workId: string): Promise<{ name: string; year: number | null }[]> {
+  const res = await fetch(
+    `https://musicbrainz.org/ws/2/recording?work=${workId}&inc=artist-credits&fmt=json&limit=100`,
+    { headers: MB_HEADERS }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+
+  const seen = new Set<string>();
+  const result: { name: string; year: number | null }[] = [];
+
+  const sorted = (data.recordings ?? [])
+    .map((r: any) => ({
+      name: (r["artist-credit"] ?? []).map((ac: any) => ac.artist?.name).filter(Boolean).join(" & "),
+      year: r["first-release-date"] ? parseInt(r["first-release-date"].slice(0, 4)) : null,
+    }))
+    .filter((e: any) => e.name)
+    .sort((a: any, b: any) => {
+      if (a.year === null && b.year === null) return 0;
+      if (a.year === null) return 1;
+      if (b.year === null) return -1;
+      return a.year - b.year;
+    });
+
+  for (const e of sorted) {
+    if (!seen.has(e.name.toLowerCase())) {
+      seen.add(e.name.toLowerCase());
+      result.push(e);
+    }
+    if (result.length >= 3) break;
+  }
+
+  return result;
+}
+
 async function fetchMBWorkData(workId: string): Promise<WorkData> {
   const res = await fetch(
     `https://musicbrainz.org/ws/2/work/${workId}?inc=artist-rels&fmt=json`,
@@ -81,8 +116,10 @@ async function enrichMusicBrainz(title: string, artist: string) {
   let workData: WorkData = { composers: [], lyricists: [], languages: [] };
   const workRel = (rec.relations ?? []).find((r: any) => r["target-type"] === "work");
 
+  let workId: string | undefined;
   if (workRel?.work?.id) {
-    workData = await fetchMBWorkData(workRel.work.id);
+    workId = workRel.work.id;
+    workData = await fetchMBWorkData(workId!);
   } else {
     // Fallback: search works directly by title — covers songs without recording→work links
     const workQ = artist
@@ -96,10 +133,13 @@ async function enrichMusicBrainz(title: string, artist: string) {
       const workSearchData = await workSearchRes.json();
       const bestWork = (workSearchData.works ?? []).find((w: any) => (w.score ?? 0) >= 80);
       if (bestWork?.id) {
-        workData = await fetchMBWorkData(bestWork.id);
+        workId = bestWork.id;
+        workData = await fetchMBWorkData(workId!);
       }
     }
   }
+
+  const topArtists = workId ? await fetchMBWorkArtists(workId) : [];
 
   return {
     title: rec.title as string | undefined,
@@ -109,6 +149,7 @@ async function enrichMusicBrainz(title: string, artist: string) {
     composers: workData.composers,
     lyricists: workData.lyricists,
     recording_artists: recordingArtists,
+    topArtists,
   };
 }
 
@@ -162,57 +203,17 @@ async function enrichSecondHandSongs(title: string, artist: string) {
   console.log("[SHS] versions URL:", versionsUrl);
   const versionsRes = await fetch(versionsUrl, { headers: SHS_HTML_HEADERS });
   let year: number | undefined;
-  const topArtists: { name: string; year: number | null }[] = [];
-
   if (versionsRes.ok) {
     const versionsHtml = await versionsRes.text();
-
-    // Meta description gives us the first recorded artist + year reliably
     const metaMatch = versionsHtml.match(/first released by (.+?) in (\d{4})/);
-    if (metaMatch) {
-      year = parseInt(metaMatch[2]);
-    }
-
-    // Parse artist links from the versions list, take up to 3 unique performers
-    const seenNames = new Set<string>();
-    const artistLinkRe = /href="\/artist\/\d+"[^>]*>([^<]+)<\/a>/g;
-    let am: RegExpExecArray | null;
-    while ((am = artistLinkRe.exec(versionsHtml)) !== null) {
-      const name = am[1].trim();
-      if (seenNames.has(name.toLowerCase())) continue;
-      seenNames.add(name.toLowerCase());
-      // Look for a 4-digit year in the 200 chars following the artist link
-      const after = versionsHtml.slice(am.index + am[0].length, am.index + am[0].length + 200);
-      const yearM = after.match(/\b(19|20)\d{2}\b/);
-      topArtists.push({ name, year: yearM ? parseInt(yearM[0]) : null });
-      if (topArtists.length >= 3) break;
-    }
-
-    // If meta firstRecordedBy isn't already first in the list, prepend it with the reliable year
-    if (metaMatch) {
-      const metaName = metaMatch[1].trim();
-      const existingIdx = topArtists.findIndex((a) => a.name.toLowerCase() === metaName.toLowerCase());
-      if (existingIdx > 0) {
-        // Move to front and attach the meta year
-        const [entry] = topArtists.splice(existingIdx, 1);
-        topArtists.unshift({ ...entry, year: year ?? entry.year });
-      } else if (existingIdx === -1) {
-        topArtists.unshift({ name: metaName, year: year ?? null });
-        if (topArtists.length > 3) topArtists.pop();
-      } else {
-        // Already first — just ensure meta year is used
-        topArtists[0] = { ...topArtists[0], year: year ?? topArtists[0].year };
-      }
-    }
-
+    if (metaMatch) year = parseInt(metaMatch[2]);
     console.log("[SHS] meta match:", metaMatch?.[0] ?? "no match");
-    console.log("[SHS] topArtists:", topArtists);
   }
 
   console.log("[SHS] search match:", { uri: match.uri, title: match.title });
   console.log("[SHS] composers:", composers, "lyricists:", lyricists);
 
-  return composers.length || lyricists.length ? { composers, lyricists, year, topArtists } : null;
+  return composers.length || lyricists.length ? { composers, lyricists, year } : null;
 }
 
 
