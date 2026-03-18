@@ -115,6 +115,8 @@ export default function SongEditor({
   // New-song chunk-1 state
   const [finding, setFinding] = useState(false);
   const [found, setFound] = useState(false);
+  const [standardizedTitle, setStandardizedTitle] = useState("");
+  const [standardizedArtist, setStandardizedArtist] = useState("");
   const [newComposerName, setNewComposerName] = useState("");
   const [newLyricistName, setNewLyricistName] = useState("");
   const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
@@ -154,8 +156,11 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const mb = data.musicbrainz as { composers?: string[]; lyricists?: string[] } | null;
+      const mb = data.musicbrainz as { title?: string; display_artist?: string; composers?: string[]; lyricists?: string[] } | null;
       const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[] } | null;
+
+      setStandardizedTitle(mb?.title ?? title);
+      setStandardizedArtist(mb?.display_artist ?? displayArtist);
 
       const mbComposers = mb?.composers ?? [];
       const shsComposers = shs?.composers ?? [];
@@ -204,7 +209,8 @@ export default function SongEditor({
       const { data, error } = await supabase
         .from("songs")
         .insert({
-          title: title.trim(),
+          title: (standardizedTitle || title).trim(),
+          display_artist: (standardizedArtist || displayArtist).trim() || null,
           updated_at: new Date().toISOString(),
         })
         .select("id")
@@ -420,6 +426,16 @@ export default function SongEditor({
 
         {found && (
           <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Standardized title">
+                <input value={standardizedTitle} onChange={(e) => setStandardizedTitle(e.target.value)}
+                  className="input" />
+              </Field>
+              <Field label="Standardized artist">
+                <input value={standardizedArtist} onChange={(e) => setStandardizedArtist(e.target.value)}
+                  className="input" />
+              </Field>
+            </div>
             <PeopleField
               label="Composers"
               items={composerItems}
