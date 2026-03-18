@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import Link from "next/link";
+import DeleteSongButton from "./DeleteSongButton";
 
 export default async function AdminSongsPage({
   searchParams,
@@ -11,7 +12,11 @@ export default async function AdminSongsPage({
 
   let query = supabase
     .from("songs")
-    .select("id, title, display_artist, year, energy, difficulty, popularity")
+    .select(`
+      id, title, display_artist, year, energy, difficulty, popularity,
+      song_composers(people(name)),
+      song_lyricists(people(name))
+    `)
     .order("title");
 
   if (q) {
@@ -46,6 +51,7 @@ export default async function AdminSongsPage({
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-medium text-slate-500">
               <th className="px-4 py-3">Title</th>
+              <th className="px-4 py-3">Songwriters</th>
               <th className="px-4 py-3">Artist</th>
               <th className="px-4 py-3">Year</th>
               <th className="px-4 py-3">E</th>
@@ -58,24 +64,37 @@ export default async function AdminSongsPage({
             {(songs ?? []).map((s) => (
               <tr key={s.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2.5 font-medium text-slate-900">{s.title}</td>
+                <td className="px-4 py-2.5 text-slate-500">
+                  {(() => {
+                    const names = new Set<string>([
+                      ...(s.song_composers ?? []).map((c: any) => c.people?.name).filter(Boolean),
+                      ...(s.song_lyricists ?? []).map((l: any) => l.people?.name).filter(Boolean),
+                    ]);
+                    const sorted = [...names].sort();
+                    return sorted.length ? sorted.join(", ") : "—";
+                  })()}
+                </td>
                 <td className="px-4 py-2.5 text-slate-500">{s.display_artist ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.year ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.energy ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.difficulty ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{s.popularity ?? "—"}</td>
                 <td className="px-4 py-2.5">
-                  <Link
-                    href={`/admin/songs/${s.id}`}
-                    className="text-amber-600 hover:text-amber-500"
-                  >
-                    Edit
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/admin/songs/${s.id}`}
+                      className="text-amber-600 hover:text-amber-500"
+                    >
+                      Edit
+                    </Link>
+                    <DeleteSongButton id={s.id} />
+                  </div>
                 </td>
               </tr>
             ))}
             {!songs?.length && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                   {q ? "No songs match that search." : "No songs yet."}
                 </td>
               </tr>
