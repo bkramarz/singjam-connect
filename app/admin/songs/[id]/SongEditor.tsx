@@ -176,8 +176,11 @@ export default function SongEditor({
 
       // Resolve top artists from MB work recordings
       if (mb?.topArtists?.length) {
+        const artists = (mb.topArtists as { name: string; year: number | null }[]).map((a, i) =>
+          i === 0 && shs?.year ? { ...a, year: shs.year } : a
+        );
         const entries: { id: string; year: number | null }[] = [];
-        for (const artist of (mb.topArtists as { name: string; year: number | null }[])) {
+        for (const artist of artists) {
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) entries.push({ id: artistId, year: artist.year });
         }
@@ -275,7 +278,11 @@ export default function SongEditor({
       const shs = data.secondhandsongs as { year?: number } | null;
 
       if (mb?.topArtists?.length) {
-        for (const artist of mb.topArtists) {
+        // SHS year is the official first-release year — more reliable than MB for the earliest artist
+        const artists = mb.topArtists.map((a, i) =>
+          i === 0 && shs?.year ? { ...a, year: shs.year } : a
+        );
+        for (const artist of artists) {
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) {
             setRecordingArtists((prev) => {
