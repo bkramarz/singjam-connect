@@ -27,7 +27,7 @@ type Song = {
   song_traditions: { tradition_id: string }[];
   song_composers: { person_id: string }[];
   song_lyricists: { person_id: string }[];
-  song_recording_artists: { artist_id: string }[];
+  song_recording_artists: { artist_id: string; year: number | null }[];
   song_alternate_titles: AltTitle[];
 };
 
@@ -43,29 +43,24 @@ type Props = {
   allArtists: Lookup[];
 };
 
-type EnrichSuggestions = {
-  musicbrainz?: {
-    title?: string;
-    year?: number;
-    display_artist?: string;
-    languages?: string[];
-    composers?: string[];
-    lyricists?: string[];
-    recording_artists?: string[];
-  };
-  wikidata?: {
-    composers?: string[];
-    lyricists?: string[];
-  };
+type OptionalSuggestions = {
   spotify?: {
     popularity?: number;
     energy?: number;
-    genres?: string[];
   };
   genius?: {
     first_line?: string;
     lyrics_url?: string;
   };
+};
+
+type Applied = {
+  title?: string;
+  displayArtist?: string;
+  year?: number;
+  composers: string[];
+  lyricists: string[];
+  recordingArtists: string[];
 };
 
 function toSet(ids: string[]) {
@@ -115,15 +110,18 @@ export default function SongEditor({
   const [traditions, setTraditions] = useState<Set<string>>(
     toSet(song?.song_traditions.map((x) => x.tradition_id) ?? [])
   );
-  const [composers, setComposers] = useState<Set<string>>(
-    toSet(song?.song_composers.map((x) => x.person_id) ?? [])
-  );
+  const initialComposerIds = song?.song_composers.map((x) => x.person_id) ?? [];
+  const initialLyricistIds = song?.song_lyricists.map((x) => x.person_id) ?? [];
+  const [composers, setComposers] = useState<Set<string>>(toSet(initialComposerIds));
   const [lyricists, setLyricists] = useState<Set<string>>(
-    toSet(song?.song_lyricists.map((x) => x.person_id) ?? [])
+    toSet(initialLyricistIds.length ? initialLyricistIds : initialComposerIds)
   );
-  const [recordingArtists, setRecordingArtists] = useState<Set<string>>(
-    toSet(song?.song_recording_artists.map((x) => x.artist_id) ?? [])
-  );
+  type RecordingArtistEntry = { id: string; year: number | null };
+  const initialRecordingArtistEntries: RecordingArtistEntry[] = song?.song_recording_artists.map((x) => ({ id: x.artist_id, year: x.year })) ?? [];
+  const seededRecordingArtistEntries: RecordingArtistEntry[] = initialRecordingArtistEntries.length
+    ? initialRecordingArtistEntries
+    : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null }));
+  const [recordingArtists, setRecordingArtists] = useState<RecordingArtistEntry[]>(seededRecordingArtistEntries);
 
   // Alternate titles
   const [altTitles, setAltTitles] = useState<AltTitle[]>(song?.song_alternate_titles ?? []);
@@ -132,8 +130,18 @@ export default function SongEditor({
   // UI state
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [enriching, setEnriching] = useState(false);
-  const [suggestions, setSuggestions] = useState<EnrichSuggestions | null>(null);
+  const [standardizing, setStandardizing] = useState(false);
+  const [applied, setApplied] = useState<Applied | null>(null);
+  const [suggestions, setSuggestions] = useState<OptionalSuggestions | null>(null);
+
+  // New-song chunk-1 state
+  const [finding, setFinding] = useState(false);
+  const [found, setFound] = useState(false);
+  const [newComposerName, setNewComposerName] = useState("");
+  const [newLyricistName, setNewLyricistName] = useState("");
+  const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
+  const [standardizedTitle, setStandardizedTitle] = useState("");
+  const [standardizedArtist, setStandardizedArtist] = useState("");
 
   function toggleSet(set: Set<string>, setFn: (s: Set<string>) => void, id: string) {
     const next = new Set(set);
@@ -141,49 +149,209 @@ export default function SongEditor({
     setFn(next);
   }
 
-  async function handleEnrich() {
-    if (!title) return;
-    setEnriching(true);
-    setSuggestions(null);
+  // Find or create a person/artist by canonical name. Returns the DB id.
+  async function resolvePersonName(
+    name: string,
+    table: "people" | "artists",
+    allItems: Lookup[]
+  ): Promise<string | null> {
+    const normalised = name.trim().toLowerCase();
+    const existing = allItems.find((p) => p.name.toLowerCase() === normalised);
+    if (existing) return existing.id;
+
+    const { data, error } = await supabase
+      .from(table)
+      .upsert({ name: name.trim() }, { onConflict: "name" })
+      .select("id, name")
+      .single();
+    if (error) { setError(error.message); return null; }
+    if (!allItems.find((p) => p.id === data.id)) allItems.push(data);
+    return data.id;
+  }
+
+  async function handleFindComposers() {
+    if (!title.trim()) return;
+    setFinding(true);
+    setError(null);
     try {
       const res = await fetch(
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      setSuggestions(data);
+      const mb = data.musicbrainz as {
+        title?: string;
+        display_artist?: string;
+        year?: number;
+        composers?: string[];
+        lyricists?: string[];
+      } | null;
+
+      setStandardizedTitle(mb?.title ?? data.spotify?.title ?? title);
+      setStandardizedArtist(mb?.display_artist ?? data.spotify?.artist ?? displayArtist);
+
+      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number; firstRecordedBy?: string } | null;
+
+      // Prefer SHS year — it tracks the earliest known recording
+      const bestYear = shs?.year ?? mb?.year;
+      if (bestYear) setYear(bestYear.toString());
+
+      // Resolve firstRecordedBy to a recording artist entry with year
+      if (shs?.firstRecordedBy) {
+        const artistId = await resolvePersonName(shs.firstRecordedBy, "artists", allArtists);
+        if (artistId) {
+          setRecordingArtists([{ id: artistId, year: shs.year ?? null }]);
+        }
+      }
+
+      // Cross-validate MB vs SHS composers:
+      // If both agree (share a name) → trust MB (more structured data)
+      // If they disagree → prefer SHS (authoritative for originals)
+      // Fall back to Wikidata only if neither found anything
+      const mbComposers = mb?.composers ?? [];
+      const shsComposers = shs?.composers ?? [];
+      const overlap = mbComposers.some((n: string) =>
+        shsComposers.some((s: string) => s.toLowerCase() === n.toLowerCase())
+      );
+      const composerNames =
+        mbComposers.length && shsComposers.length
+          ? overlap ? mbComposers : shsComposers
+          : mbComposers.length ? mbComposers
+          : shsComposers.length ? shsComposers
+          : (data.wikidata?.composers ?? []);
+
+      const mbLyricists = mb?.lyricists ?? [];
+      const shsLyricists = shs?.lyricists ?? [];
+      const lyricistOverlap = mbLyricists.some((n: string) =>
+        shsLyricists.some((s: string) => s.toLowerCase() === n.toLowerCase())
+      );
+      const lyricistNames =
+        mbLyricists.length && shsLyricists.length
+          ? lyricistOverlap ? mbLyricists : shsLyricists
+          : mbLyricists.length ? mbLyricists
+          : shsLyricists.length ? shsLyricists
+          : data.wikidata?.lyricists?.length ? data.wikidata.lyricists
+          : composerNames; // fall back to composers — common for singer-songwriters
+
+      const [composerIds, lyricistIds] = await Promise.all([
+        Promise.all(composerNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
+        Promise.all(lyricistNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
+      ]);
+      setComposers(new Set(composerIds.filter((id: string | null): id is string => id !== null)));
+      setLyricists(new Set(lyricistIds.filter((id: string | null): id is string => id !== null)));
+      setFound(true);
     } catch {
-      setError("Enrichment failed. Check your API keys in Netlify env vars.");
+      setError("Could not reach enrichment API. Check your network and API keys.");
     } finally {
-      setEnriching(false);
+      setFinding(false);
     }
   }
 
-  // Find or create a person/artist by canonical name, then toggle into the given set
-  async function applyPerson(
-    name: string,
-    table: "people" | "artists",
-    currentSet: Set<string>,
-    setFn: (s: Set<string>) => void,
-    allItems: Lookup[]
-  ) {
-    const normalised = name.trim().toLowerCase();
-    const existing = allItems.find((p) => p.name.toLowerCase() === normalised);
-    if (existing) {
-      const next = new Set(currentSet);
-      next.add(existing.id);
-      setFn(next);
-      return;
+  async function handleSaveAndContinue() {
+    if (!title.trim()) { setError("Title is required."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from("songs")
+        .insert({
+          title: (standardizedTitle || title).trim(),
+          display_artist: (standardizedArtist || displayArtist).trim() || null,
+          year: year ? parseInt(year) : null,
+          updated_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      const songId = data.id;
+      if (composers.size) {
+        const { error: joinError } = await supabase
+          .from("song_composers")
+          .insert([...composers].map((id) => ({ song_id: songId, person_id: id })));
+        if (joinError) throw joinError;
+      }
+
+      router.push(`/admin/songs/${songId}`);
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message ?? "Save failed.");
+    } finally {
+      setSaving(false);
     }
-    const { data, error } = await supabase
-      .from(table)
-      .insert({ name: name.trim() })
-      .select("id, name")
-      .single();
-    if (error) { setError(error.message); return; }
-    allItems.push(data);
-    const next = new Set(currentSet);
-    next.add(data.id);
-    setFn(next);
+  }
+
+  async function handleStandardize() {
+    if (!title.trim()) return;
+    setStandardizing(true);
+    setApplied(null);
+    setSuggestions(null);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
+      );
+      const data = await res.json();
+      const mb = data.musicbrainz as {
+        title?: string;
+        display_artist?: string;
+        year?: number;
+        composers?: string[];
+        lyricists?: string[];
+        recording_artists?: string[];
+      } | null;
+
+      // Apply canonical scalar fields
+      if (mb?.title) setTitle(mb.title);
+      if (mb?.display_artist) setDisplayArtist(mb.display_artist);
+      if (mb?.year) setYear(mb.year.toString());
+
+      // Deduplicate names across MusicBrainz + Wikidata
+      const composerNames = [...new Set([
+        ...(mb?.composers ?? []),
+        ...(data.wikidata?.composers ?? []),
+      ])];
+      const lyricistNames = [...new Set([
+        ...(mb?.lyricists ?? []),
+        ...(data.wikidata?.lyricists ?? []),
+      ])];
+      const recordingArtistNames = mb?.recording_artists ?? [];
+
+      // Resolve sequentially per table so earlier results are visible to later lookups
+      const composerIds = await Promise.all(composerNames.map((n: string) => resolvePersonName(n, "people", allPeople)));
+      const lyricistIds = await Promise.all(lyricistNames.map((n) => resolvePersonName(n, "people", allPeople)));
+      const recordingArtistIds = await Promise.all(recordingArtistNames.map((n) => resolvePersonName(n, "artists", allArtists)));
+
+      const validComposerIds = composerIds.filter((id): id is string => id !== null);
+      const validLyricistIds = lyricistIds.filter((id): id is string => id !== null);
+      const validRecordingArtistIds = recordingArtistIds.filter((id): id is string => id !== null);
+
+      setComposers((prev) => new Set([...prev, ...validComposerIds]));
+      setLyricists((prev) => new Set([...prev, ...validLyricistIds]));
+      setRecordingArtists((prev) => {
+        const existingIds = new Set(prev.map((e) => e.id));
+        const newEntries = validRecordingArtistIds.filter((id) => !existingIds.has(id)).map((id) => ({ id, year: null as number | null }));
+        return [...prev, ...newEntries];
+      });
+
+      setApplied({
+        title: mb?.title,
+        displayArtist: mb?.display_artist,
+        year: mb?.year,
+        composers: composerNames,
+        lyricists: lyricistNames,
+        recordingArtists: recordingArtistNames,
+      });
+
+      // Keep Spotify/Genius as optional clickable suggestions
+      if (data.spotify || data.genius) {
+        setSuggestions({ spotify: data.spotify, genius: data.genius });
+      }
+    } catch {
+      setError("Standardization failed. Check your API keys in .env.local.");
+    } finally {
+      setStandardizing(false);
+    }
   }
 
   async function syncJoinTable(
@@ -225,7 +393,7 @@ export default function SongEditor({
     try {
       const payload = {
         title: title.trim(),
-        display_artist: displayArtist.trim() || null,
+        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(" & ") || displayArtist.trim() || null,
         first_line: firstLine.trim() || null,
         hook: hook.trim() || null,
         lyrics: lyrics.trim() || null,
@@ -256,7 +424,9 @@ export default function SongEditor({
       const originalTraditions = song?.song_traditions.map((x) => x.tradition_id) ?? [];
       const originalComposers = song?.song_composers.map((x) => x.person_id) ?? [];
       const originalLyricists = song?.song_lyricists.map((x) => x.person_id) ?? [];
-      const originalRecordingArtists = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
+      const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
+      const newRecordingArtistIds = recordingArtists.map((e) => e.id);
+      const toDeleteArtists = originalRecordingArtistIds.filter((id) => !newRecordingArtistIds.includes(id));
 
       await Promise.all([
         syncJoinTable(songId!, "song_genres", "genre_id", genres, originalGenres),
@@ -266,13 +436,15 @@ export default function SongEditor({
         syncJoinTable(songId!, "song_traditions", "tradition_id", traditions, originalTraditions),
         syncJoinTable(songId!, "song_composers", "person_id", composers, originalComposers),
         syncJoinTable(songId!, "song_lyricists", "person_id", lyricists, originalLyricists),
-        syncJoinTable(
-          songId!,
-          "song_recording_artists",
-          "artist_id",
-          recordingArtists,
-          originalRecordingArtists
-        ),
+        toDeleteArtists.length
+          ? supabase.from("song_recording_artists").delete().eq("song_id", songId!).in("artist_id", toDeleteArtists)
+          : Promise.resolve(),
+        recordingArtists.length
+          ? supabase.from("song_recording_artists").upsert(
+              recordingArtists.map((e) => ({ song_id: songId!, artist_id: e.id, year: e.year })),
+              { onConflict: "song_id,artist_id" }
+            )
+          : Promise.resolve(),
       ]);
 
       router.push("/admin/songs");
@@ -301,19 +473,125 @@ export default function SongEditor({
     setAltTitles((prev) => prev.filter((t) => t.id !== id));
   }
 
+  // ── Chunk 1: new song form ────────────────────────────────────────────────
+  if (isNew) {
+    const composerItems = [...composers]
+      .map((id) => allPeople.find((p) => p.id === id))
+      .filter((p): p is Lookup => !!p);
+
+    const lyricistItems = [...lyricists]
+      .map((id) => allPeople.find((p) => p.id === id))
+      .filter((p): p is Lookup => !!p);
+
+
+    return (
+      <div className="space-y-6 pb-16">
+        <h1 className="text-xl font-semibold text-slate-900">Add song</h1>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        )}
+
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Title *">
+              <input value={title} onChange={(e) => setTitle(e.target.value)}
+                className="input" placeholder="Song title" />
+            </Field>
+            <Field label="Artist">
+              <input value={displayArtist} onChange={(e) => setDisplayArtist(e.target.value)}
+                className="input" placeholder="e.g. The Beatles" />
+            </Field>
+          </div>
+          <button
+            onClick={handleFindComposers}
+            disabled={finding || !title.trim()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          >
+            {finding ? "Finding…" : "Find composers"}
+          </button>
+        </section>
+
+        {found && (
+          <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-slate-700">Results</h2>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Standardized title">
+                <input value={standardizedTitle} onChange={(e) => setStandardizedTitle(e.target.value)}
+                  className="input" />
+              </Field>
+              <Field label="Standardized artist">
+                <input value={standardizedArtist} onChange={(e) => setStandardizedArtist(e.target.value)}
+                  className="input" />
+              </Field>
+            </div>
+
+            <PeopleField
+              label="Composers"
+              items={composerItems}
+              query={newComposerName}
+              onQueryChange={setNewComposerName}
+              suggestions={allPeople.filter(
+                (p) => !composers.has(p.id) && p.name.toLowerCase().includes(newComposerName.toLowerCase().trim())
+              )}
+              onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
+              onRemove={(id) => setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+            />
+
+            <PeopleField
+              label="Lyricists"
+              items={lyricistItems}
+              query={newLyricistName}
+              onQueryChange={setNewLyricistName}
+              suggestions={allPeople.filter(
+                (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
+              )}
+              onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
+              onRemove={(id) => setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+            />
+
+            <Field label="Year first recorded">
+              <input type="number" value={year} onChange={(e) => setYear(e.target.value)}
+                className="input" placeholder="e.g. 1965" />
+            </Field>
+
+            <RecordingArtistField
+              items={recordingArtists}
+              allArtists={allArtists}
+              query={newRecordingArtistName}
+              onQueryChange={setNewRecordingArtistName}
+              onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null }]); setNewRecordingArtistName(""); }}
+              onRemove={(id) => setRecordingArtists((prev) => prev.filter((e) => e.id !== id))}
+              onYearChange={(id, yr) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year: yr } : e))}
+            />
+          </section>
+        )}
+
+        <button
+          onClick={handleSaveAndContinue}
+          disabled={saving || !title.trim()}
+          className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-40"
+        >
+          {saving ? "Saving…" : "Save & continue"}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-16">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-slate-900">
-          {isNew ? "New song" : title || "Edit song"}
+          {title || "Edit song"}
         </h1>
         <div className="flex gap-2">
           <button
-            onClick={handleEnrich}
-            disabled={enriching || !title}
+            onClick={handleStandardize}
+            disabled={standardizing || !title.trim()}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            {enriching ? "Enriching…" : "✦ Enrich from APIs"}
+            {standardizing ? "Standardizing…" : "✦ Standardize"}
           </button>
           <button
             onClick={handleSave}
@@ -331,143 +609,40 @@ export default function SongEditor({
         </div>
       )}
 
-      {/* API Suggestions panel */}
-      {suggestions && (
+      {/* Standardization result */}
+      {applied && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+          <div className="text-sm font-semibold text-emerald-800">✓ Standardized</div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-emerald-700">
+            {applied.title && <span>Title: <strong>{applied.title}</strong></span>}
+            {applied.displayArtist && <span>Artist: <strong>{applied.displayArtist}</strong></span>}
+            {applied.year && <span>Year: <strong>{applied.year}</strong></span>}
+          </div>
+          {applied.composers.length > 0 && (
+            <div className="text-sm text-emerald-700">
+              Composers: <strong>{applied.composers.join(", ")}</strong>
+            </div>
+          )}
+          {applied.lyricists.length > 0 && (
+            <div className="text-sm text-emerald-700">
+              Lyricists: <strong>{applied.lyricists.join(", ")}</strong>
+            </div>
+          )}
+          {applied.recordingArtists.length > 0 && (
+            <div className="text-sm text-emerald-700">
+              Recording artists: <strong>{applied.recordingArtists.join(", ")}</strong>
+            </div>
+          )}
+          {!applied.composers.length && !applied.lyricists.length && (
+            <div className="text-sm text-emerald-600 opacity-70">No composers or lyricists found.</div>
+          )}
+        </div>
+      )}
+
+      {/* Optional Spotify / Genius suggestions */}
+      {suggestions && (suggestions.spotify || suggestions.genius) && (
         <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
-          <div className="text-sm font-semibold text-indigo-800">✦ Enrichment suggestions</div>
-
-          {suggestions.musicbrainz && (
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-indigo-600 uppercase tracking-wide">MusicBrainz</div>
-              <div className="flex flex-wrap gap-2">
-                {suggestions.musicbrainz.title && (
-                  <button onClick={() => setTitle(suggestions.musicbrainz!.title!)}
-                    className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100">
-                    Title: {suggestions.musicbrainz.title}
-                  </button>
-                )}
-                {suggestions.musicbrainz.year && (
-                  <button onClick={() => setYear(suggestions.musicbrainz!.year!.toString())}
-                    className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100">
-                    Year: {suggestions.musicbrainz.year}
-                  </button>
-                )}
-                {suggestions.musicbrainz.display_artist && (
-                  <button onClick={() => setDisplayArtist(suggestions.musicbrainz!.display_artist!)}
-                    className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100">
-                    Artist: {suggestions.musicbrainz.display_artist}
-                  </button>
-                )}
-                {suggestions.musicbrainz.languages?.map((l) => (
-                  <span key={l} className="rounded border border-indigo-200 bg-white px-2 py-1 text-xs text-indigo-700">
-                    Lang: {l}
-                  </span>
-                ))}
-              </div>
-              {!!suggestions.musicbrainz.composers?.length && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-xs text-indigo-500">Composers:</span>
-                  {suggestions.musicbrainz.composers.map((name) => {
-                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
-                      composers.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
-                    return (
-                      <button
-                        key={name}
-                        disabled={!!already}
-                        onClick={() => applyPerson(name, "people", composers, setComposers, allPeople)}
-                        className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100 disabled:opacity-40"
-                      >
-                        {already ? "✓ " : "+ "}{name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {!!suggestions.musicbrainz.lyricists?.length && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-xs text-indigo-500">Lyricists:</span>
-                  {suggestions.musicbrainz.lyricists.map((name) => {
-                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
-                      lyricists.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
-                    return (
-                      <button
-                        key={name}
-                        disabled={!!already}
-                        onClick={() => applyPerson(name, "people", lyricists, setLyricists, allPeople)}
-                        className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100 disabled:opacity-40"
-                      >
-                        {already ? "✓ " : "+ "}{name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {!!suggestions.musicbrainz.recording_artists?.length && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-xs text-indigo-500">Recording artists:</span>
-                  {suggestions.musicbrainz.recording_artists.map((name) => {
-                    const already = allArtists.find((a) => a.name.toLowerCase() === name.toLowerCase()) &&
-                      recordingArtists.has(allArtists.find((a) => a.name.toLowerCase() === name.toLowerCase())!.id);
-                    return (
-                      <button
-                        key={name}
-                        disabled={!!already}
-                        onClick={() => applyPerson(name, "artists", recordingArtists, setRecordingArtists, allArtists)}
-                        className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs hover:bg-indigo-100 disabled:opacity-40"
-                      >
-                        {already ? "✓ " : "+ "}{name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {suggestions.wikidata && (suggestions.wikidata.composers?.length || suggestions.wikidata.lyricists?.length) && (
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-violet-600 uppercase tracking-wide">Wikidata</div>
-              {!!suggestions.wikidata.composers?.length && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-violet-500">Composers:</span>
-                  {suggestions.wikidata.composers.map((name) => {
-                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
-                      composers.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
-                    return (
-                      <button
-                        key={name}
-                        disabled={!!already}
-                        onClick={() => applyPerson(name, "people", composers, setComposers, allPeople)}
-                        className="rounded border border-violet-300 bg-white px-2 py-1 text-xs hover:bg-violet-100 disabled:opacity-40"
-                      >
-                        {already ? "✓ " : "+ "}{name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {!!suggestions.wikidata.lyricists?.length && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-violet-500">Lyricists:</span>
-                  {suggestions.wikidata.lyricists.map((name) => {
-                    const already = allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase()) &&
-                      lyricists.has(allPeople.find((p) => p.name.toLowerCase() === name.toLowerCase())!.id);
-                    return (
-                      <button
-                        key={name}
-                        disabled={!!already}
-                        onClick={() => applyPerson(name, "people", lyricists, setLyricists, allPeople)}
-                        className="rounded border border-violet-300 bg-white px-2 py-1 text-xs hover:bg-violet-100 disabled:opacity-40"
-                      >
-                        {already ? "✓ " : "+ "}{name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
+          <div className="text-sm font-semibold text-indigo-800">Optional suggestions</div>
           {suggestions.spotify && (
             <div className="space-y-1">
               <div className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Spotify</div>
@@ -487,7 +662,6 @@ export default function SongEditor({
               </div>
             </div>
           )}
-
           {suggestions.genius && (
             <div className="space-y-1">
               <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">Genius</div>
@@ -519,10 +693,41 @@ export default function SongEditor({
             <input value={title} onChange={(e) => setTitle(e.target.value)}
               className="input" placeholder="Song title" />
           </Field>
-          <Field label="Display artist">
-            <input value={displayArtist} onChange={(e) => setDisplayArtist(e.target.value)}
-              className="input" placeholder="e.g. The Beatles" />
-          </Field>
+        </div>
+
+        <PeopleField
+          label="Composers"
+          items={[...composers].map((id) => allPeople.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
+          query={newComposerName}
+          onQueryChange={setNewComposerName}
+          suggestions={allPeople.filter(
+            (p) => !composers.has(p.id) && p.name.toLowerCase().includes(newComposerName.toLowerCase().trim())
+          )}
+          onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
+          onRemove={(id) => setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+        />
+        <PeopleField
+          label="Lyricists"
+          items={[...lyricists].map((id) => allPeople.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
+          query={newLyricistName}
+          onQueryChange={setNewLyricistName}
+          suggestions={allPeople.filter(
+            (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
+          )}
+          onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
+          onRemove={(id) => setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+        />
+        <RecordingArtistField
+          items={recordingArtists}
+          allArtists={allArtists}
+          query={newRecordingArtistName}
+          onQueryChange={setNewRecordingArtistName}
+          onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null }]); setNewRecordingArtistName(""); }}
+          onRemove={(id) => setRecordingArtists((prev) => prev.filter((e) => e.id !== id))}
+          onYearChange={(id, year) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year } : e))}
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="First line" className="sm:col-span-2">
             <input value={firstLine} onChange={(e) => setFirstLine(e.target.value)}
               className="input" placeholder="First sung line of the song" />
@@ -574,13 +779,6 @@ export default function SongEditor({
         onToggle={(id) => toggleSet(languages, setLanguages, id)} />
       <LookupSection title="Religious traditions" items={allTraditions} selected={traditions}
         onToggle={(id) => toggleSet(traditions, setTraditions, id)} />
-      <LookupSection title="Composers" items={allPeople} selected={composers}
-        onToggle={(id) => toggleSet(composers, setComposers, id)} creatable />
-      <LookupSection title="Lyricists" items={allPeople} selected={lyricists}
-        onToggle={(id) => toggleSet(lyricists, setLyricists, id)} creatable />
-      <LookupSection title="Recording artists" items={allArtists} selected={recordingArtists}
-        onToggle={(id) => toggleSet(recordingArtists, setRecordingArtists, id)} creatable />
-
       {/* Alternate titles */}
       {!isNew && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
@@ -613,6 +811,140 @@ export default function SongEditor({
           </div>
         </section>
       )}
+
+      {!isNew && (
+        <div className="border-t border-slate-200 pt-6">
+          <button
+            onClick={async () => {
+              if (!confirm("Delete this song? This cannot be undone.")) return;
+              const { error } = await supabase.from("songs").delete().eq("id", song!.id);
+              if (error) { setError(error.message); return; }
+              router.push("/admin/songs");
+              router.refresh();
+            }}
+            className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            Delete song
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecordingArtistField({
+  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange,
+}: {
+  items: { id: string; year: number | null }[];
+  allArtists: Lookup[];
+  query: string;
+  onQueryChange: (v: string) => void;
+  onAdd: (a: Lookup) => void;
+  onRemove: (id: string) => void;
+  onYearChange: (id: string, year: number | null) => void;
+}) {
+  const showSuggestions = query.trim().length > 0;
+  const suggestions = allArtists.filter(
+    (a) => !items.find((e) => e.id === a.id) && a.name.toLowerCase().includes(query.toLowerCase().trim())
+  );
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-slate-600">Recording artists</label>
+      <div className="flex flex-wrap gap-2">
+        {items.map((e) => {
+          const artist = allArtists.find((a) => a.id === e.id);
+          return (
+            <span key={e.id} className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white">
+              {artist?.name}
+              <input
+                type="number"
+                value={e.year ?? ""}
+                onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
+                placeholder="year"
+                className="w-14 bg-transparent border-b border-white/60 text-white placeholder-white/60 text-xs focus:outline-none"
+              />
+              <button onClick={() => onRemove(e.id)} className="opacity-70 hover:opacity-100">×</button>
+            </span>
+          );
+        })}
+        {!items.length && <span className="text-sm text-slate-400">None found.</span>}
+      </div>
+      <div className="relative">
+        <input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search recording artists…"
+          className="input w-full"
+        />
+        {showSuggestions && (
+          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-md">
+            {suggestions.slice(0, 6).map((a) => (
+              <li key={a.id}>
+                <button onMouseDown={() => onAdd(a)} className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50">
+                  {a.name}
+                </button>
+              </li>
+            ))}
+            {!suggestions.length && (
+              <li className="px-3 py-2 text-sm text-slate-400">No match — add to database first</li>
+            )}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PeopleField({
+  label, items, query, onQueryChange, suggestions, onAdd, onRemove,
+}: {
+  label: string;
+  items: Lookup[];
+  query: string;
+  onQueryChange: (v: string) => void;
+  suggestions: Lookup[];
+  onAdd: (p: Lookup) => void;
+  onRemove: (id: string) => void;
+}) {
+  const showSuggestions = query.trim().length > 0;
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-slate-600">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {items.map((p) => (
+          <span key={p.id}
+            className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white">
+            {p.name}
+            <button onClick={() => onRemove(p.id)} className="opacity-70 hover:opacity-100">×</button>
+          </span>
+        ))}
+        {!items.length && <span className="text-sm text-slate-400">None found.</span>}
+      </div>
+      <div className="relative">
+        <input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder={`Search ${label.toLowerCase()}…`}
+          className="input w-full"
+        />
+        {showSuggestions && (
+          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-md">
+            {suggestions.slice(0, 6).map((p) => (
+              <li key={p.id}>
+                <button
+                  onMouseDown={() => onAdd(p)}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  {p.name}
+                </button>
+              </li>
+            ))}
+            {!suggestions.length && (
+              <li className="px-3 py-2 text-sm text-slate-400">No match — add to database first</li>
+            )}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -699,20 +1031,31 @@ function LookupSection({
     setNewName("");
   }
 
+  const selectedItems = items.filter((item) => selected.has(item.id));
+  const unselectedItems = items.filter((item) => !selected.has(item.id));
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
       <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
       <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
+        {/* Selected items first */}
+        {selectedItems.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => onToggle(item.id)}
-            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-              selected.has(item.id)
-                ? "border-amber-500 bg-amber-500 text-white"
-                : "border-slate-200 bg-white text-slate-600 hover:border-amber-300"
-            }`}
+            className="rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white transition-colors"
+          >
+            {item.name}
+          </button>
+        ))}
+        {/* Unselected items */}
+        {unselectedItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onToggle(item.id)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 transition-colors hover:border-amber-300"
           >
             {item.name}
           </button>
