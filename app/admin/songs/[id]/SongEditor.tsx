@@ -43,26 +43,6 @@ type Props = {
   allArtists: Lookup[];
 };
 
-type OptionalSuggestions = {
-  spotify?: {
-    popularity?: number;
-    energy?: number;
-  };
-  genius?: {
-    first_line?: string;
-    lyrics_url?: string;
-  };
-};
-
-type Applied = {
-  title?: string;
-  displayArtist?: string;
-  year?: number;
-  composers: string[];
-  lyricists: string[];
-  recordingArtists: string[];
-};
-
 function toSet(ids: string[]) {
   return new Set(ids);
 }
@@ -131,8 +111,6 @@ export default function SongEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [standardizing, setStandardizing] = useState(false);
-  const [applied, setApplied] = useState<Applied | null>(null);
-  const [suggestions, setSuggestions] = useState<OptionalSuggestions | null>(null);
 
   // New-song chunk-1 state
   const [finding, setFinding] = useState(false);
@@ -280,11 +258,9 @@ export default function SongEditor({
     }
   }
 
-  async function handleStandardize() {
+  async function handleEnrich() {
     if (!title.trim()) return;
     setStandardizing(true);
-    setApplied(null);
-    setSuggestions(null);
     setError(null);
 
     try {
@@ -292,47 +268,8 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const mb = data.musicbrainz as {
-        title?: string;
-        display_artist?: string;
-        year?: number;
-        composers?: string[];
-        lyricists?: string[];
-        recording_artists?: string[];
-      } | null;
+      const shs = data.secondhandsongs as { year?: number; firstRecordedBy?: string } | null;
 
-      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number; firstRecordedBy?: string } | null;
-
-      // Apply canonical scalar fields — prefer SHS year for earliest known recording
-      if (mb?.title) setTitle(mb.title);
-      if (mb?.display_artist) setDisplayArtist(mb.display_artist);
-      const bestYear = shs?.year ?? mb?.year;
-      if (bestYear) setYear(bestYear.toString());
-
-      // Deduplicate names across MusicBrainz + Wikidata
-      const composerNames = [...new Set([
-        ...(mb?.composers ?? []),
-        ...(data.wikidata?.composers ?? []),
-      ])];
-      const lyricistNames = [...new Set([
-        ...(mb?.lyricists ?? []),
-        ...(data.wikidata?.lyricists ?? []),
-      ])];
-      const recordingArtistNames = mb?.recording_artists ?? [];
-
-      // Resolve sequentially per table so earlier results are visible to later lookups
-      const composerIds = await Promise.all(composerNames.map((n: string) => resolvePersonName(n, "people", allPeople)));
-      const lyricistIds = await Promise.all(lyricistNames.map((n) => resolvePersonName(n, "people", allPeople)));
-      const recordingArtistIds = await Promise.all(recordingArtistNames.map((n) => resolvePersonName(n, "artists", allArtists)));
-
-      const validComposerIds = composerIds.filter((id): id is string => id !== null);
-      const validLyricistIds = lyricistIds.filter((id): id is string => id !== null);
-      const validRecordingArtistIds = recordingArtistIds.filter((id): id is string => id !== null);
-
-      setComposers((prev) => new Set([...prev, ...validComposerIds]));
-      setLyricists((prev) => new Set([...prev, ...validLyricistIds]));
-
-      // Resolve SHS firstRecordedBy into a recording artist entry with year
       if (shs?.firstRecordedBy) {
         const artistId = await resolvePersonName(shs.firstRecordedBy, "artists", allArtists);
         if (artistId) {
@@ -341,29 +278,11 @@ export default function SongEditor({
             return [...prev, { id: artistId, year: shs.year ?? null }];
           });
         }
-      } else {
-        setRecordingArtists((prev) => {
-          const existingIds = new Set(prev.map((e) => e.id));
-          const newEntries = validRecordingArtistIds.filter((id) => !existingIds.has(id)).map((id) => ({ id, year: null as number | null }));
-          return [...prev, ...newEntries];
-        });
       }
 
-      setApplied({
-        title: mb?.title,
-        displayArtist: mb?.display_artist,
-        year: bestYear,
-        composers: composerNames,
-        lyricists: lyricistNames,
-        recordingArtists: shs?.firstRecordedBy ? [shs.firstRecordedBy] : recordingArtistNames,
-      });
-
-      // Keep Spotify/Genius as optional clickable suggestions
-      if (data.spotify || data.genius) {
-        setSuggestions({ spotify: data.spotify, genius: data.genius });
-      }
+      if (shs?.year) setYear(shs.year.toString());
     } catch {
-      setError("Standardization failed. Check your API keys in .env.local.");
+      setError("Enrich failed. Check your API keys in .env.local.");
     } finally {
       setStandardizing(false);
     }
@@ -602,11 +521,11 @@ export default function SongEditor({
         </h1>
         <div className="flex gap-2">
           <button
-            onClick={handleStandardize}
+            onClick={handleEnrich}
             disabled={standardizing || !title.trim()}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            {standardizing ? "Standardizing…" : "✦ Standardize"}
+            {standardizing ? "Enriching…" : "✦ Enrich"}
           </button>
           <button
             onClick={handleSave}
@@ -621,81 +540,6 @@ export default function SongEditor({
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
-        </div>
-      )}
-
-      {/* Standardization result */}
-      {applied && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
-          <div className="text-sm font-semibold text-emerald-800">✓ Standardized</div>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-emerald-700">
-            {applied.title && <span>Title: <strong>{applied.title}</strong></span>}
-            {applied.displayArtist && <span>Artist: <strong>{applied.displayArtist}</strong></span>}
-            {applied.year && <span>Year: <strong>{applied.year}</strong></span>}
-          </div>
-          {applied.composers.length > 0 && (
-            <div className="text-sm text-emerald-700">
-              Composers: <strong>{applied.composers.join(", ")}</strong>
-            </div>
-          )}
-          {applied.lyricists.length > 0 && (
-            <div className="text-sm text-emerald-700">
-              Lyricists: <strong>{applied.lyricists.join(", ")}</strong>
-            </div>
-          )}
-          {applied.recordingArtists.length > 0 && (
-            <div className="text-sm text-emerald-700">
-              Recording artists: <strong>{applied.recordingArtists.join(", ")}</strong>
-            </div>
-          )}
-          {!applied.composers.length && !applied.lyricists.length && (
-            <div className="text-sm text-emerald-600 opacity-70">No composers or lyricists found.</div>
-          )}
-        </div>
-      )}
-
-      {/* Optional Spotify / Genius suggestions */}
-      {suggestions && (suggestions.spotify || suggestions.genius) && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 space-y-3">
-          <div className="text-sm font-semibold text-indigo-800">Optional suggestions</div>
-          {suggestions.spotify && (
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Spotify</div>
-              <div className="flex flex-wrap gap-2">
-                {suggestions.spotify.popularity && (
-                  <button onClick={() => setPopularity(suggestions.spotify!.popularity!.toString())}
-                    className="rounded border border-emerald-300 bg-white px-2 py-1 text-xs hover:bg-emerald-100">
-                    Popularity: {suggestions.spotify.popularity}/5
-                  </button>
-                )}
-                {suggestions.spotify.energy && (
-                  <button onClick={() => setEnergy(suggestions.spotify!.energy!.toString())}
-                    className="rounded border border-emerald-300 bg-white px-2 py-1 text-xs hover:bg-emerald-100">
-                    Energy: {suggestions.spotify.energy}/5
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {suggestions.genius && (
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">Genius</div>
-              <div className="flex flex-wrap gap-2">
-                {suggestions.genius.first_line && (
-                  <button onClick={() => setFirstLine(suggestions.genius!.first_line!)}
-                    className="rounded border border-orange-300 bg-white px-2 py-1 text-xs hover:bg-orange-100">
-                    First line: "{suggestions.genius.first_line}"
-                  </button>
-                )}
-                {suggestions.genius.lyrics_url && (
-                  <a href={suggestions.genius.lyrics_url} target="_blank" rel="noopener noreferrer"
-                    className="rounded border border-orange-300 bg-white px-2 py-1 text-xs hover:bg-orange-100 text-orange-700">
-                    View lyrics on Genius ↗
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
