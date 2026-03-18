@@ -113,8 +113,111 @@ async function enrichMusicBrainz(title: string, artist: string) {
 }
 
 
+// ─── Second Hand Songs ────────────────────────────────────────────────────────
+const SHS_JSON_HEADERS = { "User-Agent": "SingJamConnect/1.0", Accept: "application/json" };
+const SHS_HTML_HEADERS = { "User-Agent": "SingJamConnect/1.0" };
+
+function normTitle(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+}
+
+function extractDtField(html: string, ...labels: string[]): string[] {
+  for (const label of labels) {
+    const regex = new RegExp(`<dt[^>]*>${label}<\\/dt>\\s*<dd[^>]*>([\\s\\S]*?)<\\/dd>`);
+    const match = html.match(regex);
+    if (match) {
+      return match[1].replace(/<[^>]+>/g, "").trim().split(/,\s*/).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+async function enrichSecondHandSongs(title: string, artist: string) {
+  const searchRes = await fetch(
+    `https://secondhandsongs.com/search/work?title=${encodeURIComponent(title)}&performer=${encodeURIComponent(artist)}`,
+    { headers: SHS_JSON_HEADERS }
+  );
+  if (!searchRes.ok) return null;
+
+  const searchData = await searchRes.json();
+  const results: any[] = searchData.resultPage ?? [];
+  if (!results.length) return null;
+
+  const match = results.find((r) => normTitle(r.title) === normTitle(title)) ?? results[0];
+  if (!match?.uri) return null;
+
+  // Fetch work page for composers/lyricists (HTML, not JSON)
+  const workRes = await fetch(match.uri, { headers: SHS_HTML_HEADERS });
+  if (!workRes.ok) return null;
+  const workHtml = await workRes.text();
+
+  const composers = extractDtField(workHtml, "Music written by", "Written by");
+  const lyricists = extractDtField(workHtml, "Lyrics written by");
+
+  // Construct the versions URL using the work ID extracted from the URI
+  const workId = match.uri.match(/\/work\/(\d+)/)?.[1];
+  const versionsUrl = workId
+    ? `https://secondhandsongs.com/work/${workId}/versions`
+    : `${match.uri}/versions`;
+  console.log("[SHS] versions URL:", versionsUrl);
+  const versionsRes = await fetch(versionsUrl, { headers: SHS_HTML_HEADERS });
+  let year: number | undefined;
+  const topArtists: { name: string; year: number | null }[] = [];
+
+  if (versionsRes.ok) {
+    const versionsHtml = await versionsRes.text();
+
+    // Meta description gives us the first recorded artist + year reliably
+    const metaMatch = versionsHtml.match(/first released by (.+?) in (\d{4})/);
+    if (metaMatch) {
+      year = parseInt(metaMatch[2]);
+    }
+
+    // Parse artist links from the versions list, take up to 3 unique performers
+    const seenNames = new Set<string>();
+    const artistLinkRe = /href="\/artist\/\d+"[^>]*>([^<]+)<\/a>/g;
+    let am: RegExpExecArray | null;
+    while ((am = artistLinkRe.exec(versionsHtml)) !== null) {
+      const name = am[1].trim();
+      if (seenNames.has(name.toLowerCase())) continue;
+      seenNames.add(name.toLowerCase());
+      // Look for a 4-digit year in the 200 chars following the artist link
+      const after = versionsHtml.slice(am.index + am[0].length, am.index + am[0].length + 200);
+      const yearM = after.match(/\b(19|20)\d{2}\b/);
+      topArtists.push({ name, year: yearM ? parseInt(yearM[0]) : null });
+      if (topArtists.length >= 3) break;
+    }
+
+    // If meta firstRecordedBy isn't already first in the list, prepend it with the reliable year
+    if (metaMatch) {
+      const metaName = metaMatch[1].trim();
+      const existingIdx = topArtists.findIndex((a) => a.name.toLowerCase() === metaName.toLowerCase());
+      if (existingIdx > 0) {
+        // Move to front and attach the meta year
+        const [entry] = topArtists.splice(existingIdx, 1);
+        topArtists.unshift({ ...entry, year: year ?? entry.year });
+      } else if (existingIdx === -1) {
+        topArtists.unshift({ name: metaName, year: year ?? null });
+        if (topArtists.length > 3) topArtists.pop();
+      } else {
+        // Already first — just ensure meta year is used
+        topArtists[0] = { ...topArtists[0], year: year ?? topArtists[0].year };
+      }
+    }
+
+    console.log("[SHS] meta match:", metaMatch?.[0] ?? "no match");
+    console.log("[SHS] topArtists:", topArtists);
+  }
+
+  console.log("[SHS] search match:", { uri: match.uri, title: match.title });
+  console.log("[SHS] composers:", composers, "lyricists:", lyricists);
+
+  return composers.length || lyricists.length ? { composers, lyricists, year, topArtists } : null;
+}
+
+
 // ─── Wikidata ─────────────────────────────────────────────────────────────────
-async function enrichWikidata(title: string, artist: string) {
+async function enrichWikidata(title: string, _artist: string) {
   // Escape title for SPARQL string literal
   const escaped = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
@@ -185,15 +288,20 @@ async function enrichSpotify(title: string, artist: string) {
   const token = await getSpotifyToken();
   if (!token) return null;
 
-  const q = artist ? `track:${title} artist:${artist}` : `track:${title}`;
-  const searchRes = await fetch(
-    `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  const trySearch = async (q: string) => {
+    const res = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.tracks?.items?.[0] ?? null;
+  };
 
-  if (!searchRes.ok) return null;
-  const searchData = await searchRes.json();
-  const track = searchData.tracks?.items?.[0];
+  // Try with artist constraint first, fall back to title-only field search (still fuzzy-matches typos)
+  const track =
+    (await trySearch(`track:${title} artist:${artist}`)) ??
+    (await trySearch(`track:${title}`));
   if (!track) return null;
 
   // Fetch audio features for energy
@@ -232,6 +340,8 @@ async function enrichSpotify(title: string, artist: string) {
       : undefined;
 
   return {
+    title: track.name as string,
+    artist: (track.artists?.[0]?.name ?? "") as string,
     popularity,
     energy: energyRaw,
     genres,
@@ -272,17 +382,51 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
 
-  const [musicbrainz, wikidata, spotify, genius] = await Promise.allSettled([
-    enrichMusicBrainz(title, artist),
-    enrichWikidata(title, artist),
-    enrichSpotify(title, artist),
-    enrichGenius(title, artist),
+  console.log("[enrich] input:", { title, artist });
+
+  // MusicBrainz first — its recording titles are clean (no "Remastered", "Radio Edit" etc.)
+  const mbResult = await enrichMusicBrainz(title, artist).catch((e) => { console.error("[enrich] MusicBrainz error:", e); return null; });
+  console.log("[enrich] MusicBrainz result:", mbResult);
+
+  const canonicalTitle = mbResult?.title ?? title;
+  const canonicalArtist = mbResult?.display_artist ?? artist;
+  console.log("[enrich] canonical:", { canonicalTitle, canonicalArtist });
+
+  // Feed canonical title/artist into remaining sources in parallel
+  const [spotify, secondhandsongs, wikidata, genius] = await Promise.allSettled([
+    enrichSpotify(canonicalTitle, canonicalArtist),
+    enrichSecondHandSongs(canonicalTitle, canonicalArtist),
+    enrichWikidata(canonicalTitle, canonicalArtist),
+    enrichGenius(canonicalTitle, canonicalArtist),
   ]);
 
+  const spotifyVal = spotify.status === "fulfilled" ? spotify.value : null;
+  const shsVal = secondhandsongs.status === "fulfilled" ? secondhandsongs.value : null;
+  const wdVal = wikidata.status === "fulfilled" ? wikidata.value : null;
+  const geniusVal = genius.status === "fulfilled" ? genius.value : null;
+
+  if (secondhandsongs.status === "rejected") console.error("[enrich] SHS error:", secondhandsongs.reason);
+  if (wikidata.status === "rejected") console.error("[enrich] Wikidata error:", wikidata.reason);
+  if (spotify.status === "rejected") console.error("[enrich] Spotify error:", spotify.reason);
+
+  console.log("[enrich] Spotify:", spotifyVal);
+  console.log("[enrich] SecondHandSongs:", shsVal);
+  console.log("[enrich] Wikidata:", wdVal);
+
+  console.log("─── COMPOSER SOURCES ───────────────────────────────");
+  console.log("MusicBrainz composers:", mbResult?.composers ?? "none");
+  console.log("SecondHandSongs composers:", shsVal?.composers ?? "none");
+  console.log("Wikidata composers:", wdVal?.composers ?? "none");
+  console.log("MusicBrainz lyricists:", mbResult?.lyricists ?? "none");
+  console.log("SecondHandSongs lyricists:", shsVal?.lyricists ?? "none");
+  console.log("Wikidata lyricists:", wdVal?.lyricists ?? "none");
+  console.log("────────────────────────────────────────────────────");
+
   return NextResponse.json({
-    musicbrainz: musicbrainz.status === "fulfilled" ? musicbrainz.value : null,
-    wikidata: wikidata.status === "fulfilled" ? wikidata.value : null,
-    spotify: spotify.status === "fulfilled" ? spotify.value : null,
-    genius: genius.status === "fulfilled" ? genius.value : null,
+    musicbrainz: mbResult,
+    secondhandsongs: shsVal,
+    wikidata: wdVal,
+    spotify: spotifyVal,
+    genius: geniusVal,
   });
 }

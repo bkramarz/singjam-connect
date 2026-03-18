@@ -167,18 +167,20 @@ export default function SongEditor({
       setStandardizedTitle(mb?.title ?? data.spotify?.title ?? title);
       setStandardizedArtist(mb?.display_artist ?? data.spotify?.artist ?? displayArtist);
 
-      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number; firstRecordedBy?: string } | null;
+      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number; topArtists?: { name: string; year: number | null }[] } | null;
 
       // Prefer SHS year — it tracks the earliest known recording
       const bestYear = shs?.year ?? mb?.year;
       if (bestYear) setYear(bestYear.toString());
 
-      // Resolve firstRecordedBy to a recording artist entry with year
-      if (shs?.firstRecordedBy) {
-        const artistId = await resolvePersonName(shs.firstRecordedBy, "artists", allArtists);
-        if (artistId) {
-          setRecordingArtists([{ id: artistId, year: shs.year ?? null }]);
+      // Resolve top artists from SHS into recording artist entries
+      if (shs?.topArtists?.length) {
+        const entries: { id: string; year: number | null }[] = [];
+        for (const artist of shs.topArtists) {
+          const artistId = await resolvePersonName(artist.name, "artists", allArtists);
+          if (artistId) entries.push({ id: artistId, year: artist.year });
         }
+        if (entries.length) setRecordingArtists(entries);
       }
 
       // Cross-validate MB vs SHS composers:
@@ -268,15 +270,17 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const shs = data.secondhandsongs as { year?: number; firstRecordedBy?: string } | null;
+      const shs = data.secondhandsongs as { year?: number; topArtists?: { name: string; year: number | null }[] } | null;
 
-      if (shs?.firstRecordedBy) {
-        const artistId = await resolvePersonName(shs.firstRecordedBy, "artists", allArtists);
-        if (artistId) {
-          setRecordingArtists((prev) => {
-            if (prev.find((e) => e.id === artistId)) return prev;
-            return [...prev, { id: artistId, year: shs.year ?? null }];
-          });
+      if (shs?.topArtists?.length) {
+        for (const artist of shs.topArtists) {
+          const artistId = await resolvePersonName(artist.name, "artists", allArtists);
+          if (artistId) {
+            setRecordingArtists((prev) => {
+              if (prev.find((e) => e.id === artistId)) return prev;
+              return [...prev, { id: artistId, year: artist.year }];
+            });
+          }
         }
       }
 
