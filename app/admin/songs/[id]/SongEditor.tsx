@@ -170,17 +170,12 @@ export default function SongEditor({
 
       const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number } | null;
 
-      // Prefer SHS year — it tracks the earliest known recording
-      const bestYear = shs?.year ?? mb?.year;
-      if (bestYear) setYear(bestYear.toString());
+      if (mb?.year) setYear(mb.year.toString());
 
       // Resolve top artists from MB work recordings
       if (mb?.topArtists?.length) {
-        const artists = (mb.topArtists as { name: string; year: number | null }[]).map((a, i) =>
-          i === 0 && shs?.year ? { ...a, year: shs.year } : a
-        );
         const entries: { id: string; year: number | null }[] = [];
-        for (const artist of artists) {
+        for (const artist of mb.topArtists as { name: string; year: number | null }[]) {
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) entries.push({ id: artistId, year: artist.year });
         }
@@ -275,14 +270,9 @@ export default function SongEditor({
       );
       const data = await res.json();
       const mb = data.musicbrainz as { topArtists?: { name: string; year: number | null }[] } | null;
-      const shs = data.secondhandsongs as { year?: number } | null;
 
       if (mb?.topArtists?.length) {
-        // SHS year is the official first-release year — more reliable than MB for the earliest artist
-        const artists = mb.topArtists.map((a, i) =>
-          i === 0 && shs?.year ? { ...a, year: shs.year } : a
-        );
-        for (const artist of artists) {
+        for (const artist of mb.topArtists) {
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) {
             setRecordingArtists((prev) => {
@@ -294,8 +284,6 @@ export default function SongEditor({
           }
         }
       }
-
-      if (shs?.year) setYear(shs.year.toString());
     } catch {
       setError("Enrich failed. Check your API keys in .env.local.");
     } finally {
