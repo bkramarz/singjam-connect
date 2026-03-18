@@ -26,7 +26,7 @@ export default async function AdminSongPage({
               song_traditions(tradition_id),
               song_composers(person_id),
               song_lyricists(person_id),
-              song_recording_artists(artist_id),
+              song_recording_artists(artist_id, year),
               song_alternate_titles(id, title)
             `)
             .eq("id", id)
