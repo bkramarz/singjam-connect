@@ -154,8 +154,8 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const mb = data.musicbrainz as { composers?: string[] } | null;
-      const shs = data.secondhandsongs as { composers?: string[] } | null;
+      const mb = data.musicbrainz as { composers?: string[]; lyricists?: string[] } | null;
+      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[] } | null;
 
       const mbComposers = mb?.composers ?? [];
       const shsComposers = shs?.composers ?? [];
@@ -169,10 +169,25 @@ export default function SongEditor({
           : shsComposers.length ? shsComposers
           : (data.wikidata?.composers ?? []);
 
-      const composerIds = await Promise.all(
-        composerNames.map((n: string) => resolvePersonName(n, "people", allPeople))
+      const mbLyricists = mb?.lyricists ?? [];
+      const shsLyricists = shs?.lyricists ?? [];
+      const lyricistOverlap = mbLyricists.some((n: string) =>
+        shsLyricists.some((s: string) => s.toLowerCase() === n.toLowerCase())
       );
+      const lyricistNames =
+        mbLyricists.length && shsLyricists.length
+          ? lyricistOverlap ? mbLyricists : shsLyricists
+          : mbLyricists.length ? mbLyricists
+          : shsLyricists.length ? shsLyricists
+          : data.wikidata?.lyricists?.length ? data.wikidata.lyricists
+          : composerNames;
+
+      const [composerIds, lyricistIds] = await Promise.all([
+        Promise.all(composerNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
+        Promise.all(lyricistNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
+      ]);
       setComposers(new Set(composerIds.filter((id): id is string => id !== null)));
+      setLyricists(new Set(lyricistIds.filter((id): id is string => id !== null)));
       setFound(true);
     } catch {
       setError("Could not reach enrichment API. Check your network and API keys.");
@@ -415,6 +430,17 @@ export default function SongEditor({
               )}
               onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
               onRemove={(id) => setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+            />
+            <PeopleField
+              label="Lyricists"
+              items={lyricistItems}
+              query={newLyricistName}
+              onQueryChange={setNewLyricistName}
+              suggestions={allPeople.filter(
+                (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
+              )}
+              onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
+              onRemove={(id) => setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; })}
             />
           </section>
         )}
