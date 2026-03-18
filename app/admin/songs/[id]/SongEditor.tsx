@@ -118,8 +118,6 @@ export default function SongEditor({
   const [newComposerName, setNewComposerName] = useState("");
   const [newLyricistName, setNewLyricistName] = useState("");
   const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
-  const [standardizedTitle, setStandardizedTitle] = useState("");
-  const [standardizedArtist, setStandardizedArtist] = useState("");
 
   function toggleSet(set: Set<string>, setFn: (s: Set<string>) => void, id: string) {
     const next = new Set(set);
@@ -156,36 +154,9 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const mb = data.musicbrainz as {
-        title?: string;
-        display_artist?: string;
-        year?: number;
-        composers?: string[];
-        lyricists?: string[];
-        topArtists?: { name: string; year: number | null }[];
-      } | null;
+      const mb = data.musicbrainz as { composers?: string[] } | null;
+      const shs = data.secondhandsongs as { composers?: string[] } | null;
 
-      setStandardizedTitle(mb?.title ?? data.spotify?.title ?? title);
-      setStandardizedArtist(mb?.display_artist ?? data.spotify?.artist ?? displayArtist);
-
-      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number } | null;
-
-      if (mb?.year) setYear(mb.year.toString());
-
-      // Resolve top artists from MB work recordings
-      if (mb?.topArtists?.length) {
-        const entries: { id: string; year: number | null }[] = [];
-        for (const artist of mb.topArtists as { name: string; year: number | null }[]) {
-          const artistId = await resolvePersonName(artist.name, "artists", allArtists);
-          if (artistId) entries.push({ id: artistId, year: artist.year });
-        }
-        if (entries.length) setRecordingArtists(entries);
-      }
-
-      // Cross-validate MB vs SHS composers:
-      // If both agree (share a name) → trust MB (more structured data)
-      // If they disagree → prefer SHS (authoritative for originals)
-      // Fall back to Wikidata only if neither found anything
       const mbComposers = mb?.composers ?? [];
       const shsComposers = shs?.composers ?? [];
       const overlap = mbComposers.some((n: string) =>
@@ -198,25 +169,10 @@ export default function SongEditor({
           : shsComposers.length ? shsComposers
           : (data.wikidata?.composers ?? []);
 
-      const mbLyricists = mb?.lyricists ?? [];
-      const shsLyricists = shs?.lyricists ?? [];
-      const lyricistOverlap = mbLyricists.some((n: string) =>
-        shsLyricists.some((s: string) => s.toLowerCase() === n.toLowerCase())
+      const composerIds = await Promise.all(
+        composerNames.map((n: string) => resolvePersonName(n, "people", allPeople))
       );
-      const lyricistNames =
-        mbLyricists.length && shsLyricists.length
-          ? lyricistOverlap ? mbLyricists : shsLyricists
-          : mbLyricists.length ? mbLyricists
-          : shsLyricists.length ? shsLyricists
-          : data.wikidata?.lyricists?.length ? data.wikidata.lyricists
-          : composerNames; // fall back to composers — common for singer-songwriters
-
-      const [composerIds, lyricistIds] = await Promise.all([
-        Promise.all(composerNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
-        Promise.all(lyricistNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
-      ]);
-      setComposers(new Set(composerIds.filter((id: string | null): id is string => id !== null)));
-      setLyricists(new Set(lyricistIds.filter((id: string | null): id is string => id !== null)));
+      setComposers(new Set(composerIds.filter((id): id is string => id !== null)));
       setFound(true);
     } catch {
       setError("Could not reach enrichment API. Check your network and API keys.");
@@ -233,9 +189,7 @@ export default function SongEditor({
       const { data, error } = await supabase
         .from("songs")
         .insert({
-          title: (standardizedTitle || title).trim(),
-          display_artist: (standardizedArtist || displayArtist).trim() || null,
-          year: year ? parseInt(year) : null,
+          title: title.trim(),
           updated_at: new Date().toISOString(),
         })
         .select("id")
@@ -451,19 +405,6 @@ export default function SongEditor({
 
         {found && (
           <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-700">Results</h2>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Standardized title">
-                <input value={standardizedTitle} onChange={(e) => setStandardizedTitle(e.target.value)}
-                  className="input" />
-              </Field>
-              <Field label="Standardized artist">
-                <input value={standardizedArtist} onChange={(e) => setStandardizedArtist(e.target.value)}
-                  className="input" />
-              </Field>
-            </div>
-
             <PeopleField
               label="Composers"
               items={composerItems}
@@ -474,33 +415,6 @@ export default function SongEditor({
               )}
               onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
               onRemove={(id) => setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; })}
-            />
-
-            <PeopleField
-              label="Lyricists"
-              items={lyricistItems}
-              query={newLyricistName}
-              onQueryChange={setNewLyricistName}
-              suggestions={allPeople.filter(
-                (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
-              )}
-              onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
-              onRemove={(id) => setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; })}
-            />
-
-            <Field label="Year first recorded">
-              <input type="number" value={year} onChange={(e) => setYear(e.target.value)}
-                className="input" placeholder="e.g. 1965" />
-            </Field>
-
-            <RecordingArtistField
-              items={recordingArtists}
-              allArtists={allArtists}
-              query={newRecordingArtistName}
-              onQueryChange={setNewRecordingArtistName}
-              onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null }]); setNewRecordingArtistName(""); }}
-              onRemove={(id) => setRecordingArtists((prev) => prev.filter((e) => e.id !== id))}
-              onYearChange={(id, yr) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year: yr } : e))}
             />
           </section>
         )}
