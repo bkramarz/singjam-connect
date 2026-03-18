@@ -279,7 +279,9 @@ export default function SongEditor({
           const artistId = await resolvePersonName(artist.name, "artists", allArtists);
           if (artistId) {
             setRecordingArtists((prev) => {
-              if (prev.find((e) => e.id === artistId)) return prev;
+              if (prev.find((e) => e.id === artistId)) {
+                return prev.map((e) => e.id === artistId ? { ...e, year: artist.year } : e);
+              }
               return [...prev, { id: artistId, year: artist.year }];
             });
           }
@@ -600,10 +602,6 @@ export default function SongEditor({
           <Field label="Hook / excerpt" className="sm:col-span-2">
             <input value={hook} onChange={(e) => setHook(e.target.value)}
               className="input" placeholder="Memorable lyric excerpt" />
-          </Field>
-          <Field label="Year">
-            <input type="number" value={year} onChange={(e) => setYear(e.target.value)}
-              className="input" placeholder="e.g. 1965" />
           </Field>
           <Field label="Tonality">
             <input value={tonality} onChange={(e) => setTonality(e.target.value)}
