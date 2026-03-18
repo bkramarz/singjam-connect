@@ -1,51 +1,82 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const MB_HEADERS = {
+  "User-Agent": "SingJamConnect/1.0 (https://github.com/bkramarz/singjam-connect)",
+  Accept: "application/json",
+};
+
 // ─── MusicBrainz ─────────────────────────────────────────────────────────────
 async function enrichMusicBrainz(title: string, artist: string) {
+  // Artist in the query dramatically improves accuracy
   const q = artist
     ? `recording:"${title}" AND artist:"${artist}"`
     : `recording:"${title}"`;
 
-  const res = await fetch(
-    `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=3`,
-    {
-      headers: {
-        "User-Agent": "SingJamConnect/1.0 (https://singjam.connect)",
-        Accept: "application/json",
-      },
-    }
+  const searchRes = await fetch(
+    `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=10`,
+    { headers: MB_HEADERS }
   );
+  if (!searchRes.ok) return null;
 
-  if (!res.ok) return null;
-  const data = await res.json();
-  const rec = data.recordings?.[0];
-  if (!rec) return null;
+  const searchData = await searchRes.json();
+
+  // Only trust results with score >= 80 — below that MB is guessing
+  const recordings: any[] = (searchData.recordings ?? []).filter(
+    (r: any) => (r.score ?? 0) >= 80
+  );
+  if (!recordings.length) return null;
+
+  // Pick the one with the earliest release date (most likely the original)
+  const best = recordings.sort((a: any, b: any) => {
+    const aYear = a["first-release-date"] ? parseInt(a["first-release-date"]) : 9999;
+    const bYear = b["first-release-date"] ? parseInt(b["first-release-date"]) : 9999;
+    return aYear - bYear;
+  })[0];
+
+  // Full lookup with work relations to get composers/lyricists
+  const lookupRes = await fetch(
+    `https://musicbrainz.org/ws/2/recording/${best.id}?inc=artist-credits+work-rels&fmt=json`,
+    { headers: MB_HEADERS }
+  );
+  if (!lookupRes.ok) return null;
+  const rec = await lookupRes.json();
 
   const year = rec["first-release-date"]
     ? parseInt(rec["first-release-date"].slice(0, 4))
     : undefined;
 
-  const displayArtist = rec["artist-credit"]?.[0]?.artist?.name;
-
-  const languages: string[] = [];
-  if (rec.language) languages.push(rec.language);
-
-  // Fetch work relations for composer/lyricist
-  let composers: string[] = [];
-  let lyricists: string[] = [];
-
-  if (rec.relations) {
-    for (const rel of rec.relations) {
-      if (rel.type === "composer" && rel.artist?.name)
-        composers.push(rel.artist.name);
-      if (rel.type === "lyricist" && rel.artist?.name)
-        lyricists.push(rel.artist.name);
-    }
-  }
-
-  const recordingArtists = (rec["artist-credit"] ?? [])
+  const recordingArtists: string[] = (rec["artist-credit"] ?? [])
     .map((ac: any) => ac.artist?.name)
     .filter(Boolean);
+
+  // Join recording artists into a display string (e.g. "John Lennon & Paul McCartney")
+  const displayArtist = recordingArtists.join(" & ") || undefined;
+
+  // Follow work relation to get composers and lyricists
+  let composers: string[] = [];
+  let lyricists: string[] = [];
+  let languages: string[] = [];
+
+  const workRel = (rec.relations ?? []).find((r: any) => r["target-type"] === "work");
+  if (workRel?.work?.id) {
+    const workRes = await fetch(
+      `https://musicbrainz.org/ws/2/work/${workRel.work.id}?inc=artist-rels&fmt=json`,
+      { headers: MB_HEADERS }
+    );
+    if (workRes.ok) {
+      const work = await workRes.json();
+      if (work.language) languages.push(work.language);
+      for (const rel of (work.relations ?? [])) {
+        if (rel.type === "composer" && rel.artist?.name) composers.push(rel.artist.name);
+        if (rel.type === "lyricist" && rel.artist?.name) lyricists.push(rel.artist.name);
+        // "writer" means both composer and lyricist
+        if (rel.type === "writer" && rel.artist?.name) {
+          composers.push(rel.artist.name);
+          lyricists.push(rel.artist.name);
+        }
+      }
+    }
+  }
 
   return {
     year,
