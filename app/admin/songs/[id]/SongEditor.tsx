@@ -301,10 +301,13 @@ export default function SongEditor({
         recording_artists?: string[];
       } | null;
 
-      // Apply canonical scalar fields
+      const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[]; year?: number; firstRecordedBy?: string } | null;
+
+      // Apply canonical scalar fields — prefer SHS year for earliest known recording
       if (mb?.title) setTitle(mb.title);
       if (mb?.display_artist) setDisplayArtist(mb.display_artist);
-      if (mb?.year) setYear(mb.year.toString());
+      const bestYear = shs?.year ?? mb?.year;
+      if (bestYear) setYear(bestYear.toString());
 
       // Deduplicate names across MusicBrainz + Wikidata
       const composerNames = [...new Set([
@@ -328,19 +331,31 @@ export default function SongEditor({
 
       setComposers((prev) => new Set([...prev, ...validComposerIds]));
       setLyricists((prev) => new Set([...prev, ...validLyricistIds]));
-      setRecordingArtists((prev) => {
-        const existingIds = new Set(prev.map((e) => e.id));
-        const newEntries = validRecordingArtistIds.filter((id) => !existingIds.has(id)).map((id) => ({ id, year: null as number | null }));
-        return [...prev, ...newEntries];
-      });
+
+      // Resolve SHS firstRecordedBy into a recording artist entry with year
+      if (shs?.firstRecordedBy) {
+        const artistId = await resolvePersonName(shs.firstRecordedBy, "artists", allArtists);
+        if (artistId) {
+          setRecordingArtists((prev) => {
+            if (prev.find((e) => e.id === artistId)) return prev;
+            return [...prev, { id: artistId, year: shs.year ?? null }];
+          });
+        }
+      } else {
+        setRecordingArtists((prev) => {
+          const existingIds = new Set(prev.map((e) => e.id));
+          const newEntries = validRecordingArtistIds.filter((id) => !existingIds.has(id)).map((id) => ({ id, year: null as number | null }));
+          return [...prev, ...newEntries];
+        });
+      }
 
       setApplied({
         title: mb?.title,
         displayArtist: mb?.display_artist,
-        year: mb?.year,
+        year: bestYear,
         composers: composerNames,
         lyricists: lyricistNames,
-        recordingArtists: recordingArtistNames,
+        recordingArtists: shs?.firstRecordedBy ? [shs.firstRecordedBy] : recordingArtistNames,
       });
 
       // Keep Spotify/Genius as optional clickable suggestions
