@@ -6,6 +6,32 @@ const MB_HEADERS = {
 };
 
 // ─── MusicBrainz ─────────────────────────────────────────────────────────────
+
+type WorkData = { composers: string[]; lyricists: string[]; languages: string[] };
+
+async function fetchMBWorkData(workId: string): Promise<WorkData> {
+  const res = await fetch(
+    `https://musicbrainz.org/ws/2/work/${workId}?inc=artist-rels&fmt=json`,
+    { headers: MB_HEADERS }
+  );
+  if (!res.ok) return { composers: [], lyricists: [], languages: [] };
+  const work = await res.json();
+
+  const result: WorkData = { composers: [], lyricists: [], languages: [] };
+  if (work.language) result.languages.push(work.language);
+  for (const rel of (work.relations ?? [])) {
+    const name: string | undefined = rel.artist?.name;
+    if (!name) continue;
+    if (rel.type === "composer") result.composers.push(name);
+    if (rel.type === "lyricist") result.lyricists.push(name);
+    if (rel.type === "writer") {
+      result.composers.push(name);
+      result.lyricists.push(name);
+    }
+  }
+  return result;
+}
+
 async function enrichMusicBrainz(title: string, artist: string) {
   // Artist in the query dramatically improves accuracy
   const q = artist
@@ -49,43 +75,89 @@ async function enrichMusicBrainz(title: string, artist: string) {
     .map((ac: any) => ac.artist?.name)
     .filter(Boolean);
 
-  // Join recording artists into a display string (e.g. "John Lennon & Paul McCartney")
   const displayArtist = recordingArtists.join(" & ") || undefined;
 
-  // Follow work relation to get composers and lyricists
-  let composers: string[] = [];
-  let lyricists: string[] = [];
-  let languages: string[] = [];
-
+  // Try work relation on the recording first
+  let workData: WorkData = { composers: [], lyricists: [], languages: [] };
   const workRel = (rec.relations ?? []).find((r: any) => r["target-type"] === "work");
+
   if (workRel?.work?.id) {
-    const workRes = await fetch(
-      `https://musicbrainz.org/ws/2/work/${workRel.work.id}?inc=artist-rels&fmt=json`,
+    workData = await fetchMBWorkData(workRel.work.id);
+  } else {
+    // Fallback: search works directly by title — covers songs without recording→work links
+    const workQ = artist
+      ? `work:"${title}" AND artist:"${artist}"`
+      : `work:"${title}"`;
+    const workSearchRes = await fetch(
+      `https://musicbrainz.org/ws/2/work/?query=${encodeURIComponent(workQ)}&fmt=json&limit=5`,
       { headers: MB_HEADERS }
     );
-    if (workRes.ok) {
-      const work = await workRes.json();
-      if (work.language) languages.push(work.language);
-      for (const rel of (work.relations ?? [])) {
-        if (rel.type === "composer" && rel.artist?.name) composers.push(rel.artist.name);
-        if (rel.type === "lyricist" && rel.artist?.name) lyricists.push(rel.artist.name);
-        // "writer" means both composer and lyricist
-        if (rel.type === "writer" && rel.artist?.name) {
-          composers.push(rel.artist.name);
-          lyricists.push(rel.artist.name);
-        }
+    if (workSearchRes.ok) {
+      const workSearchData = await workSearchRes.json();
+      const bestWork = (workSearchData.works ?? []).find((w: any) => (w.score ?? 0) >= 80);
+      if (bestWork?.id) {
+        workData = await fetchMBWorkData(bestWork.id);
       }
     }
   }
 
   return {
+    title: rec.title as string | undefined,
     year,
     display_artist: displayArtist,
-    languages,
-    composers,
-    lyricists,
+    languages: workData.languages,
+    composers: workData.composers,
+    lyricists: workData.lyricists,
     recording_artists: recordingArtists,
   };
+}
+
+
+// ─── Wikidata ─────────────────────────────────────────────────────────────────
+async function enrichWikidata(title: string, artist: string) {
+  // Escape title for SPARQL string literal
+  const escaped = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+  // Q7366 = song, Q2188189 = musical work/composition, Q105543609 = musical composition
+  // P86 = composer, P676 = lyrics by
+  const sparql = `
+SELECT DISTINCT ?composerLabel ?lyricistLabel WHERE {
+  VALUES ?types { wd:Q7366 wd:Q2188189 wd:Q105543609 }
+  ?song wdt:P31 ?types ;
+        rdfs:label ?label .
+  FILTER(LANG(?label) = "en" && LCASE(STR(?label)) = LCASE("${escaped}"))
+  OPTIONAL { ?song wdt:P86 ?composer . }
+  OPTIONAL { ?song wdt:P676 ?lyricist . }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
+}
+LIMIT 20`.trim();
+
+  const res = await fetch(
+    `https://query.wikidata.org/sparql?query=${encodeURIComponent(sparql)}&format=json`,
+    {
+      headers: {
+        "User-Agent": "SingJamConnect/1.0",
+        Accept: "application/sparql-results+json",
+      },
+    }
+  );
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const bindings: any[] = data.results?.bindings ?? [];
+  if (!bindings.length) return null;
+
+  // Filter out unresolved entity IDs (e.g. "Q12345") that Wikidata returns when a label is missing
+  const isLabel = (v: string) => !!v && !v.match(/^Q\d+$/);
+
+  const composers = [...new Set(
+    bindings.map((b) => b.composerLabel?.value).filter(isLabel)
+  )] as string[];
+  const lyricists = [...new Set(
+    bindings.map((b) => b.lyricistLabel?.value).filter(isLabel)
+  )] as string[];
+
+  return composers.length || lyricists.length ? { composers, lyricists } : null;
 }
 
 
@@ -200,14 +272,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
 
-  const [musicbrainz, spotify, genius] = await Promise.allSettled([
+  const [musicbrainz, wikidata, spotify, genius] = await Promise.allSettled([
     enrichMusicBrainz(title, artist),
+    enrichWikidata(title, artist),
     enrichSpotify(title, artist),
     enrichGenius(title, artist),
   ]);
 
   return NextResponse.json({
     musicbrainz: musicbrainz.status === "fulfilled" ? musicbrainz.value : null,
+    wikidata: wikidata.status === "fulfilled" ? wikidata.value : null,
     spotify: spotify.status === "fulfilled" ? spotify.value : null,
     genius: genius.status === "fulfilled" ? genius.value : null,
   });
