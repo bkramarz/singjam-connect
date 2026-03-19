@@ -16,10 +16,12 @@ type ConfidenceKey = (typeof CONFIDENCE_LEVELS)[number]["key"];
 
 type Item = {
   song_id: string;
+  slug: string | null;
   confidence: string | null;
   updated_at: string | null;
   title: string;
   display_artist: string | null;
+  composers: string[];
 };
 
 type UserSongRow = {
@@ -28,7 +30,10 @@ type UserSongRow = {
   updated_at: string | null;
   songs: {
     title: string;
+    slug: string | null;
     display_artist: string | null;
+    song_composers: { people: { name: string } | null }[];
+    song_lyricists: { people: { name: string } | null }[];
   } | null;
 };
 
@@ -81,7 +86,10 @@ export default function RepertoirePage() {
             updated_at,
             songs (
               title,
-              display_artist
+              slug,
+              display_artist,
+              song_composers ( people ( name ) ),
+              song_lyricists ( people ( name ) )
             )
           `
           )
@@ -100,13 +108,21 @@ export default function RepertoirePage() {
         const typed = (rows ?? []) as unknown as UserSongRow[];
         const flattened: Item[] = typed
           .filter((r) => r.songs)
-          .map((r) => ({
-            song_id: r.song_id,
-            confidence: r.confidence,
-            updated_at: r.updated_at,
-            title: r.songs!.title,
-            display_artist: r.songs!.display_artist,
-          }));
+          .map((r) => {
+            const names = new Set<string>([
+              ...(r.songs!.song_composers ?? []).map((c) => c.people?.name).filter(Boolean) as string[],
+              ...(r.songs!.song_lyricists ?? []).map((l) => l.people?.name).filter(Boolean) as string[],
+            ]);
+            return {
+              song_id: r.song_id,
+              slug: r.songs!.slug ?? null,
+              confidence: r.confidence,
+              updated_at: r.updated_at,
+              title: r.songs!.title,
+              display_artist: r.songs!.display_artist,
+              composers: [...names].sort(),
+            };
+          });
 
         setItems(flattened);
       } catch (e: any) {
@@ -272,7 +288,21 @@ export default function RepertoirePage() {
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{it.title}</div>
+                    <div className="truncate font-medium">
+                      <Link href={`/songs/${it.slug ?? it.song_id}`} className="hover:text-amber-600">
+                        {it.title}
+                      </Link>
+                      {it.composers.length > 0 && (
+                        <span className="ml-1 font-normal text-slate-400">
+                          ({it.composers.map((name) => {
+                            const parts = name.trim().split(" ");
+                            return parts.length > 1
+                              ? `${parts[0][0]}. ${parts.slice(1).join(" ")}`
+                              : name;
+                          }).join(", ")})
+                        </span>
+                      )}
+                    </div>
                     <div className="truncate text-sm text-muted-foreground">
                       {it.display_artist ?? "—"}
                     </div>

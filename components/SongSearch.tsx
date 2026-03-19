@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Result = {
@@ -9,6 +11,9 @@ type Result = {
   display_artist: string | null;
   aka: string[] | null;
   score: number;
+  composers: string[];
+  year: number | null;
+  slug: string | null;
 };
 
 const LEVELS = [
@@ -20,6 +25,7 @@ const LEVELS = [
 
 export default function SongSearch({ initialQuery = "" }: { initialQuery?: string }) {
   const supabase = supabaseBrowser();
+  const router = useRouter();
 
   const [q, setQ] = useState(initialQuery);
   const [results, setResults] = useState<Result[]>([]);
@@ -28,7 +34,25 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [level, setLevel] = useState<(typeof LEVELS)[number]["key"]>("support");
   const [status, setStatus] = useState<string | null>(null);
 
+  // Map of song_id → confidence for songs already in repertoire
+  const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
+
   const debounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) return;
+      supabase
+        .from("user_songs")
+        .select("song_id, confidence")
+        .eq("user_id", data.session.user.id)
+        .then(({ data: rows }) => {
+          if (!rows) return;
+          setRepertoire(new Map(rows.map((r) => [r.song_id, r.confidence ?? ""])));
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function runSearch(query: string) {
     const trimmed = query.trim();
@@ -54,7 +78,24 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       return;
     }
 
-    setResults((data ?? []) as Result[]);
+    const songs = (data ?? []) as Omit<Result, "composers">[];
+    if (!songs.length) { setResults([]); return; }
+
+    const { data: songData } = await supabase
+      .from("songs")
+      .select("id, year, slug, song_composers(people(name))")
+      .in("id", songs.map((s) => s.song_id));
+
+    const byId: Record<string, { composers: string[]; year: number | null; slug: string | null }> = {};
+    for (const row of (songData ?? []) as any[]) {
+      byId[row.id] = {
+        year: row.year ?? null,
+        slug: row.slug ?? null,
+        composers: (row.song_composers ?? []).map((c: any) => c.people?.name).filter(Boolean).sort(),
+      };
+    }
+
+    setResults(songs.map((s) => ({ ...s, ...byId[s.song_id] ?? { composers: [], year: null, slug: null } })));
   }
 
   useEffect(() => {
@@ -83,7 +124,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     const session = data.session;
 
     if (!session) {
-      setStatus("Please sign in first.");
+      router.push("/auth");
       return;
     }
 
@@ -97,7 +138,12 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       { onConflict: "user_id,song_id" }
     );
 
-    setStatus(error ? error.message : "Added!");
+    if (error) {
+      setStatus(error.message);
+    } else {
+      setRepertoire((prev) => new Map(prev).set(songId, level));
+      setStatus(null);
+    }
   }
 
   return (
@@ -143,31 +189,61 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       {/* Results live ON the page */}
       {q.trim() ? (
         <div className="grid gap-2">
-          {results.map((r) => (
-            <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">
-                    {r.title}
-                    {r.display_artist ? (
-                      <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
+          {results.map((r) => {
+            const inRepertoire = repertoire.has(r.song_id);
+            const confidence = repertoire.get(r.song_id);
+            const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
+            return (
+              <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {r.title}
+                      {r.composers.length > 0 && (
+                        <span className="ml-1 font-normal text-zinc-400">
+                          ({r.composers.map((name) => {
+                            const parts = name.trim().split(" ");
+                            return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
+                          }).join(", ")})
+                        </span>
+                      )}
+                      {r.display_artist ? (
+                        <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
+                      ) : null}
+                      {r.year && (
+                        <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
+                      )}
+                    </div>
+
+                    {r.aka && r.aka.length ? (
+                      <div className="text-xs text-zinc-500 truncate">aka: {r.aka.join(" · ")}</div>
                     ) : null}
+
+                    {inRepertoire && (
+                      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+                        ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
+                      </div>
+                    )}
                   </div>
 
-                  {r.aka && r.aka.length ? (
-                    <div className="text-xs text-zinc-500 truncate">aka: {r.aka.join(" · ")}</div>
-                  ) : null}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Link
+                      href={`/songs/${r.slug ?? r.song_id}`}
+                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                    >
+                      View
+                    </Link>
+                    <button
+                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                      onClick={() => addSong(r.song_id)}
+                    >
+                      {inRepertoire ? "Update" : "Add"}
+                    </button>
+                  </div>
                 </div>
-
-                <button
-                  className="shrink-0 rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                  onClick={() => addSong(r.song_id)}
-                >
-                  Add
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {!loading && results.length === 0 ? (
             <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">

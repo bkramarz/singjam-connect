@@ -13,10 +13,14 @@ export default async function AdminSongsPage({
   let query = supabase
     .from("songs")
     .select(`
-      id, title, display_artist, energy, difficulty, popularity,
+      id, title, slug, display_artist,
+      first_line, hook, genius_url, chord_chart_url, tonality, meter,
       song_composers(people(name)),
       song_lyricists(people(name)),
-      song_recording_artists(year)
+      song_recording_artists(year),
+      song_genres(genre_id),
+      song_languages(language_id),
+      user_songs(count)
     `)
     .order("title");
 
@@ -53,11 +57,10 @@ export default async function AdminSongsPage({
             <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-medium text-slate-500">
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Songwriters</th>
-              <th className="px-4 py-3">Artist</th>
+              <th className="px-4 py-3">Artist(s)</th>
               <th className="px-4 py-3">First recorded</th>
-              <th className="px-4 py-3">E</th>
-              <th className="px-4 py-3">D</th>
-              <th className="px-4 py-3">Pop</th>
+              <th className="px-4 py-3">SingJam popularity</th>
+              <th className="px-4 py-3">Missing</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -75,7 +78,9 @@ export default async function AdminSongsPage({
                     return sorted.length ? sorted.join(", ") : "—";
                   })()}
                 </td>
-                <td className="px-4 py-2.5 text-slate-500">{s.display_artist ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-500">
+                  {s.display_artist ? s.display_artist.replace(/ & /g, " | ") : "—"}
+                </td>
                 <td className="px-4 py-2.5 text-slate-500">{
                   (() => {
                     const years = (s.song_recording_artists ?? [])
@@ -84,13 +89,39 @@ export default async function AdminSongsPage({
                     return years.length ? Math.min(...years) : "—";
                   })()
                 }</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.energy ?? "—"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.difficulty ?? "—"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{s.popularity ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-500">
+                  {(s.user_songs as any)?.[0]?.count ?? 0}
+                </td>
+                <td className="px-4 py-2.5">
+                  {(() => {
+                    const missing: string[] = [];
+                    if (!(s.song_composers ?? []).length) missing.push("composer");
+                    if (!(s.song_lyricists ?? []).length) missing.push("lyricist");
+                    if (!s.display_artist) missing.push("artist");
+                    if (!(s.song_recording_artists ?? []).length) missing.push("recording");
+                    if (!s.first_line) missing.push("first line");
+                    if (!s.hook) missing.push("hook");
+                    if (!s.genius_url) missing.push("genius");
+                    if (!s.tonality) missing.push("tonality");
+                    if (!s.meter) missing.push("meter");
+                    if (!(s.song_genres ?? []).length) missing.push("genre");
+                    if (!(s.song_languages ?? []).length) missing.push("language");
+                    if (!missing.length) return <span className="text-xs text-slate-300">✓</span>;
+                    return (
+                      <div className="flex flex-wrap gap-1">
+                        {missing.map((m) => (
+                          <span key={m} className="rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-xs text-red-500">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-3">
                     <Link
-                      href={`/admin/songs/${s.id}`}
+                      href={`/admin/songs/${(s as any).slug ?? s.id}`}
                       className="text-amber-600 hover:text-amber-500"
                     >
                       Edit
@@ -102,7 +133,7 @@ export default async function AdminSongsPage({
             ))}
             {!songs?.length && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                   {q ? "No songs match that search." : "No songs yet."}
                 </td>
               </tr>

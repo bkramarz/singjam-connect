@@ -7,24 +7,65 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Lookup = { id: string; name: string };
 type AltTitle = { id: string; title: string };
 
+function toTitleCase(s: string) {
+  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+const LANG_NAMES: Record<string, string> = {
+  eng: "English", fra: "French", deu: "German", spa: "Spanish",
+  ita: "Italian", por: "Portuguese", jpn: "Japanese", zho: "Chinese",
+  kor: "Korean", rus: "Russian", ara: "Arabic", nld: "Dutch",
+  pol: "Polish", swe: "Swedish", nor: "Norwegian", fin: "Finnish",
+  dan: "Danish", ces: "Czech", hun: "Hungarian", ron: "Romanian",
+  tur: "Turkish", heb: "Hebrew", hin: "Hindi", ben: "Bengali",
+  ind: "Indonesian", vie: "Vietnamese", tha: "Thai", ukr: "Ukrainian",
+  cat: "Catalan", lat: "Latin", gle: "Irish", cym: "Welsh",
+  eus: "Basque", glg: "Galician", hrv: "Croatian", srp: "Serbian",
+  slk: "Slovak", slv: "Slovenian", bul: "Bulgarian", ell: "Greek",
+  lit: "Lithuanian", lav: "Latvian", est: "Estonian", afr: "Afrikaans",
+  swa: "Swahili", yor: "Yoruba", amh: "Amharic", msa: "Malay",
+  tgl: "Filipino", nob: "Norwegian Bokmål", nno: "Norwegian Nynorsk",
+  yid: "Yiddish", bre: "Breton", oci: "Occitan", scr: "Croatian",
+};
+
+function langCodeToName(code: string): string {
+  return LANG_NAMES[code.toLowerCase()] ?? toTitleCase(code);
+}
+
+const TONALITY_OPTIONS = [
+  "Major", "Minor", "Dorian", "Phrygian", "Lydian", "Mixolydian",
+  "Aeolian", "Locrian", "Harmonic Minor", "Melodic Minor",
+  "Pentatonic", "Blues", "Whole Tone", "Chromatic", "Modal",
+];
+
+const METER_OPTIONS = ["4", "3", "5", "7", "9", "11", "Free", "Irregular"];
+
+function generateSlug(title: string, composerNames: string[]): string {
+  return [title, ...composerNames]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 type Song = {
   id: string;
   title: string;
+  slug: string | null;
   display_artist: string | null;
   first_line: string | null;
   hook: string | null;
   lyrics: string | null;
+  genius_url: string | null;
+  chord_chart_url: string | null;
   year: number | null;
   tonality: string | null;
   meter: string | null;
-  energy: number | null;
-  difficulty: number | null;
-  popularity: number | null;
   song_genres: { genre_id: string }[];
   song_themes: { theme_id: string }[];
   song_cultures: { culture_id: string }[];
   song_languages: { language_id: string }[];
-  song_traditions: { tradition_id: string }[];
   song_composers: { person_id: string }[];
   song_lyricists: { person_id: string }[];
   song_recording_artists: { artist_id: string; year: number | null }[];
@@ -38,7 +79,6 @@ type Props = {
   allThemes: Lookup[];
   allCultures: Lookup[];
   allLanguages: Lookup[];
-  allTraditions: Lookup[];
   allPeople: Lookup[];
   allArtists: Lookup[];
 };
@@ -54,7 +94,6 @@ export default function SongEditor({
   allThemes,
   allCultures,
   allLanguages,
-  allTraditions,
   allPeople,
   allArtists,
 }: Props) {
@@ -63,33 +102,20 @@ export default function SongEditor({
 
   // Scalar fields
   const [title, setTitle] = useState(song?.title ?? "");
+  const [slug, setSlug] = useState(song?.slug ?? "");
   const [displayArtist, setDisplayArtist] = useState(song?.display_artist ?? "");
   const [firstLine, setFirstLine] = useState(song?.first_line ?? "");
   const [hook, setHook] = useState(song?.hook ?? "");
-  const [lyrics, setLyrics] = useState(song?.lyrics ?? "");
+  const [geniusUrl, setGeniusUrl] = useState(song?.genius_url ?? "");
+  const [chordChartUrl, setChordChartUrl] = useState(song?.chord_chart_url ?? "");
   const [year, setYear] = useState(song?.year?.toString() ?? "");
-  const [tonality, setTonality] = useState(song?.tonality ?? "");
-  const [meter, setMeter] = useState(song?.meter ?? "");
-  const [energy, setEnergy] = useState(song?.energy?.toString() ?? "");
-  const [difficulty, setDifficulty] = useState(song?.difficulty?.toString() ?? "");
-  const [popularity, setPopularity] = useState(song?.popularity?.toString() ?? "");
+  const [tonalities, setTonalities] = useState<string[]>(() =>
+    song?.tonality ? song.tonality.split(",").map((s) => s.trim()).filter(Boolean) : []
+  );
+  const [meters, setMeters] = useState<string[]>(() =>
+    song?.meter ? song.meter.split(",").map((s) => s.trim()).filter(Boolean) : []
+  );
 
-  // Lookup associations
-  const [genres, setGenres] = useState<Set<string>>(
-    toSet(song?.song_genres.map((x) => x.genre_id) ?? [])
-  );
-  const [themes, setThemes] = useState<Set<string>>(
-    toSet(song?.song_themes.map((x) => x.theme_id) ?? [])
-  );
-  const [cultures, setCultures] = useState<Set<string>>(
-    toSet(song?.song_cultures.map((x) => x.culture_id) ?? [])
-  );
-  const [languages, setLanguages] = useState<Set<string>>(
-    toSet(song?.song_languages.map((x) => x.language_id) ?? [])
-  );
-  const [traditions, setTraditions] = useState<Set<string>>(
-    toSet(song?.song_traditions.map((x) => x.tradition_id) ?? [])
-  );
   const initialComposerIds = song?.song_composers.map((x) => x.person_id) ?? [];
   const initialLyricistIds = song?.song_lyricists.map((x) => x.person_id) ?? [];
   const [composers, setComposers] = useState<Set<string>>(toSet(initialComposerIds));
@@ -103,6 +129,20 @@ export default function SongEditor({
     : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null }));
   const [recordingArtists, setRecordingArtists] = useState<RecordingArtistEntry[]>(seededRecordingArtistEntries);
 
+  // Tag pill arrays
+  const [genres, setGenres] = useState<string[]>(() =>
+    (song?.song_genres ?? []).map((x) => allGenres.find((g) => g.id === x.genre_id)?.name).filter((n): n is string => !!n)
+  );
+  const [themes, setThemes] = useState<string[]>(() =>
+    (song?.song_themes ?? []).map((x) => allThemes.find((t) => t.id === x.theme_id)?.name).filter((n): n is string => !!n)
+  );
+  const [cultures, setCultures] = useState<string[]>(() =>
+    (song?.song_cultures ?? []).map((x) => allCultures.find((c) => c.id === x.culture_id)?.name).filter((n): n is string => !!n)
+  );
+  const [languages, setLanguages] = useState<string[]>(() =>
+    (song?.song_languages ?? []).map((x) => allLanguages.find((l) => l.id === x.language_id)?.name).filter((n): n is string => !!n)
+  );
+
   // Alternate titles
   const [altTitles, setAltTitles] = useState<AltTitle[]>(song?.song_alternate_titles ?? []);
   const [newAltTitle, setNewAltTitle] = useState("");
@@ -112,6 +152,67 @@ export default function SongEditor({
   const [error, setError] = useState<string | null>(null);
   const [standardizing, setStandardizing] = useState(false);
 
+  // Lyric data
+  const [openingGenius, setOpeningGenius] = useState(false);
+
+  async function handleGetGeniusUrl() {
+    setOpeningGenius(true);
+    try {
+      const res = await fetch(`/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`);
+      const data = await res.json();
+      const url = data.genius?.lyrics_url;
+      if (url) setGeniusUrl(url);
+    } catch {
+      // leave field blank if it fails
+    } finally {
+      setOpeningGenius(false);
+    }
+  }
+
+  // Tags enrichment
+  const [findingTags, setFindingTags] = useState(false);
+
+  async function handleFindTags() {
+    if (!title.trim()) return;
+    setFindingTags(true);
+    try {
+      console.log("[findTags] calling /api/enrich?mode=tags for:", title, displayArtist);
+      const t0 = Date.now();
+      const res = await fetch(`/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}&mode=tags`);
+      console.log(`[findTags] enrich responded in ${Date.now() - t0}ms — status ${res.status}`);
+      const data = await res.json();
+      console.log("[findTags] musicbrainz languages:", data.musicbrainz?.languages ?? "none");
+      console.log("[findTags] spotify genres:", data.spotify?.genres ?? "none");
+      console.log("[findTags] lastfm tags:", data.lastfm?.tags ?? "none (check LASTFM_API_KEY)");
+
+      const lastfmTags: string[] = data.lastfm?.tags ?? [];
+      const spotifyGenres: string[] = data.spotify?.genres ?? [];
+      const mbLanguages: string[] = data.musicbrainz?.languages ?? [];
+
+      const allGenreSuggestions = [...new Set([...lastfmTags, ...spotifyGenres].map(toTitleCase))];
+      console.log("[findTags] genre suggestions:", allGenreSuggestions);
+      if (allGenreSuggestions.length) {
+        setGenres((prev) => {
+          const prevLower = new Set(prev.map((p) => p.toLowerCase()));
+          return [...prev, ...allGenreSuggestions.filter((s) => !prevLower.has(s.toLowerCase()))];
+        });
+      }
+      if (mbLanguages.length) {
+        const newLangs = mbLanguages.map(langCodeToName);
+        console.log("[findTags] language suggestions:", newLangs);
+        setLanguages((prev) => {
+          const prevLower = new Set(prev.map((p) => p.toLowerCase()));
+          return [...prev, ...newLangs.filter((l) => !prevLower.has(l.toLowerCase()))];
+        });
+      }
+    } catch (e) {
+      console.error("[findTags] error:", e);
+      setError("Could not fetch tag data.");
+    } finally {
+      setFindingTags(false);
+    }
+  }
+
   // New-song chunk-1 state
   const [finding, setFinding] = useState(false);
   const [found, setFound] = useState(false);
@@ -120,12 +221,7 @@ export default function SongEditor({
   const [newComposerName, setNewComposerName] = useState("");
   const [newLyricistName, setNewLyricistName] = useState("");
   const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
-
-  function toggleSet(set: Set<string>, setFn: (s: Set<string>) => void, id: string) {
-    const next = new Set(set);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setFn(next);
-  }
+  const [primaryArtist, setPrimaryArtist] = useState<{ name: string; year: number | null } | null>(null);
 
   // Find or create a person/artist by canonical name. Returns the DB id.
   async function resolvePersonName(
@@ -156,11 +252,14 @@ export default function SongEditor({
         `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
       );
       const data = await res.json();
-      const mb = data.musicbrainz as { title?: string; display_artist?: string; composers?: string[]; lyricists?: string[] } | null;
+      const mb = data.musicbrainz as { title?: string; display_artist?: string; composers?: string[]; lyricists?: string[]; topArtists?: { name: string; year: number | null }[] } | null;
       const shs = data.secondhandsongs as { composers?: string[]; lyricists?: string[] } | null;
 
       setStandardizedTitle(mb?.title ?? title);
       setStandardizedArtist(mb?.display_artist ?? displayArtist);
+      if (mb?.topArtists?.length) {
+        setPrimaryArtist({ name: mb.topArtists[0].name, year: mb.topArtists[0].year });
+      }
 
       const mbComposers = mb?.composers ?? [];
       const shsComposers = shs?.composers ?? [];
@@ -206,10 +305,13 @@ export default function SongEditor({
     setSaving(true);
     setError(null);
     try {
+      const finalTitle = (standardizedTitle || title).trim();
+      const composerNames = [...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
       const { data, error } = await supabase
         .from("songs")
         .insert({
-          title: (standardizedTitle || title).trim(),
+          title: finalTitle,
+          slug: generateSlug(finalTitle, composerNames),
           display_artist: (standardizedArtist || displayArtist).trim() || null,
           updated_at: new Date().toISOString(),
         })
@@ -218,14 +320,26 @@ export default function SongEditor({
       if (error) throw error;
 
       const songId = data.id;
+
       if (composers.size) {
-        const { error: joinError } = await supabase
-          .from("song_composers")
-          .insert([...composers].map((id) => ({ song_id: songId, person_id: id })));
-        if (joinError) throw joinError;
+        const { error: e } = await supabase.from("song_composers").insert([...composers].map((id) => ({ song_id: songId, person_id: id })));
+        if (e) throw e;
+      }
+      if (lyricists.size) {
+        const { error: e } = await supabase.from("song_lyricists").insert([...lyricists].map((id) => ({ song_id: songId, person_id: id })));
+        if (e) throw e;
+      }
+      const artistName = (standardizedArtist || displayArtist).trim();
+      if (artistName) {
+        const artistId = await resolvePersonName(artistName, "artists", allArtists);
+        if (artistId) {
+          const { error: e } = await supabase.from("song_recording_artists").insert({ song_id: songId, artist_id: artistId, year: primaryArtist?.year ?? null });
+          if (e) throw e;
+        }
       }
 
-      router.push(`/admin/songs/${songId}`);
+      const newSlug = generateSlug(finalTitle, composerNames);
+      router.push(`/admin/songs/${newSlug}`);
       router.refresh();
     } catch (e: any) {
       setError(e.message ?? "Save failed.");
@@ -305,18 +419,20 @@ export default function SongEditor({
     setError(null);
 
     try {
+      const composerNamesForSlug = [...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
+      const resolvedSlug = slug.trim() || generateSlug(title.trim(), composerNamesForSlug);
+
       const payload = {
         title: title.trim(),
+        slug: resolvedSlug,
         display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(" & ") || displayArtist.trim() || null,
         first_line: firstLine.trim() || null,
         hook: hook.trim() || null,
-        lyrics: lyrics.trim() || null,
+        genius_url: geniusUrl.trim() || null,
+        chord_chart_url: chordChartUrl.trim() || null,
         year: year ? parseInt(year) : null,
-        tonality: tonality.trim() || null,
-        meter: meter.trim() || null,
-        energy: energy ? parseInt(energy) : null,
-        difficulty: difficulty ? parseInt(difficulty) : null,
-        popularity: popularity ? parseInt(popularity) : null,
+        tonality: tonalities.join(", ") || null,
+        meter: meters.join(", ") || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -331,11 +447,32 @@ export default function SongEditor({
         if (error) throw error;
       }
 
+      async function resolveNamesToIds(names: string[], table: string, lookup: Lookup[]) {
+        const ids: string[] = [];
+        for (const name of names) {
+          const existing = lookup.find((l) => l.name === name);
+          if (existing) {
+            ids.push(existing.id);
+          } else {
+            const { data: row } = await supabase.from(table).upsert({ name }, { onConflict: "name" }).select("id").single();
+            if (row?.id) {
+              ids.push(row.id);
+              lookup.push({ id: row.id, name });
+            }
+          }
+        }
+        return new Set(ids);
+      }
       const originalGenres = song?.song_genres.map((x) => x.genre_id) ?? [];
       const originalThemes = song?.song_themes.map((x) => x.theme_id) ?? [];
       const originalCultures = song?.song_cultures.map((x) => x.culture_id) ?? [];
       const originalLanguages = song?.song_languages.map((x) => x.language_id) ?? [];
-      const originalTraditions = song?.song_traditions.map((x) => x.tradition_id) ?? [];
+      const [genreIds, themeIds, cultureIds, languageIds] = await Promise.all([
+        resolveNamesToIds(genres, "genres", allGenres),
+        resolveNamesToIds(themes, "themes", allThemes),
+        resolveNamesToIds(cultures, "cultures", allCultures),
+        resolveNamesToIds(languages, "languages", allLanguages),
+      ]);
       const originalComposers = song?.song_composers.map((x) => x.person_id) ?? [];
       const originalLyricists = song?.song_lyricists.map((x) => x.person_id) ?? [];
       const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
@@ -343,11 +480,10 @@ export default function SongEditor({
       const toDeleteArtists = originalRecordingArtistIds.filter((id) => !newRecordingArtistIds.includes(id));
 
       await Promise.all([
-        syncJoinTable(songId!, "song_genres", "genre_id", genres, originalGenres),
-        syncJoinTable(songId!, "song_themes", "theme_id", themes, originalThemes),
-        syncJoinTable(songId!, "song_cultures", "culture_id", cultures, originalCultures),
-        syncJoinTable(songId!, "song_languages", "language_id", languages, originalLanguages),
-        syncJoinTable(songId!, "song_traditions", "tradition_id", traditions, originalTraditions),
+        syncJoinTable(songId!, "song_genres", "genre_id", genreIds, originalGenres),
+        syncJoinTable(songId!, "song_themes", "theme_id", themeIds, originalThemes),
+        syncJoinTable(songId!, "song_cultures", "culture_id", cultureIds, originalCultures),
+        syncJoinTable(songId!, "song_languages", "language_id", languageIds, originalLanguages),
         syncJoinTable(songId!, "song_composers", "person_id", composers, originalComposers),
         syncJoinTable(songId!, "song_lyricists", "person_id", lyricists, originalLyricists),
         toDeleteArtists.length
@@ -361,7 +497,8 @@ export default function SongEditor({
           : Promise.resolve(),
       ]);
 
-      router.push("/admin/songs");
+      setSlug(resolvedSlug);
+      router.push(`/admin/songs/${resolvedSlug}`);
       router.refresh();
     } catch (e: any) {
       setError(e.message ?? "Save failed.");
@@ -428,7 +565,7 @@ export default function SongEditor({
 
         {found && (
           <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Standardized title">
                 <input value={standardizedTitle} onChange={(e) => setStandardizedTitle(e.target.value)}
                   className="input" />
@@ -436,6 +573,15 @@ export default function SongEditor({
               <Field label="Standardized artist">
                 <input value={standardizedArtist} onChange={(e) => setStandardizedArtist(e.target.value)}
                   className="input" />
+              </Field>
+              <Field label="Year first recorded">
+                <input
+                  type="number"
+                  value={primaryArtist?.year ?? ""}
+                  onChange={(e) => setPrimaryArtist((prev) => ({ name: prev?.name ?? "", year: e.target.value ? parseInt(e.target.value) : null }))}
+                  className="input"
+                  placeholder="e.g. 1965"
+                />
               </Field>
             </div>
             <PeopleField
@@ -481,12 +627,22 @@ export default function SongEditor({
           {title || "Edit song"}
         </h1>
         <div className="flex gap-2">
+          {slug && (
+            <a
+              href={`/songs/${slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              View ↗
+            </a>
+          )}
           <button
             onClick={handleEnrich}
             disabled={standardizing || !title.trim()}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            {standardizing ? "Enriching…" : "✦ Enrich"}
+            {standardizing ? "Finding…" : "✦ Find additional recordings"}
           </button>
           <button
             onClick={handleSave}
@@ -512,6 +668,10 @@ export default function SongEditor({
           <Field label="Title *">
             <input value={title} onChange={(e) => setTitle(e.target.value)}
               className="input" placeholder="Song title" />
+          </Field>
+          <Field label="Slug">
+            <input value={slug} onChange={(e) => setSlug(e.target.value)}
+              className="input font-mono text-xs" placeholder="e.g. blowin-in-the-wind-bob-dylan" />
           </Field>
         </div>
 
@@ -548,57 +708,74 @@ export default function SongEditor({
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="First line" className="sm:col-span-2">
-            <input value={firstLine} onChange={(e) => setFirstLine(e.target.value)}
-              className="input" placeholder="First sung line of the song" />
-          </Field>
-          <Field label="Hook / excerpt" className="sm:col-span-2">
-            <input value={hook} onChange={(e) => setHook(e.target.value)}
-              className="input" placeholder="Memorable lyric excerpt" />
-          </Field>
-          <Field label="Year">
-            <input type="number" value={year} onChange={(e) => setYear(e.target.value)}
-              className="input" placeholder="e.g. 1965" />
-          </Field>
-          <Field label="Tonality">
-            <input value={tonality} onChange={(e) => setTonality(e.target.value)}
-              className="input" placeholder="e.g. major, minor, modal" />
-          </Field>
-          <Field label="Meter">
-            <input value={meter} onChange={(e) => setMeter(e.target.value)}
-              className="input" placeholder="e.g. 4/4, 3/4, 6/8" />
-          </Field>
+          <TagPillsField label="Tonality" value={tonalities} onChange={setTonalities} suggestions={TONALITY_OPTIONS} allowNew placeholder="Search tonality…" />
+          <TagPillsField label="Meter" value={meters} onChange={setMeters} suggestions={METER_OPTIONS} placeholder="Search meter…" />
         </div>
+      </section>
 
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Energy (1–5)">
-            <RatingInput value={energy} onChange={setEnergy} />
-          </Field>
-          <Field label="Difficulty (1–5)">
-            <RatingInput value={difficulty} onChange={setDifficulty} />
-          </Field>
-          <Field label="Popularity (1–5)">
-            <RatingInput value={popularity} onChange={setPopularity} />
-          </Field>
+      {/* Lyric data */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">Lyric data</h2>
+          <button
+            onClick={handleGetGeniusUrl}
+            disabled={openingGenius || !title.trim()}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40 flex items-center gap-1.5"
+          >
+            {openingGenius ? "Finding…" : "♪ Get Genius URL"}
+          </button>
         </div>
-
-        <Field label="Lyrics">
-          <textarea value={lyrics} onChange={(e) => setLyrics(e.target.value)}
-            rows={6} className="input resize-y" placeholder="Full lyrics…" />
+        <Field label="Genius URL">
+          <div className="flex gap-2">
+            <input value={geniusUrl} onChange={(e) => setGeniusUrl(e.target.value)}
+              className="input flex-1" placeholder="https://genius.com/…" />
+            {geniusUrl && (
+              <a href={geniusUrl} target="_blank" rel="noopener noreferrer"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 shrink-0">
+                ↗
+              </a>
+            )}
+          </div>
+        </Field>
+        <Field label="Chord Chart URL">
+          <div className="flex gap-2">
+            <input value={chordChartUrl} onChange={(e) => setChordChartUrl(e.target.value)}
+              className="input flex-1" placeholder="https://…" />
+            {chordChartUrl && (
+              <a href={chordChartUrl} target="_blank" rel="noopener noreferrer"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 shrink-0">
+                ↗
+              </a>
+            )}
+          </div>
+        </Field>
+        <Field label="First line">
+          <input value={firstLine} onChange={(e) => setFirstLine(e.target.value)}
+            className="input" placeholder="First sung line of the song" />
+        </Field>
+        <Field label="Hook / excerpt">
+          <input value={hook} onChange={(e) => setHook(e.target.value)}
+            className="input" placeholder="Memorable lyric excerpt" />
         </Field>
       </section>
 
       {/* Lookups */}
-      <LookupSection title="Genres" items={allGenres} selected={genres}
-        onToggle={(id) => toggleSet(genres, setGenres, id)} />
-      <LookupSection title="Themes" items={allThemes} selected={themes}
-        onToggle={(id) => toggleSet(themes, setThemes, id)} />
-      <LookupSection title="Cultures" items={allCultures} selected={cultures}
-        onToggle={(id) => toggleSet(cultures, setCultures, id)} />
-      <LookupSection title="Languages" items={allLanguages} selected={languages}
-        onToggle={(id) => toggleSet(languages, setLanguages, id)} />
-      <LookupSection title="Religious traditions" items={allTraditions} selected={traditions}
-        onToggle={(id) => toggleSet(traditions, setTraditions, id)} />
+      <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">Tags</h2>
+          <button
+            onClick={handleFindTags}
+            disabled={findingTags || !title.trim()}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
+          >
+            {findingTags ? "Finding…" : "✦ Find more information"}
+          </button>
+        </div>
+        <TagPillsField label="Genres" value={genres} onChange={setGenres} suggestions={allGenres.map((g) => g.name)} allowNew placeholder="Search genres…" />
+        <TagPillsField label="Themes" value={themes} onChange={setThemes} suggestions={allThemes.map((t) => t.name)} allowNew placeholder="Search themes…" />
+        <TagPillsField label="Languages" value={languages} onChange={setLanguages} suggestions={allLanguages.map((l) => l.name)} placeholder="Search languages…" />
+        <TagPillsField label="Cultures" value={cultures} onChange={setCultures} suggestions={allCultures.map((c) => c.name)} allowNew placeholder="Search cultures…" />
+      </section>
       {/* Alternate titles */}
       {!isNew && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
@@ -633,7 +810,26 @@ export default function SongEditor({
       )}
 
       {!isNew && (
-        <div className="border-t border-slate-200 pt-6">
+        <div className="border-t border-slate-200 pt-6 flex items-center justify-between">
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-40"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            {slug && (
+              <a
+                href={`/songs/${slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                View ↗
+              </a>
+            )}
+          </div>
           <button
             onClick={async () => {
               if (!confirm("Delete this song? This cannot be undone.")) return;
@@ -769,6 +965,83 @@ function PeopleField({
   );
 }
 
+function TagPillsField({
+  label, value, onChange, suggestions, allowNew = false, placeholder,
+}: {
+  label: string;
+  value: string[];
+  onChange: (v: string[]) => void;
+  suggestions: string[];
+  allowNew?: boolean;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState("");
+
+  const trimmed = query.trim();
+  const filtered = trimmed.length > 0
+    ? suggestions.filter((s) => s.toLowerCase().includes(trimmed.toLowerCase()) && !value.includes(s))
+    : [];
+  const exactMatch = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+  const showCreate = allowNew && trimmed.length > 0 && !exactMatch && !value.find((v) => v.toLowerCase() === trimmed.toLowerCase());
+
+  function add(name: string) {
+    if (!value.includes(name)) onChange([...value, name]);
+    setQuery("");
+  }
+
+  const knownSet = new Set(suggestions.map((s) => s.toLowerCase()));
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-slate-600">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {[...new Set(value)].map((v) => {
+          const isNew = !knownSet.has(v.toLowerCase());
+          return (
+            <span key={v} className={`flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${isNew ? "border-amber-400 bg-white text-amber-600" : "border-amber-500 bg-amber-500 text-white"}`}>
+              {v}
+              {isNew && <span className="text-xs opacity-60">(new)</span>}
+              <button type="button" onClick={() => onChange(value.filter((x) => x !== v))} className="opacity-70 hover:opacity-100 leading-none">×</button>
+            </span>
+          );
+        })}
+        {!value.length && <span className="text-sm text-slate-400">None added.</span>}
+      </div>
+      <div className="relative">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={placeholder ?? `Search ${label.toLowerCase()}…`}
+          className="input w-full"
+        />
+        {(filtered.length > 0 || showCreate) && (
+          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-md max-h-48 overflow-y-auto">
+            {filtered.slice(0, 8).map((s) => (
+              <li key={s}>
+                <button onMouseDown={() => add(s)} className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50">
+                  {s}
+                </button>
+              </li>
+            ))}
+            {showCreate && (
+              <li>
+                <button onMouseDown={() => add(toTitleCase(trimmed))} className="w-full px-3 py-2 text-left text-sm text-amber-600 hover:bg-amber-50">
+                  Create "{toTitleCase(trimmed)}" and add to database on save
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
+        {trimmed.length > 0 && filtered.length === 0 && !showCreate && (
+          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-md">
+            <li className="px-3 py-2 text-sm text-slate-400">No match in database</li>
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Field({
   label,
   children,
@@ -786,119 +1059,4 @@ function Field({
   );
 }
 
-function RatingInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(value === n.toString() ? "" : n.toString())}
-          className={`h-8 w-8 rounded-lg border text-sm font-medium transition-colors ${
-            value === n.toString()
-              ? "border-amber-500 bg-amber-500 text-white"
-              : "border-slate-200 bg-white text-slate-500 hover:border-amber-300"
-          }`}
-        >
-          {n}
-        </button>
-      ))}
-    </div>
-  );
-}
 
-function LookupSection({
-  title,
-  items,
-  selected,
-  onToggle,
-  creatable = false,
-}: {
-  title: string;
-  items: Lookup[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-  creatable?: boolean;
-}) {
-  const [newName, setNewName] = useState("");
-  const [adding, setAdding] = useState(false);
-  const supabase = supabaseBrowser();
-
-  const tableMap: Record<string, string> = {
-    Genres: "genres",
-    Themes: "themes",
-    Cultures: "cultures",
-    Languages: "languages",
-    "Religious traditions": "traditions",
-    Composers: "people",
-    Lyricists: "people",
-    "Recording artists": "artists",
-  };
-
-  async function create() {
-    if (!newName.trim()) return;
-    setAdding(true);
-    const table = tableMap[title];
-    const { data, error } = await supabase
-      .from(table)
-      .insert({ name: newName.trim() })
-      .select("id, name")
-      .single();
-    setAdding(false);
-    if (error) { alert(error.message); return; }
-    items.push(data);
-    onToggle(data.id);
-    setNewName("");
-  }
-
-  const selectedItems = items.filter((item) => selected.has(item.id));
-  const unselectedItems = items.filter((item) => !selected.has(item.id));
-
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
-      <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
-      <div className="flex flex-wrap gap-2">
-        {/* Selected items first */}
-        {selectedItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onToggle(item.id)}
-            className="rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white transition-colors"
-          >
-            {item.name}
-          </button>
-        ))}
-        {/* Unselected items */}
-        {unselectedItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onToggle(item.id)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 transition-colors hover:border-amber-300"
-          >
-            {item.name}
-          </button>
-        ))}
-        {!items.length && (
-          <span className="text-sm text-slate-400">No {title.toLowerCase()} yet.</span>
-        )}
-      </div>
-      {creatable && (
-        <div className="flex gap-2 pt-1">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && create()}
-            placeholder={`Add new ${title.toLowerCase().replace(/s$/, "")}…`}
-            className="input flex-1"
-          />
-          <button onClick={create} disabled={adding}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40">
-            {adding ? "…" : "Add"}
-          </button>
-        </div>
-      )}
-    </section>
-  );
-}

@@ -350,6 +350,39 @@ async function enrichSpotify(title: string, artist: string) {
 }
 
 
+// ─── Last.fm ─────────────────────────────────────────────────────────────────
+async function enrichLastFm(title: string, artist: string) {
+  const apiKey = process.env.LASTFM_API_KEY;
+  if (!apiKey) return null;
+
+  // Try track-level tags first, fall back to artist-level
+  const trackRes = await fetch(
+    `https://ws.audioscrobbler.com/2.0/?method=track.gettoptags&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}&api_key=${apiKey}&format=json`
+  );
+  const trackData = trackRes.ok ? await trackRes.json() : null;
+  const trackTags: { name: string; count: number }[] = trackData?.toptags?.tag ?? [];
+
+  let tags = trackTags;
+  if (!tags.length) {
+    const artistRes = await fetch(
+      `https://ws.audioscrobbler.com/2.0/?method=artist.gettoptags&artist=${encodeURIComponent(artist)}&api_key=${apiKey}&format=json`
+    );
+    if (!artistRes.ok) return null;
+    const artistData = await artistRes.json();
+    if (artistData.error) return null;
+    tags = artistData.toptags?.tag ?? [];
+  }
+
+  const noise = new Set(["seen live", "under 2000 listeners", "favorites", "favourite", "love", "owned"]);
+  const cleaned = tags
+    .filter((t) => t.count > 3 && !noise.has(t.name.toLowerCase()))
+    .slice(0, 12)
+    .map((t) => t.name);
+
+  return cleaned.length ? { tags: cleaned } : null;
+}
+
+
 // ─── Genius ──────────────────────────────────────────────────────────────────
 async function enrichGenius(title: string, artist: string) {
   const token = process.env.GENIUS_ACCESS_TOKEN;
@@ -383,7 +416,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
 
-  console.log("[enrich] input:", { title, artist });
+  const mode = req.nextUrl.searchParams.get("mode");
+  console.log("[enrich] input:", { title, artist, mode });
 
   // MusicBrainz first — its recording titles are clean (no "Remastered", "Radio Edit" etc.)
   const mbResult = await enrichMusicBrainz(title, artist).catch((e) => { console.error("[enrich] MusicBrainz error:", e); return null; });
@@ -391,36 +425,47 @@ export async function GET(req: NextRequest) {
 
   const canonicalTitle = mbResult?.title ?? title;
   const canonicalArtist = mbResult?.display_artist ?? artist;
+
+  // tags mode: only Spotify + Last.fm (skip SHS, Wikidata, Genius)
+  if (mode === "tags") {
+    const [spotify, lastfm] = await Promise.allSettled([
+      enrichSpotify(canonicalTitle, canonicalArtist),
+      enrichLastFm(canonicalTitle, canonicalArtist),
+    ]);
+    console.log("[enrich:tags] Spotify:", spotify.status === "fulfilled" ? spotify.value : spotify.reason);
+    console.log("[enrich:tags] Last.fm:", lastfm.status === "fulfilled" ? lastfm.value : lastfm.reason);
+    return NextResponse.json({
+      musicbrainz: mbResult,
+      spotify: spotify.status === "fulfilled" ? spotify.value : null,
+      lastfm: lastfm.status === "fulfilled" ? lastfm.value : null,
+    });
+  }
+
   console.log("[enrich] canonical:", { canonicalTitle, canonicalArtist });
 
-  // Feed canonical title/artist into remaining sources in parallel
-  const [spotify, secondhandsongs, wikidata, genius] = await Promise.allSettled([
+  // Full mode: all sources in parallel
+  const [spotify, secondhandsongs, wikidata, genius, lastfm] = await Promise.allSettled([
     enrichSpotify(canonicalTitle, canonicalArtist),
     enrichSecondHandSongs(canonicalTitle, canonicalArtist),
     enrichWikidata(canonicalTitle, canonicalArtist),
     enrichGenius(canonicalTitle, canonicalArtist),
+    enrichLastFm(canonicalTitle, canonicalArtist),
   ]);
 
   const spotifyVal = spotify.status === "fulfilled" ? spotify.value : null;
   const shsVal = secondhandsongs.status === "fulfilled" ? secondhandsongs.value : null;
   const wdVal = wikidata.status === "fulfilled" ? wikidata.value : null;
   const geniusVal = genius.status === "fulfilled" ? genius.value : null;
+  const lastfmVal = lastfm.status === "fulfilled" ? lastfm.value : null;
 
   if (secondhandsongs.status === "rejected") console.error("[enrich] SHS error:", secondhandsongs.reason);
   if (wikidata.status === "rejected") console.error("[enrich] Wikidata error:", wikidata.reason);
   if (spotify.status === "rejected") console.error("[enrich] Spotify error:", spotify.reason);
 
-  console.log("[enrich] Spotify:", spotifyVal);
-  console.log("[enrich] SecondHandSongs:", shsVal);
-  console.log("[enrich] Wikidata:", wdVal);
-
   console.log("─── COMPOSER SOURCES ───────────────────────────────");
   console.log("MusicBrainz composers:", mbResult?.composers ?? "none");
   console.log("SecondHandSongs composers:", shsVal?.composers ?? "none");
   console.log("Wikidata composers:", wdVal?.composers ?? "none");
-  console.log("MusicBrainz lyricists:", mbResult?.lyricists ?? "none");
-  console.log("SecondHandSongs lyricists:", shsVal?.lyricists ?? "none");
-  console.log("Wikidata lyricists:", wdVal?.lyricists ?? "none");
   console.log("────────────────────────────────────────────────────");
 
   return NextResponse.json({
@@ -429,5 +474,6 @@ export async function GET(req: NextRequest) {
     wikidata: wdVal,
     spotify: spotifyVal,
     genius: geniusVal,
+    lastfm: lastfmVal,
   });
 }

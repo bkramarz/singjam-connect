@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div>
                 <div className="text-sm font-semibold leading-none text-white">SingJam Connect</div>
-                <div className="mt-0.5 text-xs text-slate-400">Acoustic · Bay Area</div>
+                <div className="mt-0.5 text-xs text-slate-400">Bay Area</div>
               </div>
             </Link>
 

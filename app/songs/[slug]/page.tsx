@@ -1,0 +1,224 @@
+import { supabaseServer } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+
+export default async function SongPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const supabase = await supabaseServer();
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAdmin = user
+    ? (await supabase.from("profiles").select("is_admin").eq("id", user.id).single()).data?.is_admin ?? false
+    : false;
+
+  // Check if song is in user's repertoire (fetched after we know the song id below)
+  let userSongConfidence: string | null = null;
+
+  const { data: song } = await supabase
+    .from("songs")
+    .select(`
+      id, title, slug, display_artist, first_line, hook, genius_url, chord_chart_url, year, tonality, meter,
+      song_composers(people(name)),
+      song_lyricists(people(name)),
+      song_recording_artists(year, artists(name)),
+      song_alternate_titles(title),
+      song_genres(genres(name)),
+      song_themes(themes(name)),
+      song_cultures(cultures(name)),
+      song_languages(languages(name))
+    `)
+    .eq(isUuid ? "id" : "slug", slug)
+    .single();
+
+  if (!song) notFound();
+
+  if (user) {
+    const { data: us } = await supabase
+      .from("user_songs")
+      .select("confidence")
+      .eq("user_id", user.id)
+      .eq("song_id", song.id)
+      .maybeSingle();
+    userSongConfidence = us?.confidence ?? null;
+  }
+
+  const composers = (song.song_composers as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
+  const lyricists = (song.song_lyricists as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
+  const recordingArtists = (song.song_recording_artists as any[])
+    .map((x) => ({ name: x.artists?.name as string, year: x.year as number | null }))
+    .filter((x) => x.name)
+    .sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+  const altTitles = (song.song_alternate_titles as any[]).map((x) => x.title as string).filter(Boolean);
+  const genres = (song.song_genres as any[]).map((x) => x.genres?.name as string).filter(Boolean);
+  const themes = (song.song_themes as any[]).map((x) => x.themes?.name as string).filter(Boolean);
+  const cultures = (song.song_cultures as any[]).map((x) => x.cultures?.name as string).filter(Boolean);
+  const languages = (song.song_languages as any[]).map((x) => x.languages?.name as string).filter(Boolean);
+
+  const firstRecorded = recordingArtists.find((a) => a.year)?.year ?? (song as any).year;
+
+  const tonalityPills = song.tonality ? song.tonality.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
+  const meterPills = song.meter ? song.meter.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
+
+  return (
+    <div className="space-y-6 pb-16">
+      {/* Header */}
+      <div>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">{song.title}</h1>
+            {song.display_artist && (
+              <p className="mt-0.5 text-base text-slate-500">{song.display_artist}</p>
+            )}
+            {altTitles.length > 0 && (
+              <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {firstRecorded && (
+              <span className="text-sm text-slate-400">{firstRecorded}</span>
+            )}
+            {userSongConfidence !== null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700">
+                ✓ In your repertoire
+                {userSongConfidence && ` · ${userSongConfidence.charAt(0).toUpperCase() + userSongConfidence.slice(1)}`}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {(composers.length > 0 || lyricists.length > 0) && (
+          <div className="mt-3 flex flex-col gap-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Songwriter(s)</p>
+            {composers.length > 0 && (
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">Music:</span> {composers.join(", ")}
+              </p>
+            )}
+            {lyricists.length > 0 && (
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">Lyrics:</span> {lyricists.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Recording artists */}
+      {recordingArtists.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Recordings
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {recordingArtists.map((a, i) => (
+              <span key={i} className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                {a.name}
+                {a.year && <span className="text-slate-400">{a.year}</span>}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Lyric data */}
+      {(song.first_line || song.hook || song.genius_url || (song as any).chord_chart_url) && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lyrics</h2>
+          {song.first_line && (
+            <p className="text-sm text-slate-700">
+              <span className="font-medium text-slate-500">Opens: </span>
+              <em>{song.first_line}</em>
+            </p>
+          )}
+          {song.hook && (
+            <p className="text-sm text-slate-700">
+              <span className="font-medium text-slate-500">Hook: </span>
+              <em>{song.hook}</em>
+            </p>
+          )}
+          {(song.genius_url || (song as any).chord_chart_url) && (
+            <div className="flex gap-2 pt-1">
+              {song.genius_url && (
+                <a
+                  href={song.genius_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
+                >
+                  Full lyrics ↗
+                </a>
+              )}
+              {(song as any).chord_chart_url && (
+                <a
+                  href={(song as any).chord_chart_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
+                >
+                  Chord chart ↗
+                </a>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Musical properties */}
+      {(tonalityPills.length > 0 || meterPills.length > 0) && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Musical properties
+          </h2>
+          {tonalityPills.length > 0 && <TagRow label="Tonality" tags={tonalityPills} />}
+          {meterPills.length > 0 && <TagRow label="Meter" tags={meterPills} />}
+        </section>
+      )}
+
+      {/* Tags */}
+      {(genres.length > 0 || themes.length > 0 || cultures.length > 0 || languages.length > 0) && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tags</h2>
+          {genres.length > 0 && <TagRow label="Genres" tags={genres} />}
+          {themes.length > 0 && <TagRow label="Themes" tags={themes} />}
+          {languages.length > 0 && <TagRow label="Languages" tags={languages} />}
+          {cultures.length > 0 && <TagRow label="Cultures" tags={cultures} />}
+        </section>
+      )}
+
+      <div className="flex items-center justify-between pt-2">
+        <Link href="/songs" className="text-sm text-slate-500 hover:text-slate-700">
+          ← Back to search
+        </Link>
+        {isAdmin && (
+          <Link
+            href={`/admin/songs/${song.slug ?? song.id}`}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Edit
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TagRow({ label, tags }: { label: string; tags: string[] }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-2">
+      <span className="text-xs font-medium text-slate-500 w-20 shrink-0">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((t) => (
+          <span key={t} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">
+            {t}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

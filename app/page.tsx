@@ -9,28 +9,22 @@ export default function HomePage() {
         <div className="relative">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-            Bay Area acoustic community
+            Bay Area music community
           </div>
           <h1 className="mt-5 text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            Keep the music going<br />
-            <span className="text-amber-400">between jams.</span>
+            Build your repertoire<br />
+            <span className="text-amber-400">Sing and jam with friends.</span>
           </h1>
           <p className="mt-4 max-w-lg text-base text-slate-400">
-            Find people to sing and play acoustic music with — based on the songs you already know.
+            Find people to sing and play music with — based on the songs you already know.
             No cold starts. Just real overlap.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/auth"
+              href="/songs"
               className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 transition-colors"
             >
-              Get started
-            </Link>
-            <Link
-              href="/songs"
-              className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-            >
-              Browse songs
+              Add songs
             </Link>
           </div>
         </div>
