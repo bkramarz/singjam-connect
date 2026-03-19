@@ -44,7 +44,7 @@ export default function OnboardingPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Set up your profile</h1>
       <p className="text-sm text-zinc-600">
-        Acoustic-first. Bay Area only for now. Your exact address stays private.
+        Bay Area only for now. Your exact address stays private.
       </p>
       <OnboardingForm initialProfile={profile} />
     </div>
