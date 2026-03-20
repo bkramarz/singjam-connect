@@ -37,7 +37,7 @@ export default async function AdminSongPage({
               *,
               song_genres(genre_id),
               song_themes(theme_id),
-              song_cultures(culture_id),
+              song_cultures(culture_id, context),
               song_languages(language_id),
               song_composers(person_id),
               song_lyricists(person_id),
