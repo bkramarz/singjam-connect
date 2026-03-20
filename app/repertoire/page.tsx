@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
@@ -47,8 +47,6 @@ export default function RepertoirePage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const router = useRouter();
 
-  const inFlight = useRef(false);
-
   const [userId, setUserId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,10 +61,6 @@ export default function RepertoirePage() {
     let cancelled = false;
 
     async function load() {
-      // Avoid StrictMode double-fetch + accidental re-entry
-      if (inFlight.current) return;
-      inFlight.current = true;
-
       try {
         setLoading(true);
 
@@ -141,9 +135,6 @@ export default function RepertoirePage() {
         setErrorMsg("Something went wrong. Please try again.");
         setItems([]);
       } finally {
-        // release lock first so it can't get stuck true
-        inFlight.current = false;
-
         if (!cancelled) setLoading(false);
       }
     }
