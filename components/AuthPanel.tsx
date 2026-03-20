@@ -8,10 +8,12 @@ export default function AuthPanel() {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signedUp, setSignedUp] = useState(false);
 
   async function signInWithPassword() {
     setBusy(true);
@@ -28,6 +30,21 @@ export default function AuthPanel() {
     }
   }
 
+  async function signUp() {
+    setBusy(true);
+    setStatus(null);
+
+    const { error } = await supabase.auth.signUp({ email, password });
+
+    setBusy(false);
+
+    if (error) {
+      setStatus(error.message);
+    } else {
+      setSignedUp(true);
+    }
+  }
+
   async function signInWithGoogle() {
     setBusy(true);
     setStatus(null);
@@ -41,10 +58,35 @@ export default function AuthPanel() {
     }
   }
 
+  if (signedUp) {
+    return (
+      <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+        <h2 className="text-xl font-semibold text-slate-900">Check your email</h2>
+        <p className="mt-2 text-sm text-slate-500">
+          We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then come back to sign in.
+        </p>
+        <button
+          onClick={() => { setMode("signin"); setSignedUp(false); }}
+          className="mt-4 text-sm text-amber-600 hover:underline"
+        >
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-      <h2 className="text-xl font-semibold text-slate-900">Welcome back</h2>
-      <p className="mt-1 text-sm text-slate-500">Sign in to your account or create a new one.</p>
+      <h2 className="text-xl font-semibold text-slate-900">
+        {mode === "signin" ? "Welcome back" : "Create an account"}
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        {mode === "signin" ? (
+          <>No account? <button onClick={() => { setMode("signup"); setStatus(null); }} className="text-amber-600 hover:underline">Create one</button></>
+        ) : (
+          <>Already have an account? <button onClick={() => { setMode("signin"); setStatus(null); }} className="text-amber-600 hover:underline">Sign in</button></>
+        )}
+      </p>
 
       <div className="mt-6 space-y-4">
         <button
@@ -90,11 +132,11 @@ export default function AuthPanel() {
         </div>
 
         <button
-          onClick={signInWithPassword}
+          onClick={mode === "signin" ? signInWithPassword : signUp}
           disabled={!email || !password || busy}
           className="w-full rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600 disabled:opacity-50 transition-colors"
         >
-          {busy ? "Signing in..." : "Sign in"}
+          {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
         </button>
 
         {status && (
