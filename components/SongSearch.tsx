@@ -16,6 +16,16 @@ type Result = {
   slug: string | null;
 };
 
+type PopularSong = {
+  song_id: string;
+  title: string;
+  slug: string | null;
+  display_artist: string | null;
+  composers: string[];
+  year: number | null;
+  popularity: number;
+};
+
 const LEVELS = [
   { key: "lead", label: "Lead" },
   { key: "support", label: "Support" },
@@ -23,7 +33,7 @@ const LEVELS = [
   { key: "learn", label: "Learn" },
 ] as const;
 
-export default function SongSearch({ initialQuery = "" }: { initialQuery?: string }) {
+export default function SongSearch({ initialQuery = "", popularSongs = [] }: { initialQuery?: string; popularSongs?: PopularSong[] }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
@@ -36,6 +46,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
 
   // Map of song_id → confidence for songs already in repertoire
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
+  const [visiblePopular, setVisiblePopular] = useState(popularSongs);
 
   const debounceRef = useRef<number | null>(null);
 
@@ -83,13 +94,18 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
 
     const { data: songData } = await supabase
       .from("songs")
-      .select("id, year, slug, song_composers(people(name))")
+      .select("id, year, year_written, slug, song_composers(people(name))")
       .in("id", songs.map((s) => s.song_id));
 
     const byId: Record<string, { composers: string[]; year: number | null; slug: string | null }> = {};
     for (const row of (songData ?? []) as any[]) {
       byId[row.id] = {
-        year: row.year ?? null,
+        year: (() => {
+          const yw = (row as any).year_written as number | null;
+          const yr = row.year as number | null;
+          if (yw && yr) return Math.min(yw, yr);
+          return yw ?? yr ?? null;
+        })(),
         slug: row.slug ?? null,
         composers: (row.song_composers ?? []).map((c: any) => c.people?.name).filter(Boolean).sort(),
       };
@@ -142,6 +158,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       setStatus(error.message);
     } else {
       setRepertoire((prev) => new Map(prev).set(songId, level));
+      setVisiblePopular((prev) => prev.filter((s) => s.song_id !== songId));
       setStatus(null);
     }
   }
@@ -255,8 +272,69 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
           ) : null}
         </div>
       ) : (
-        <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
-          Start typing to search the catalog.
+        <div className="space-y-2">
+          {visiblePopular.length > 0 && (
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
+              Popular songs{popularSongs.length < 10 ? "" : " · Top 10"}
+            </p>
+          )}
+          {visiblePopular.length > 0 ? (
+            <div className="grid gap-2">
+              {visiblePopular.map((r) => {
+                const inRepertoire = repertoire.has(r.song_id);
+                const confidence = repertoire.get(r.song_id);
+                const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
+                return (
+                  <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {r.title}
+                          {r.composers.length > 0 && (
+                            <span className="ml-1 font-normal text-zinc-400">
+                              ({r.composers.map((name) => {
+                                const parts = name.trim().split(" ");
+                                return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
+                              }).join(", ")})
+                            </span>
+                          )}
+                          {r.display_artist && (
+                            <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
+                          )}
+                          {r.year && (
+                            <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
+                          )}
+                        </div>
+                        {inRepertoire && (
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+                            ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Link
+                          href={`/songs/${r.slug ?? r.song_id}`}
+                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                        >
+                          View
+                        </Link>
+                        <button
+                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                          onClick={() => addSong(r.song_id)}
+                        >
+                          {inRepertoire ? "Update" : "Add"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
+              Start typing to search the catalog.
+            </div>
+          )}
         </div>
       )}
     </div>

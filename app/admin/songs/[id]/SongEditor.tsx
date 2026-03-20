@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -56,19 +56,20 @@ type Song = {
   display_artist: string | null;
   first_line: string | null;
   hook: string | null;
-  lyrics: string | null;
   genius_url: string | null;
   chord_chart_url: string | null;
   year: number | null;
+  year_written: number | null;
   tonality: string | null;
   meter: string | null;
+  vibe: "Banger" | "Ballad" | null;
   song_genres: { genre_id: string }[];
   song_themes: { theme_id: string }[];
   song_cultures: { culture_id: string }[];
   song_languages: { language_id: string }[];
   song_composers: { person_id: string }[];
   song_lyricists: { person_id: string }[];
-  song_recording_artists: { artist_id: string; year: number | null }[];
+  song_recording_artists: { artist_id: string; year: number | null; position: number | null }[];
   song_alternate_titles: AltTitle[];
 };
 
@@ -109,12 +110,14 @@ export default function SongEditor({
   const [geniusUrl, setGeniusUrl] = useState(song?.genius_url ?? "");
   const [chordChartUrl, setChordChartUrl] = useState(song?.chord_chart_url ?? "");
   const [year, setYear] = useState(song?.year?.toString() ?? "");
+  const [yearWritten, setYearWritten] = useState(song?.year_written?.toString() ?? "");
   const [tonalities, setTonalities] = useState<string[]>(() =>
     song?.tonality ? song.tonality.split(",").map((s) => s.trim()).filter(Boolean) : []
   );
   const [meters, setMeters] = useState<string[]>(() =>
     song?.meter ? song.meter.split(",").map((s) => s.trim()).filter(Boolean) : []
   );
+  const [vibe, setVibe] = useState<"Banger" | "Ballad" | null>(song?.vibe ?? null);
 
   const initialComposerIds = song?.song_composers.map((x) => x.person_id) ?? [];
   const initialLyricistIds = song?.song_lyricists.map((x) => x.person_id) ?? [];
@@ -123,7 +126,10 @@ export default function SongEditor({
     toSet(initialLyricistIds.length ? initialLyricistIds : initialComposerIds)
   );
   type RecordingArtistEntry = { id: string; year: number | null };
-  const initialRecordingArtistEntries: RecordingArtistEntry[] = song?.song_recording_artists.map((x) => ({ id: x.artist_id, year: x.year })) ?? [];
+  const initialRecordingArtistEntries: RecordingArtistEntry[] = (song?.song_recording_artists ?? [])
+    .slice()
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .map((x) => ({ id: x.artist_id, year: x.year }));
   const seededRecordingArtistEntries: RecordingArtistEntry[] = initialRecordingArtistEntries.length
     ? initialRecordingArtistEntries
     : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null }));
@@ -229,6 +235,7 @@ export default function SongEditor({
     table: "people" | "artists",
     allItems: Lookup[]
   ): Promise<string | null> {
+    if (!name.trim()) return null;
     const normalised = name.trim().toLowerCase();
     const existing = allItems.find((p) => p.name.toLowerCase() === normalised);
     if (existing) return existing.id;
@@ -425,14 +432,16 @@ export default function SongEditor({
       const payload = {
         title: title.trim(),
         slug: resolvedSlug,
-        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(" & ") || displayArtist.trim() || null,
+        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || displayArtist.trim() || null,
         first_line: firstLine.trim() || null,
         hook: hook.trim() || null,
         genius_url: geniusUrl.trim() || null,
         chord_chart_url: chordChartUrl.trim() || null,
         year: year ? parseInt(year) : null,
+        year_written: yearWritten ? parseInt(yearWritten) : null,
         tonality: tonalities.join(", ") || null,
         meter: meters.join(", ") || null,
+        vibe: vibe,
         updated_at: new Date().toISOString(),
       };
 
@@ -491,7 +500,7 @@ export default function SongEditor({
           : Promise.resolve(),
         recordingArtists.length
           ? supabase.from("song_recording_artists").upsert(
-              recordingArtists.map((e) => ({ song_id: songId!, artist_id: e.id, year: e.year })),
+              recordingArtists.map((e, i) => ({ song_id: songId!, artist_id: e.id, year: e.year, position: i })),
               { onConflict: "song_id,artist_id" }
             )
           : Promise.resolve(),
@@ -705,11 +714,52 @@ export default function SongEditor({
           onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null }]); setNewRecordingArtistName(""); }}
           onRemove={(id) => setRecordingArtists((prev) => prev.filter((e) => e.id !== id))}
           onYearChange={(id, year) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year } : e))}
+          onReorder={setRecordingArtists}
         />
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Year written</label>
+          <input
+            type="number"
+            value={yearWritten}
+            onChange={(e) => setYearWritten(e.target.value)}
+            placeholder="e.g. 1929"
+            className="w-32 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-slate-400">Only set if different from the first recording year</p>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <TagPillsField label="Tonality" value={tonalities} onChange={setTonalities} suggestions={TONALITY_OPTIONS} allowNew placeholder="Search tonality…" />
           <TagPillsField label="Meter" value={meters} onChange={setMeters} suggestions={METER_OPTIONS} placeholder="Search meter…" />
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Vibe</p>
+          <div className="flex gap-6">
+            {(["Banger", "Ballad"] as const).map((option) => (
+              <label key={option} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="vibe"
+                  value={option}
+                  checked={vibe === option}
+                  onChange={() => setVibe(option)}
+                  className="accent-amber-500"
+                />
+                {option}
+              </label>
+            ))}
+            {vibe && (
+              <button
+                type="button"
+                onClick={() => setVibe(null)}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -849,7 +899,7 @@ export default function SongEditor({
 }
 
 function RecordingArtistField({
-  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange,
+  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange, onReorder,
 }: {
   items: { id: string; year: number | null }[];
   allArtists: Lookup[];
@@ -858,19 +908,40 @@ function RecordingArtistField({
   onAdd: (a: Lookup) => void;
   onRemove: (id: string) => void;
   onYearChange: (id: string, year: number | null) => void;
+  onReorder: (items: { id: string; year: number | null }[]) => void;
 }) {
+  const dragIndex = useRef<number | null>(null);
+
+  function handleDragStart(i: number) { dragIndex.current = i; }
+  function handleDrop(i: number) {
+    if (dragIndex.current === null || dragIndex.current === i) return;
+    const next = [...items];
+    const [moved] = next.splice(dragIndex.current, 1);
+    next.splice(i, 0, moved);
+    onReorder(next);
+    dragIndex.current = null;
+  }
+
   const showSuggestions = query.trim().length > 0;
   const suggestions = allArtists.filter(
     (a) => !items.find((e) => e.id === a.id) && a.name.toLowerCase().includes(query.toLowerCase().trim())
   );
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-medium text-slate-600">Recording artists</label>
+      <label className="block text-xs font-medium text-slate-600">Recording artists <span className="font-normal text-slate-400">(drag to reorder)</span></label>
       <div className="flex flex-wrap gap-2">
-        {items.map((e) => {
+        {items.map((e, i) => {
           const artist = allArtists.find((a) => a.id === e.id);
           return (
-            <span key={e.id} className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white">
+            <span
+              key={e.id}
+              draggable
+              onDragStart={() => handleDragStart(i)}
+              onDragOver={(ev) => ev.preventDefault()}
+              onDrop={() => handleDrop(i)}
+              className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white cursor-grab active:cursor-grabbing"
+            >
+              <span className="opacity-50 text-xs">⠿</span>
               {artist?.name}
               <input
                 type="number"

@@ -1,0 +1,213 @@
+"use client";
+
+import Link from "next/link";
+import { useRef, useState, useCallback } from "react";
+import DeleteSongButton from "./DeleteSongButton";
+
+type Song = {
+  id: string;
+  title: string;
+  slug: string | null;
+  display_artist: string | null;
+  first_line: string | null;
+  hook: string | null;
+  genius_url: string | null;
+  chord_chart_url: string | null;
+  year_written: number | null;
+  tonality: string | null;
+  meter: string | null;
+  vibe: string | null;
+  song_composers: { people: { name: string } | null }[];
+  song_lyricists: { people: { name: string } | null }[];
+  song_recording_artists: { year: number | null }[];
+  song_genres: { genre_id: string }[];
+  song_languages: { language_id: string }[];
+  user_songs: { count: number }[];
+};
+
+const COLUMNS = [
+  { key: "title", label: "Title", defaultWidth: 160 },
+  { key: "songwriters", label: "Songwriters", defaultWidth: 140 },
+  { key: "artist", label: "Artist(s)", defaultWidth: 110 },
+  { key: "year", label: "Year", defaultWidth: 80 },
+  { key: "popularity", label: "SingJam popularity", defaultWidth: 80 },
+  { key: "missing", label: "Missing", defaultWidth: 220 },
+  { key: "actions", label: "Actions", defaultWidth: 100 },
+];
+
+export default function AdminSongsTable({ songs }: { songs: Song[] }) {
+  const equalWidth = 100 / COLUMNS.length;
+  const [widths, setWidths] = useState<number[]>(COLUMNS.map(() => equalWidth));
+  const [wrap, setWrap] = useState(true);
+  const [query, setQuery] = useState("");
+
+  const filtered = query.trim()
+    ? songs.filter((s) => {
+        const q = query.trim().toLowerCase();
+        const songwriterNames = [
+          ...s.song_composers.map((c) => c.people?.name ?? ""),
+          ...s.song_lyricists.map((l) => l.people?.name ?? ""),
+        ];
+        const hay = [
+          s.title,
+          s.display_artist ?? "",
+          ...songwriterNames,
+          s.first_line ?? "",
+          s.hook ?? "",
+        ].join(" ").toLowerCase();
+        return hay.includes(q);
+      })
+    : songs;
+  const dragging = useRef<{ col: number; startX: number; startW: number } | null>(null);
+
+  const onMouseDown = useCallback((colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = { col: colIndex, startX: e.clientX, startW: widths[colIndex] };
+
+    function onMove(ev: MouseEvent) {
+      if (!dragging.current) return;
+      const { col, startX, startW } = dragging.current;
+      const newW = Math.max(60, startW + (ev.clientX - startX));
+      setWidths((prev) => {
+        const next = [...prev];
+        next[col] = newW;
+        return next;
+      });
+    }
+    function onUp() {
+      dragging.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [widths]);
+
+  const cellClass = wrap ? "px-4 py-2.5 whitespace-normal" : "px-4 py-2.5 truncate";
+
+  return (
+    <div className="space-y-2">
+    <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
+      <label className="block text-sm font-medium mb-1">Search</label>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by title, songwriter, artist, first line, or hook…"
+        className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+        autoComplete="off"
+      />
+      {query.trim() && (
+        <p className="mt-2 text-xs text-zinc-500">{filtered.length} of {songs.length} songs</p>
+      )}
+    </div>
+    <div className="flex justify-end">
+      <button
+        onClick={() => setWrap((w) => !w)}
+        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
+      >
+        {wrap ? "Clip cells" : "Wrap cells"}
+      </button>
+    </div>
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+        <colgroup>
+          {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
+        </colgroup>
+        <thead>
+          <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-medium text-slate-500">
+            {COLUMNS.map((col, i) => (
+              <th key={col.key} className="relative px-4 py-3 select-none" style={{ width: widths[i] }}>
+                {col.label}
+                {i < COLUMNS.length - 1 && (
+                  <div
+                    onMouseDown={(e) => onMouseDown(i, e)}
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-amber-300 active:bg-amber-400"
+                  />
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {filtered.map((s) => {
+            const viewHref = `/songs/${s.slug ?? s.id}`;
+            const editHref = `/admin/songs/${s.slug ?? s.id}`;
+
+            const songwriterNames = new Set<string>([
+              ...s.song_composers.map((c) => c.people?.name).filter(Boolean) as string[],
+              ...s.song_lyricists.map((l) => l.people?.name).filter(Boolean) as string[],
+            ]);
+            const songwriters = [...songwriterNames].sort().join(", ") || "—";
+
+            const years = s.song_recording_artists
+              .map((r) => r.year)
+              .filter((y): y is number => typeof y === "number");
+            const firstRecording = years.length ? Math.min(...years) : null;
+            const yw = s.year_written ?? null;
+            const firstYear = yw && firstRecording ? Math.min(yw, firstRecording) : yw ?? firstRecording ?? null;
+
+            const missing: string[] = [];
+            if (!s.song_composers.length) missing.push("composer");
+            if (!s.song_lyricists.length) missing.push("lyricist");
+            if (!s.display_artist) missing.push("artist");
+            if (!s.song_recording_artists.length) missing.push("recording");
+            if (!s.first_line) missing.push("first line");
+            if (!s.hook) missing.push("hook");
+            if (!s.genius_url) missing.push("genius");
+            if (!s.tonality) missing.push("tonality");
+            if (!s.meter) missing.push("meter");
+            if (!s.song_genres.length) missing.push("genre");
+            if (!s.song_languages.length) missing.push("language");
+            if (!s.vibe) missing.push("vibe");
+            if (!s.chord_chart_url) missing.push("chord chart");
+
+            return (
+              <tr key={s.id} className="hover:bg-slate-50">
+                <td className={`${cellClass} font-medium`}>
+                  <Link href={viewHref} className={`text-slate-900 hover:text-amber-600 hover:underline ${wrap ? "" : "truncate"} block`}>
+                    {s.title}
+                  </Link>
+                </td>
+                <td className={`${cellClass} text-slate-500`}>{songwriters}</td>
+                <td className={`${cellClass} text-slate-500`}>
+                  {s.display_artist ?? "—"}
+                </td>
+                <td className={`${cellClass} text-slate-500`}>{firstYear ?? "—"}</td>
+                <td className={`${cellClass} text-slate-500`}>{s.user_songs[0]?.count ?? 0}</td>
+                <td className={cellClass}>
+                  {missing.length === 0 ? (
+                    <span className="text-xs text-slate-300">✓</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {missing.map((m) => (
+                        <span key={m} className="rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-xs text-red-500">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
+                <td className={cellClass}>
+                  <div className="flex items-center gap-3">
+                    <Link href={editHref} className="text-amber-600 hover:text-amber-500">
+                      Edit
+                    </Link>
+                    <DeleteSongButton id={s.id} />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+          {!filtered.length && (
+            <tr>
+              <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                {query.trim() ? "No songs match that search." : "No songs yet."}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+    </div>
+  );
+}
