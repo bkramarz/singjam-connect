@@ -9,6 +9,7 @@ type Result = {
   song_id: string;
   title: string;
   display_artist: string | null;
+  first_line: string | null;
   aka: string[] | null;
   score: number;
   composers: string[];
@@ -92,28 +93,10 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
       return;
     }
 
-    const songs = (data ?? []) as Omit<Result, "year" | "slug">[];
+    const songs = (data ?? []) as Result[];
     if (!songs.length) { setResults([]); return; }
 
-    const { data: songData } = await supabase
-      .from("songs")
-      .select("id, year, year_written, slug")
-      .in("id", songs.map((s) => s.song_id));
-
-    const byId: Record<string, { year: number | null; slug: string | null }> = {};
-    for (const row of (songData ?? []) as any[]) {
-      byId[row.id] = {
-        year: (() => {
-          const yw = (row as any).year_written as number | null;
-          const yr = row.year as number | null;
-          if (yw && yr) return Math.min(yw, yr);
-          return yw ?? yr ?? null;
-        })(),
-        slug: row.slug ?? null,
-      };
-    }
-
-    setResults(songs.map((s) => ({ ...s, ...byId[s.song_id] ?? { year: null, slug: null } })));
+    setResults(songs);
   }
 
   useEffect(() => {
