@@ -1,0 +1,269 @@
+"use client";
+
+import Link from "next/link";
+import { useRef, useState, useCallback, useMemo } from "react";
+import DeleteSongButton from "./DeleteSongButton";
+import { formatComposers } from "@/lib/formatComposers";
+
+type Song = {
+  id: string;
+  title: string;
+  slug: string | null;
+  display_artist: string | null;
+  first_line: string | null;
+  hook: string | null;
+  genius_url: string | null;
+  chord_chart_url: string | null;
+  year_written: number | null;
+  tonality: string | null;
+  meter: string | null;
+  vibe: string | null;
+  song_composers: { people: { name: string } | null }[];
+  song_lyricists: { people: { name: string } | null }[];
+  song_cultures: { cultures: { name: string } | null }[];
+  song_recording_artists: { year: number | null }[];
+  song_genres: { genre_id: string }[];
+  song_languages: { language_id: string }[];
+  user_songs: { count: number }[];
+};
+
+type SortCol = "title" | "songwriters" | "artist" | "year" | "popularity" | "missing";
+type SortDir = "asc" | "desc";
+
+const COLUMNS: { key: SortCol | "actions"; label: string; defaultWidth: number; sortable: boolean }[] = [
+  { key: "title",       label: "Title",               defaultWidth: 160, sortable: true },
+  { key: "songwriters", label: "Songwriters",          defaultWidth: 140, sortable: true },
+  { key: "artist",      label: "Artist(s)",            defaultWidth: 110, sortable: true },
+  { key: "year",        label: "Year",                 defaultWidth: 80,  sortable: true },
+  { key: "popularity",  label: "SingJam popularity",   defaultWidth: 80,  sortable: true },
+  { key: "missing",     label: "Missing",              defaultWidth: 220, sortable: true },
+  { key: "actions",     label: "Actions",              defaultWidth: 100, sortable: false },
+];
+
+function missingFields(s: Song): string[] {
+  const missing: string[] = [];
+  if (!s.song_composers.length) missing.push("composer");
+  if (!s.song_lyricists.length) missing.push("lyricist");
+  if (!s.display_artist) missing.push("artist");
+  if (!s.song_recording_artists.length) missing.push("recording");
+  if (!s.first_line) missing.push("first line");
+  if (!s.hook) missing.push("hook");
+  if (!s.genius_url) missing.push("genius");
+  if (!s.tonality) missing.push("tonality");
+  if (!s.meter) missing.push("meter");
+  if (!s.song_genres.length) missing.push("genre");
+  if (!s.song_languages.length) missing.push("language");
+  if (!s.vibe) missing.push("vibe");
+  if (!s.chord_chart_url) missing.push("chord chart");
+  return missing;
+}
+
+export default function AdminSongsTable({ songs }: { songs: Song[] }) {
+  const equalWidth = 100 / COLUMNS.length;
+  const [widths, setWidths] = useState<number[]>(COLUMNS.map(() => equalWidth));
+  const [wrap, setWrap] = useState(true);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<{ col: SortCol; dir: SortDir }>({ col: "missing", dir: "desc" });
+
+  const dragging = useRef<{ col: number; startX: number; startW: number } | null>(null);
+
+  const onMouseDown = useCallback((colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = { col: colIndex, startX: e.clientX, startW: widths[colIndex] };
+
+    function onMove(ev: MouseEvent) {
+      if (!dragging.current) return;
+      const { col, startX, startW } = dragging.current;
+      const newW = Math.max(60, startW + (ev.clientX - startX));
+      setWidths((prev) => {
+        const next = [...prev];
+        next[col] = newW;
+        return next;
+      });
+    }
+    function onUp() {
+      dragging.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [widths]);
+
+  function toggleSort(col: SortCol) {
+    setSort((prev) =>
+      prev.col === col
+        ? { col, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { col, dir: col === "missing" ? "desc" : "asc" }
+    );
+  }
+
+  const enriched = useMemo(() =>
+    songs.map((s) => {
+      const songwriterNames = new Set<string>([
+        ...s.song_composers.map((c) => c.people?.name).filter(Boolean) as string[],
+        ...s.song_lyricists.map((l) => l.people?.name).filter(Boolean) as string[],
+      ]);
+      const cultures = s.song_cultures.map((c) => c.cultures?.name).filter(Boolean) as string[];
+      const songwriters = songwriterNames.size
+        ? formatComposers([...songwriterNames].sort(), cultures)
+        : "—";
+      const years = s.song_recording_artists
+        .map((r) => r.year)
+        .filter((y): y is number => typeof y === "number");
+      const firstRecording = years.length ? Math.min(...years) : null;
+      const yw = s.year_written ?? null;
+      const firstYear = yw && firstRecording ? Math.min(yw, firstRecording) : yw ?? firstRecording ?? null;
+      const missing = missingFields(s);
+      return { ...s, songwriters, firstYear, missing };
+    }),
+  [songs]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q
+      ? enriched.filter((s) => {
+          const hay = [
+            s.title,
+            s.display_artist ?? "",
+            s.songwriters,
+            s.first_line ?? "",
+            s.hook ?? "",
+          ].join(" ").toLowerCase();
+          return hay.includes(q);
+        })
+      : enriched;
+  }, [enriched, query]);
+
+  const sorted = useMemo(() => {
+    const { col, dir } = sort;
+    const mul = dir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (col === "title")       cmp = a.title.localeCompare(b.title);
+      else if (col === "songwriters") cmp = a.songwriters.localeCompare(b.songwriters);
+      else if (col === "artist") {
+        const strip = (v: string) => v.replace(/^the\s+/i, "");
+        cmp = strip(a.display_artist ?? "").localeCompare(strip(b.display_artist ?? ""));
+      }
+      else if (col === "year")   cmp = (a.firstYear ?? Infinity) - (b.firstYear ?? Infinity);
+      else if (col === "popularity") cmp = (a.user_songs[0]?.count ?? 0) - (b.user_songs[0]?.count ?? 0);
+      else if (col === "missing") cmp = a.missing.length - b.missing.length;
+      return cmp * mul || a.title.localeCompare(b.title);
+    });
+  }, [filtered, sort]);
+
+  const cellClass = wrap ? "px-4 py-2.5 whitespace-normal" : "px-4 py-2.5 truncate";
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
+        <label className="block text-sm font-medium mb-1">Search</label>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by title, songwriter, artist, first line, or hook…"
+          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+          autoComplete="off"
+        />
+        {query.trim() && (
+          <p className="mt-2 text-xs text-zinc-500">{filtered.length} of {songs.length} songs</p>
+        )}
+      </div>
+      <div className="flex justify-end">
+        <button
+          onClick={() => setWrap((w) => !w)}
+          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
+        >
+          {wrap ? "Clip cells" : "Wrap cells"}
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
+          </colgroup>
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-medium text-slate-500">
+              {COLUMNS.map((col, i) => (
+                <th
+                  key={col.key}
+                  className="relative px-4 py-3 select-none"
+                  style={{ width: widths[i] }}
+                >
+                  {col.sortable ? (
+                    <button
+                      onClick={() => toggleSort(col.key as SortCol)}
+                      className="flex items-center gap-1 hover:text-slate-800"
+                    >
+                      {col.label}
+                      <span className="text-slate-300">
+                        {sort.col === col.key
+                          ? sort.dir === "asc" ? "↑" : "↓"
+                          : "↕"}
+                      </span>
+                    </button>
+                  ) : col.label}
+                  {i < COLUMNS.length - 1 && (
+                    <div
+                      onMouseDown={(e) => onMouseDown(i, e)}
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-amber-300 active:bg-amber-400"
+                    />
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {sorted.map((s) => {
+              const viewHref = `/songs/${s.slug ?? s.id}`;
+              const editHref = `/admin/songs/${s.slug ?? s.id}`;
+
+              return (
+                <tr key={s.id} className="hover:bg-slate-50">
+                  <td className={`${cellClass} font-medium`}>
+                    <Link href={viewHref} className={`text-slate-900 hover:text-amber-600 hover:underline ${wrap ? "" : "truncate"} block`}>
+                      {s.title}
+                    </Link>
+                  </td>
+                  <td className={`${cellClass} text-slate-500`}>{s.songwriters}</td>
+                  <td className={`${cellClass} text-slate-500`}>{s.display_artist ?? "—"}</td>
+                  <td className={`${cellClass} text-slate-500`}>{s.firstYear ?? "—"}</td>
+                  <td className={`${cellClass} text-slate-500`}>{s.user_songs[0]?.count ?? 0}</td>
+                  <td className={cellClass}>
+                    {s.missing.length === 0 ? (
+                      <span className="text-xs text-slate-300">✓</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {s.missing.map((m) => (
+                          <span key={m} className="rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-xs text-red-500">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className={cellClass}>
+                    <div className="flex items-center gap-3">
+                      <Link href={editHref} className="text-amber-600 hover:text-amber-500">
+                        Edit
+                      </Link>
+                      <DeleteSongButton id={s.id} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!sorted.length && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                  {query.trim() ? "No songs match that search." : "No songs yet."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

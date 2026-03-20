@@ -1,6 +1,20 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import SongEditor from "./SongEditor";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  if (id === "new") return { title: "New Song — SingJam Admin" };
+  const supabase = await supabaseServer();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const { data } = await supabase.from("songs").select("title").eq(isUuid ? "id" : "slug", id).single();
+  return { title: data?.title ? `${data.title} — SingJam Admin` : "Edit Song — SingJam Admin" };
+}
 
 export default async function AdminSongPage({
   params,
@@ -23,11 +37,11 @@ export default async function AdminSongPage({
               *,
               song_genres(genre_id),
               song_themes(theme_id),
-              song_cultures(culture_id),
+              song_cultures(culture_id, context),
               song_languages(language_id),
               song_composers(person_id),
               song_lyricists(person_id),
-              song_recording_artists(artist_id, year),
+              song_recording_artists(artist_id, year, position),
               song_alternate_titles(id, title)
             `)
             .eq(isUuid ? "id" : "slug", id)

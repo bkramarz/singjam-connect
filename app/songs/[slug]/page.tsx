@@ -1,6 +1,31 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import Link from "next/link";
+
+function formatComposersLong(names: string[], cultures: string[]): string {
+  const isTraditional = names.some((n) => n.toLowerCase() === "traditional");
+  const others = names.filter((n) => n.toLowerCase() !== "traditional");
+  const parts: string[] = [];
+  if (isTraditional) {
+    const culture = cultures[0];
+    parts.push(culture ? `Traditional - ${culture}` : "Traditional");
+  }
+  parts.push(...others);
+  return parts.join(", ");
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = await supabaseServer();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+  const { data } = await supabase.from("songs").select("title").eq(isUuid ? "id" : "slug", slug).single();
+  return { title: data?.title ? `${data.title} — SingJam` : "Song — SingJam" };
+}
 
 export default async function SongPage({
   params,
@@ -23,14 +48,14 @@ export default async function SongPage({
   const { data: song } = await supabase
     .from("songs")
     .select(`
-      id, title, slug, display_artist, first_line, hook, genius_url, chord_chart_url, year, tonality, meter,
+      id, title, slug, display_artist, first_line, hook, genius_url, chord_chart_url, year, year_written, tonality, meter, vibe,
       song_composers(people(name)),
       song_lyricists(people(name)),
-      song_recording_artists(year, artists(name)),
+      song_recording_artists(year, position, artists(name)),
       song_alternate_titles(title),
       song_genres(genres(name)),
       song_themes(themes(name)),
-      song_cultures(cultures(name)),
+      song_cultures(context, cultures(name)),
       song_languages(languages(name))
     `)
     .eq(isUuid ? "id" : "slug", slug)
@@ -50,14 +75,20 @@ export default async function SongPage({
 
   const composers = (song.song_composers as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
   const lyricists = (song.song_lyricists as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
+  const musicCultures = (song.song_cultures as any[])
+    .filter((x) => !x.context || x.context === "music")
+    .map((x) => x.cultures?.name).filter(Boolean) as string[];
+  const lyricsCultures = (song.song_cultures as any[])
+    .filter((x) => !x.context || x.context === "lyrics")
+    .map((x) => x.cultures?.name).filter(Boolean) as string[];
   const recordingArtists = (song.song_recording_artists as any[])
-    .map((x) => ({ name: x.artists?.name as string, year: x.year as number | null }))
+    .map((x) => ({ name: x.artists?.name as string, year: x.year as number | null, position: x.position as number | null }))
     .filter((x) => x.name)
-    .sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
   const altTitles = (song.song_alternate_titles as any[]).map((x) => x.title as string).filter(Boolean);
   const genres = (song.song_genres as any[]).map((x) => x.genres?.name as string).filter(Boolean);
   const themes = (song.song_themes as any[]).map((x) => x.themes?.name as string).filter(Boolean);
-  const cultures = (song.song_cultures as any[]).map((x) => x.cultures?.name as string).filter(Boolean);
+  const cultures = [...new Set((song.song_cultures as any[]).map((x) => x.cultures?.name as string).filter(Boolean))];
   const languages = (song.song_languages as any[]).map((x) => x.languages?.name as string).filter(Boolean);
 
   const firstRecorded = recordingArtists.find((a) => a.year)?.year ?? (song as any).year;
@@ -97,12 +128,12 @@ export default async function SongPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Songwriter(s)</p>
             {composers.length > 0 && (
               <p className="text-sm text-slate-600">
-                <span className="font-medium">Music:</span> {composers.join(", ")}
+                <span className="font-medium">Music:</span> {formatComposersLong(composers, musicCultures)}
               </p>
             )}
             {lyricists.length > 0 && (
               <p className="text-sm text-slate-600">
-                <span className="font-medium">Lyrics:</span> {lyricists.join(", ")}
+                <span className="font-medium">Lyrics:</span> {formatComposersLong(lyricists, lyricsCultures)}
               </p>
             )}
           </div>
@@ -110,19 +141,28 @@ export default async function SongPage({
       </div>
 
       {/* Recording artists */}
-      {recordingArtists.length > 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Recordings
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {recordingArtists.map((a, i) => (
-              <span key={i} className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-                {a.name}
-                {a.year && <span className="text-slate-400">{a.year}</span>}
-              </span>
-            ))}
-          </div>
+      {(recordingArtists.length > 0 || (song as any).year_written) && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          {(song as any).year_written && (
+            <p className="text-sm text-slate-600">
+              <span className="font-medium text-slate-700">Written:</span> {(song as any).year_written}
+            </p>
+          )}
+          {recordingArtists.length > 0 && (
+            <>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Recordings
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {recordingArtists.map((a, i) => (
+                  <span key={i} className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                    {a.name}
+                    {a.year && <span className="text-slate-400">{a.year}</span>}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -170,13 +210,14 @@ export default async function SongPage({
       )}
 
       {/* Musical properties */}
-      {(tonalityPills.length > 0 || meterPills.length > 0) && (
+      {(tonalityPills.length > 0 || meterPills.length > 0 || song.vibe) && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Musical properties
           </h2>
           {tonalityPills.length > 0 && <TagRow label="Tonality" tags={tonalityPills} />}
           {meterPills.length > 0 && <TagRow label="Meter" tags={meterPills} />}
+          {song.vibe && <TagRow label="Vibe" tags={[song.vibe]} />}
         </section>
       )}
 

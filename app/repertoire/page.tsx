@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { formatComposers } from "@/lib/formatComposers";
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
@@ -21,7 +22,10 @@ type Item = {
   updated_at: string | null;
   title: string;
   display_artist: string | null;
+  first_line: string | null;
+  hook: string | null;
   composers: string[];
+  cultures: string[];
 };
 
 type UserSongRow = {
@@ -34,6 +38,7 @@ type UserSongRow = {
     display_artist: string | null;
     song_composers: { people: { name: string } | null }[];
     song_lyricists: { people: { name: string } | null }[];
+    song_cultures: { cultures: { name: string } | null }[];
   } | null;
 };
 
@@ -41,8 +46,6 @@ export default function RepertoirePage() {
   // IMPORTANT: keep Supabase client stable across renders
   const supabase = useMemo(() => supabaseBrowser(), []);
   const router = useRouter();
-
-  const inFlight = useRef(false);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -58,10 +61,6 @@ export default function RepertoirePage() {
     let cancelled = false;
 
     async function load() {
-      // Avoid StrictMode double-fetch + accidental re-entry
-      if (inFlight.current) return;
-      inFlight.current = true;
-
       try {
         setLoading(true);
 
@@ -88,8 +87,11 @@ export default function RepertoirePage() {
               title,
               slug,
               display_artist,
+              first_line,
+              hook,
               song_composers ( people ( name ) ),
-              song_lyricists ( people ( name ) )
+              song_lyricists ( people ( name ) ),
+              song_cultures ( cultures ( name ) )
             )
           `
           )
@@ -120,19 +122,19 @@ export default function RepertoirePage() {
               updated_at: r.updated_at,
               title: r.songs!.title,
               display_artist: r.songs!.display_artist,
+              first_line: (r.songs as any).first_line ?? null,
+              hook: (r.songs as any).hook ?? null,
               composers: [...names].sort(),
+              cultures: (r.songs!.song_cultures ?? []).map((c) => c.cultures?.name).filter(Boolean) as string[],
             };
           });
 
-        setItems(flattened);
+        setItems(flattened.sort((a, b) => a.title.localeCompare(b.title)));
       } catch (e: any) {
         console.error("Repertoire load exception:", e);
         setErrorMsg("Something went wrong. Please try again.");
         setItems([]);
       } finally {
-        // release lock first so it can't get stuck true
-        inFlight.current = false;
-
         if (!cancelled) setLoading(false);
       }
     }
@@ -155,7 +157,7 @@ export default function RepertoirePage() {
       if (!matchesConfidence) return false;
       if (!q) return true;
 
-      const hay = [it.title, it.display_artist ?? ""]
+      const hay = [it.title, it.display_artist ?? "", ...it.composers, it.first_line ?? "", it.hook ?? ""]
         .join(" ")
         .toLowerCase();
 
@@ -252,18 +254,22 @@ export default function RepertoirePage() {
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search title / artist / tags…"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            />
+          <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">Search</label>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by title, songwriter, or artist…"
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+              />
+            </div>
 
             <select
               value={confidenceFilter}
               onChange={(e) => setConfidenceFilter(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm sm:w-56"
+              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm sm:w-56"
             >
               <option value="all">All confidence</option>
               {CONFIDENCE_LEVELS.map((l) => (
@@ -272,6 +278,7 @@ export default function RepertoirePage() {
                 </option>
               ))}
             </select>
+          </div>
           </div>
 
           <div className="text-sm text-muted-foreground">
@@ -294,12 +301,7 @@ export default function RepertoirePage() {
                       </Link>
                       {it.composers.length > 0 && (
                         <span className="ml-1 font-normal text-slate-400">
-                          ({it.composers.map((name) => {
-                            const parts = name.trim().split(" ");
-                            return parts.length > 1
-                              ? `${parts[0][0]}. ${parts.slice(1).join(" ")}`
-                              : name;
-                          }).join(", ")})
+                          ({formatComposers(it.composers, it.cultures)})
                         </span>
                       )}
                     </div>

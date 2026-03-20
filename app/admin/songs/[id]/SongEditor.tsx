@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -40,8 +40,10 @@ const TONALITY_OPTIONS = [
 
 const METER_OPTIONS = ["4", "3", "5", "7", "9", "11", "Free", "Irregular"];
 
-function generateSlug(title: string, composerNames: string[]): string {
-  return [title, ...composerNames]
+function generateSlug(title: string, composerNames: string[], culture?: string): string {
+  const parts = [title, ...composerNames];
+  if (culture) parts.push(culture);
+  return parts
     .join(" ")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
@@ -56,19 +58,20 @@ type Song = {
   display_artist: string | null;
   first_line: string | null;
   hook: string | null;
-  lyrics: string | null;
   genius_url: string | null;
   chord_chart_url: string | null;
   year: number | null;
+  year_written: number | null;
   tonality: string | null;
   meter: string | null;
+  vibe: "Banger" | "Ballad" | null;
   song_genres: { genre_id: string }[];
   song_themes: { theme_id: string }[];
-  song_cultures: { culture_id: string }[];
+  song_cultures: { culture_id: string; context: string | null }[];
   song_languages: { language_id: string }[];
   song_composers: { person_id: string }[];
   song_lyricists: { person_id: string }[];
-  song_recording_artists: { artist_id: string; year: number | null }[];
+  song_recording_artists: { artist_id: string; year: number | null; position: number | null }[];
   song_alternate_titles: AltTitle[];
 };
 
@@ -109,12 +112,14 @@ export default function SongEditor({
   const [geniusUrl, setGeniusUrl] = useState(song?.genius_url ?? "");
   const [chordChartUrl, setChordChartUrl] = useState(song?.chord_chart_url ?? "");
   const [year, setYear] = useState(song?.year?.toString() ?? "");
+  const [yearWritten, setYearWritten] = useState(song?.year_written?.toString() ?? "");
   const [tonalities, setTonalities] = useState<string[]>(() =>
     song?.tonality ? song.tonality.split(",").map((s) => s.trim()).filter(Boolean) : []
   );
   const [meters, setMeters] = useState<string[]>(() =>
     song?.meter ? song.meter.split(",").map((s) => s.trim()).filter(Boolean) : []
   );
+  const [vibe, setVibe] = useState<"Banger" | "Ballad" | null>(song?.vibe ?? null);
 
   const initialComposerIds = song?.song_composers.map((x) => x.person_id) ?? [];
   const initialLyricistIds = song?.song_lyricists.map((x) => x.person_id) ?? [];
@@ -123,7 +128,10 @@ export default function SongEditor({
     toSet(initialLyricistIds.length ? initialLyricistIds : initialComposerIds)
   );
   type RecordingArtistEntry = { id: string; year: number | null };
-  const initialRecordingArtistEntries: RecordingArtistEntry[] = song?.song_recording_artists.map((x) => ({ id: x.artist_id, year: x.year })) ?? [];
+  const initialRecordingArtistEntries: RecordingArtistEntry[] = (song?.song_recording_artists ?? [])
+    .slice()
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .map((x) => ({ id: x.artist_id, year: x.year }));
   const seededRecordingArtistEntries: RecordingArtistEntry[] = initialRecordingArtistEntries.length
     ? initialRecordingArtistEntries
     : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null }));
@@ -137,7 +145,10 @@ export default function SongEditor({
     (song?.song_themes ?? []).map((x) => allThemes.find((t) => t.id === x.theme_id)?.name).filter((n): n is string => !!n)
   );
   const [cultures, setCultures] = useState<string[]>(() =>
-    (song?.song_cultures ?? []).map((x) => allCultures.find((c) => c.id === x.culture_id)?.name).filter((n): n is string => !!n)
+    (song?.song_cultures ?? [])
+      .filter((x) => !x.context)
+      .map((x) => allCultures.find((c) => c.id === x.culture_id)?.name)
+      .filter((n): n is string => !!n)
   );
   const [languages, setLanguages] = useState<string[]>(() =>
     (song?.song_languages ?? []).map((x) => allLanguages.find((l) => l.id === x.language_id)?.name).filter((n): n is string => !!n)
@@ -222,6 +233,27 @@ export default function SongEditor({
   const [newLyricistName, setNewLyricistName] = useState("");
   const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
   const [primaryArtist, setPrimaryArtist] = useState<{ name: string; year: number | null } | null>(null);
+  const [pendingComposerNames, setPendingComposerNames] = useState<string[]>([]);
+  const [pendingLyricistNames, setPendingLyricistNames] = useState<string[]>([]);
+  const [composerTraditionalCulture, setComposerTraditionalCulture] = useState(() => {
+    const mc = song?.song_cultures.find((x) => x.context === "music");
+    return mc ? (allCultures.find((c) => c.id === mc.culture_id)?.name ?? "") : "";
+  });
+  const [lyricistTraditionalCulture, setLyricistTraditionalCulture] = useState(() => {
+    const lc = song?.song_cultures.find((x) => x.context === "lyrics");
+    return lc ? (allCultures.find((c) => c.id === lc.culture_id)?.name ?? "") : "";
+  });
+  const [duplicateSong, setDuplicateSong] = useState<{ id: string; slug: string | null; title: string } | null>(null);
+  const [sameTitleSongs, setSameTitleSongs] = useState<{ id: string; slug: string | null; title: string }[]>([]);
+
+  // Clear duplicate warnings when the user manually adjusts composers
+  useEffect(() => {
+    if (duplicateSong || sameTitleSongs.length > 0) {
+      setDuplicateSong(null);
+      setSameTitleSongs([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composers]);
 
   // Find or create a person/artist by canonical name. Returns the DB id.
   async function resolvePersonName(
@@ -229,6 +261,7 @@ export default function SongEditor({
     table: "people" | "artists",
     allItems: Lookup[]
   ): Promise<string | null> {
+    if (!name.trim()) return null;
     const normalised = name.trim().toLowerCase();
     const existing = allItems.find((p) => p.name.toLowerCase() === normalised);
     if (existing) return existing.id;
@@ -286,12 +319,41 @@ export default function SongEditor({
           : data.wikidata?.lyricists?.length ? data.wikidata.lyricists
           : composerNames;
 
-      const [composerIds, lyricistIds] = await Promise.all([
-        Promise.all(composerNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
-        Promise.all(lyricistNames.map((n: string) => resolvePersonName(n, "people", allPeople))),
-      ]);
-      setComposers(new Set(composerIds.filter((id): id is string => id !== null)));
-      setLyricists(new Set(lyricistIds.filter((id): id is string => id !== null)));
+      function splitExistingAndPending(names: string[]) {
+        const existingIds: string[] = [];
+        const pendingNames: string[] = [];
+        for (const n of names) {
+          const match = allPeople.find((p) => p.name.toLowerCase() === n.trim().toLowerCase());
+          if (match) existingIds.push(match.id);
+          else pendingNames.push(n.trim());
+        }
+        return { existingIds, pendingNames };
+      }
+
+      const { existingIds: cIds, pendingNames: cPending } = splitExistingAndPending(composerNames);
+      const { existingIds: lIds, pendingNames: lPending } = splitExistingAndPending(lyricistNames);
+      setComposers(new Set(cIds));
+      setPendingComposerNames(cPending);
+      setLyricists(new Set(lIds));
+      setPendingLyricistNames(lPending);
+
+      // Duplicate check: generate potential slug and query DB
+      const finalTitle = (mb?.title ?? title).trim();
+      const traditionalPersonId = allPeople.find((p) => p.name === "Traditional")?.id;
+      const slugCultureForCheck = traditionalPersonId && [...composers, ...pendingComposerNames.map(() => "")].length
+        ? (composerTraditionalCulture || lyricistTraditionalCulture || undefined)
+        : undefined;
+      const potentialSlug = generateSlug(finalTitle, composerNames, slugCultureForCheck);
+      const { data: existing } = await supabase
+        .from("songs")
+        .select("id, slug, title")
+        .or(`slug.eq.${potentialSlug},title.ilike.${finalTitle}`)
+        .limit(10);
+      const exactDupe = existing?.find((s) => s.slug === potentialSlug) ?? null;
+      const titleMatches = (existing ?? []).filter((s) => s.slug !== potentialSlug);
+      setDuplicateSong(exactDupe as typeof duplicateSong);
+      setSameTitleSongs(titleMatches as typeof sameTitleSongs);
+
       setFound(true);
     } catch {
       setError("Could not reach enrichment API. Check your network and API keys.");
@@ -306,12 +368,27 @@ export default function SongEditor({
     setError(null);
     try {
       const finalTitle = (standardizedTitle || title).trim();
-      const composerNames = [...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
+
+      // Resolve any pending new people to DB ids
+      const resolvedComposerIds = await Promise.all(
+        pendingComposerNames.map((name) => resolvePersonName(name, "people", allPeople))
+      );
+      const resolvedLyricistIds = await Promise.all(
+        pendingLyricistNames.map((name) => resolvePersonName(name, "people", allPeople))
+      );
+      const allComposers = new Set([...composers, ...resolvedComposerIds.filter((id): id is string => !!id)]);
+      const allLyricists = new Set([...lyricists, ...resolvedLyricistIds.filter((id): id is string => !!id)]);
+
+      const composerNames = [...allComposers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
+      const traditionalId = allPeople.find((p) => p.name === "Traditional")?.id;
+      const slugCulture = traditionalId && allComposers.has(traditionalId)
+        ? (composerTraditionalCulture || lyricistTraditionalCulture || undefined)
+        : undefined;
       const { data, error } = await supabase
         .from("songs")
         .insert({
           title: finalTitle,
-          slug: generateSlug(finalTitle, composerNames),
+          slug: generateSlug(finalTitle, composerNames, slugCulture),
           display_artist: (standardizedArtist || displayArtist).trim() || null,
           updated_at: new Date().toISOString(),
         })
@@ -321,12 +398,12 @@ export default function SongEditor({
 
       const songId = data.id;
 
-      if (composers.size) {
-        const { error: e } = await supabase.from("song_composers").insert([...composers].map((id) => ({ song_id: songId, person_id: id })));
+      if (allComposers.size) {
+        const { error: e } = await supabase.from("song_composers").insert([...allComposers].map((id) => ({ song_id: songId, person_id: id })));
         if (e) throw e;
       }
-      if (lyricists.size) {
-        const { error: e } = await supabase.from("song_lyricists").insert([...lyricists].map((id) => ({ song_id: songId, person_id: id })));
+      if (allLyricists.size) {
+        const { error: e } = await supabase.from("song_lyricists").insert([...allLyricists].map((id) => ({ song_id: songId, person_id: id })));
         if (e) throw e;
       }
       const artistName = (standardizedArtist || displayArtist).trim();
@@ -338,7 +415,18 @@ export default function SongEditor({
         }
       }
 
-      const newSlug = generateSlug(finalTitle, composerNames);
+      // Save traditional cultures to song_cultures with context
+      const traditionalCultures: { name: string; context: string }[] = [];
+      if (composerTraditionalCulture) traditionalCultures.push({ name: composerTraditionalCulture, context: "music" });
+      if (lyricistTraditionalCulture) traditionalCultures.push({ name: lyricistTraditionalCulture, context: "lyrics" });
+      for (const { name: cultureName, context } of traditionalCultures) {
+        const culture = allCultures.find((c) => c.name.toLowerCase() === cultureName.toLowerCase());
+        if (culture) {
+          await supabase.from("song_cultures").insert({ song_id: songId, culture_id: culture.id, context });
+        }
+      }
+
+      const newSlug = generateSlug(finalTitle, composerNames, slugCulture);
       router.push(`/admin/songs/${newSlug}`);
       router.refresh();
     } catch (e: any) {
@@ -425,14 +513,16 @@ export default function SongEditor({
       const payload = {
         title: title.trim(),
         slug: resolvedSlug,
-        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(" & ") || displayArtist.trim() || null,
+        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || displayArtist.trim() || null,
         first_line: firstLine.trim() || null,
         hook: hook.trim() || null,
         genius_url: geniusUrl.trim() || null,
         chord_chart_url: chordChartUrl.trim() || null,
         year: year ? parseInt(year) : null,
+        year_written: yearWritten ? parseInt(yearWritten) : null,
         tonality: tonalities.join(", ") || null,
         meter: meters.join(", ") || null,
+        vibe: vibe,
         updated_at: new Date().toISOString(),
       };
 
@@ -465,7 +555,7 @@ export default function SongEditor({
       }
       const originalGenres = song?.song_genres.map((x) => x.genre_id) ?? [];
       const originalThemes = song?.song_themes.map((x) => x.theme_id) ?? [];
-      const originalCultures = song?.song_cultures.map((x) => x.culture_id) ?? [];
+      const originalCultures = (song?.song_cultures ?? []).filter((x) => !x.context).map((x) => x.culture_id);
       const originalLanguages = song?.song_languages.map((x) => x.language_id) ?? [];
       const [genreIds, themeIds, cultureIds, languageIds] = await Promise.all([
         resolveNamesToIds(genres, "genres", allGenres),
@@ -479,10 +569,22 @@ export default function SongEditor({
       const newRecordingArtistIds = recordingArtists.map((e) => e.id);
       const toDeleteArtists = originalRecordingArtistIds.filter((id) => !newRecordingArtistIds.includes(id));
 
+      // Sync non-contextual cultures manually so the delete is scoped to context IS NULL
+      // (syncJoinTable would delete by culture_id alone, wiping traditional culture rows)
+      const toAddCultures = [...cultureIds].filter((id) => !originalCultures.includes(id));
+      const toRemoveCultures = originalCultures.filter((id) => !cultureIds.has(id));
+      if (toAddCultures.length) {
+        const { error } = await supabase.from("song_cultures").insert(toAddCultures.map((id) => ({ song_id: songId!, culture_id: id })));
+        if (error) throw error;
+      }
+      if (toRemoveCultures.length) {
+        const { error } = await supabase.from("song_cultures").delete().eq("song_id", songId!).in("culture_id", toRemoveCultures).is("context", null);
+        if (error) throw error;
+      }
+
       await Promise.all([
         syncJoinTable(songId!, "song_genres", "genre_id", genreIds, originalGenres),
         syncJoinTable(songId!, "song_themes", "theme_id", themeIds, originalThemes),
-        syncJoinTable(songId!, "song_cultures", "culture_id", cultureIds, originalCultures),
         syncJoinTable(songId!, "song_languages", "language_id", languageIds, originalLanguages),
         syncJoinTable(songId!, "song_composers", "person_id", composers, originalComposers),
         syncJoinTable(songId!, "song_lyricists", "person_id", lyricists, originalLyricists),
@@ -491,11 +593,28 @@ export default function SongEditor({
           : Promise.resolve(),
         recordingArtists.length
           ? supabase.from("song_recording_artists").upsert(
-              recordingArtists.map((e) => ({ song_id: songId!, artist_id: e.id, year: e.year })),
+              recordingArtists.map((e, i) => ({ song_id: songId!, artist_id: e.id, year: e.year, position: i })),
               { onConflict: "song_id,artist_id" }
             )
           : Promise.resolve(),
       ]);
+
+      // Sync traditional cultures with context
+      const traditionalId = allPeople.find((p) => p.name === "Traditional")?.id;
+      await supabase.from("song_cultures").delete().eq("song_id", songId!).in("context", ["music", "lyrics"]);
+      const tCultures: { name: string; context: string }[] = [];
+      if (traditionalId && composers.has(traditionalId) && composerTraditionalCulture) {
+        tCultures.push({ name: composerTraditionalCulture, context: "music" });
+      }
+      if (traditionalId && lyricists.has(traditionalId) && lyricistTraditionalCulture) {
+        tCultures.push({ name: lyricistTraditionalCulture, context: "lyrics" });
+      }
+      for (const { name: cultureName, context } of tCultures) {
+        const culture = allCultures.find((c) => c.name.toLowerCase() === cultureName.toLowerCase());
+        if (culture) {
+          await supabase.from("song_cultures").insert({ song_id: songId!, culture_id: culture.id, context });
+        }
+      }
 
       setSlug(resolvedSlug);
       router.push(`/admin/songs/${resolvedSlug}`);
@@ -584,34 +703,97 @@ export default function SongEditor({
                 />
               </Field>
             </div>
-            <PeopleField
-              label="Composers"
-              items={composerItems}
-              query={newComposerName}
-              onQueryChange={setNewComposerName}
-              suggestions={allPeople.filter(
-                (p) => !composers.has(p.id) && p.name.toLowerCase().includes(newComposerName.toLowerCase().trim())
-              )}
-              onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
-              onRemove={(id) => setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; })}
-            />
-            <PeopleField
-              label="Lyricists"
-              items={lyricistItems}
-              query={newLyricistName}
-              onQueryChange={setNewLyricistName}
-              suggestions={allPeople.filter(
-                (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
-              )}
-              onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
-              onRemove={(id) => setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; })}
-            />
+            {(() => {
+              const traditionalId = allPeople.find((p) => p.name === "Traditional")?.id;
+              const composerIsTraditional = traditionalId ? composers.has(traditionalId) : false;
+              const lyricistIsTraditional = traditionalId ? lyricists.has(traditionalId) : false;
+              return (
+                <>
+                  <PeopleField
+                    label="Composers"
+                    items={composerItems}
+                    query={newComposerName}
+                    onQueryChange={setNewComposerName}
+                    suggestions={allPeople.filter(
+                      (p) => !composers.has(p.id) && p.name.toLowerCase().includes(newComposerName.toLowerCase().trim())
+                    )}
+                    onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
+                    onRemove={(id) => { setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setComposerTraditionalCulture(""); }}
+                    onAddNew={(name) => {
+                      if (!pendingComposerNames.includes(name)) setPendingComposerNames((prev) => [...prev, name]);
+                      setNewComposerName("");
+                    }}
+                    pendingItems={pendingComposerNames}
+                    onRemovePending={(name) => setPendingComposerNames((prev) => prev.filter((n) => n !== name))}
+                  />
+                  {composerIsTraditional && (
+                    <TraditionalCultureField
+                      value={composerTraditionalCulture}
+                      onChange={setComposerTraditionalCulture}
+                      allCultures={allCultures}
+                      label="Music culture (e.g. British, Irish)"
+                    />
+                  )}
+                  <PeopleField
+                    label="Lyricists"
+                    items={lyricistItems}
+                    query={newLyricistName}
+                    onQueryChange={setNewLyricistName}
+                    suggestions={allPeople.filter(
+                      (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
+                    )}
+                    onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
+                    onRemove={(id) => { setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setLyricistTraditionalCulture(""); }}
+                    onAddNew={(name) => {
+                      if (!pendingLyricistNames.includes(name)) setPendingLyricistNames((prev) => [...prev, name]);
+                      setNewLyricistName("");
+                    }}
+                    onRemovePending={(name) => setPendingLyricistNames((prev) => prev.filter((n) => n !== name))}
+                  />
+                  {lyricistIsTraditional && (
+                    <TraditionalCultureField
+                      value={lyricistTraditionalCulture}
+                      onChange={setLyricistTraditionalCulture}
+                      allCultures={allCultures}
+                      label="Lyrics culture (e.g. British, Irish)"
+                    />
+                  )}
+                </>
+              );
+            })()}
           </section>
+        )}
+
+        {duplicateSong && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            This song already exists in the database.{" "}
+            <a
+              href={`/admin/songs/${duplicateSong.slug ?? duplicateSong.id}`}
+              className="font-semibold underline hover:text-red-900"
+            >
+              Edit "{duplicateSong.title}" →
+            </a>
+          </div>
+        )}
+
+        {!duplicateSong && sameTitleSongs.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span className="font-medium">Note:</span> A song with this title already exists:{" "}
+            {sameTitleSongs.map((s, i) => (
+              <span key={s.id}>
+                {i > 0 && ", "}
+                <a href={`/admin/songs/${s.slug ?? s.id}`} className="underline hover:text-amber-900">
+                  {s.title}
+                </a>
+              </span>
+            ))}
+            . If this is a different arrangement or version, continue saving.
+          </div>
         )}
 
         <button
           onClick={handleSaveAndContinue}
-          disabled={saving || !title.trim()}
+          disabled={saving || !title.trim() || !!duplicateSong}
           className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-40"
         >
           {saving ? "Saving…" : "Save & continue"}
@@ -675,28 +857,53 @@ export default function SongEditor({
           </Field>
         </div>
 
-        <PeopleField
-          label="Composers"
-          items={[...composers].map((id) => allPeople.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
-          query={newComposerName}
-          onQueryChange={setNewComposerName}
-          suggestions={allPeople.filter(
-            (p) => !composers.has(p.id) && p.name.toLowerCase().includes(newComposerName.toLowerCase().trim())
-          )}
-          onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
-          onRemove={(id) => setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; })}
-        />
-        <PeopleField
-          label="Lyricists"
-          items={[...lyricists].map((id) => allPeople.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
-          query={newLyricistName}
-          onQueryChange={setNewLyricistName}
-          suggestions={allPeople.filter(
-            (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
-          )}
-          onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
-          onRemove={(id) => setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; })}
-        />
+        {(() => {
+          const traditionalId = allPeople.find((p) => p.name === "Traditional")?.id;
+          const composerIsTraditional = traditionalId ? composers.has(traditionalId) : false;
+          const lyricistIsTraditional = traditionalId ? lyricists.has(traditionalId) : false;
+          return (
+            <>
+              <PeopleField
+                label="Composers"
+                items={[...composers].map((id) => allPeople.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
+                query={newComposerName}
+                onQueryChange={setNewComposerName}
+                suggestions={allPeople.filter(
+                  (p) => !composers.has(p.id) && p.name.toLowerCase().includes(newComposerName.toLowerCase().trim())
+                )}
+                onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
+                onRemove={(id) => { setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setComposerTraditionalCulture(""); }}
+              />
+              {composerIsTraditional && (
+                <TraditionalCultureField
+                  value={composerTraditionalCulture}
+                  onChange={setComposerTraditionalCulture}
+                  allCultures={allCultures}
+                  label="Music culture (e.g. English, Irish)"
+                />
+              )}
+              <PeopleField
+                label="Lyricists"
+                items={[...lyricists].map((id) => allPeople.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
+                query={newLyricistName}
+                onQueryChange={setNewLyricistName}
+                suggestions={allPeople.filter(
+                  (p) => !lyricists.has(p.id) && p.name.toLowerCase().includes(newLyricistName.toLowerCase().trim())
+                )}
+                onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
+                onRemove={(id) => { setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setLyricistTraditionalCulture(""); }}
+              />
+              {lyricistIsTraditional && (
+                <TraditionalCultureField
+                  value={lyricistTraditionalCulture}
+                  onChange={setLyricistTraditionalCulture}
+                  allCultures={allCultures}
+                  label="Lyrics culture (e.g. English, Irish)"
+                />
+              )}
+            </>
+          );
+        })()}
         <RecordingArtistField
           items={recordingArtists}
           allArtists={allArtists}
@@ -705,11 +912,52 @@ export default function SongEditor({
           onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null }]); setNewRecordingArtistName(""); }}
           onRemove={(id) => setRecordingArtists((prev) => prev.filter((e) => e.id !== id))}
           onYearChange={(id, year) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year } : e))}
+          onReorder={setRecordingArtists}
         />
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Year written</label>
+          <input
+            type="number"
+            value={yearWritten}
+            onChange={(e) => setYearWritten(e.target.value)}
+            placeholder="e.g. 1929"
+            className="w-32 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-slate-400">Only set if different from the first recording year</p>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <TagPillsField label="Tonality" value={tonalities} onChange={setTonalities} suggestions={TONALITY_OPTIONS} allowNew placeholder="Search tonality…" />
           <TagPillsField label="Meter" value={meters} onChange={setMeters} suggestions={METER_OPTIONS} placeholder="Search meter…" />
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Vibe</p>
+          <div className="flex gap-6">
+            {(["Banger", "Ballad"] as const).map((option) => (
+              <label key={option} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="vibe"
+                  value={option}
+                  checked={vibe === option}
+                  onChange={() => setVibe(option)}
+                  className="accent-amber-500"
+                />
+                {option}
+              </label>
+            ))}
+            {vibe && (
+              <button
+                type="button"
+                onClick={() => setVibe(null)}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -849,7 +1097,7 @@ export default function SongEditor({
 }
 
 function RecordingArtistField({
-  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange,
+  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange, onReorder,
 }: {
   items: { id: string; year: number | null }[];
   allArtists: Lookup[];
@@ -858,19 +1106,40 @@ function RecordingArtistField({
   onAdd: (a: Lookup) => void;
   onRemove: (id: string) => void;
   onYearChange: (id: string, year: number | null) => void;
+  onReorder: (items: { id: string; year: number | null }[]) => void;
 }) {
+  const dragIndex = useRef<number | null>(null);
+
+  function handleDragStart(i: number) { dragIndex.current = i; }
+  function handleDrop(i: number) {
+    if (dragIndex.current === null || dragIndex.current === i) return;
+    const next = [...items];
+    const [moved] = next.splice(dragIndex.current, 1);
+    next.splice(i, 0, moved);
+    onReorder(next);
+    dragIndex.current = null;
+  }
+
   const showSuggestions = query.trim().length > 0;
   const suggestions = allArtists.filter(
     (a) => !items.find((e) => e.id === a.id) && a.name.toLowerCase().includes(query.toLowerCase().trim())
   );
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-medium text-slate-600">Recording artists</label>
+      <label className="block text-xs font-medium text-slate-600">Recording artists <span className="font-normal text-slate-400">(drag to reorder)</span></label>
       <div className="flex flex-wrap gap-2">
-        {items.map((e) => {
+        {items.map((e, i) => {
           const artist = allArtists.find((a) => a.id === e.id);
           return (
-            <span key={e.id} className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white">
+            <span
+              key={e.id}
+              draggable
+              onDragStart={() => handleDragStart(i)}
+              onDragOver={(ev) => ev.preventDefault()}
+              onDrop={() => handleDrop(i)}
+              className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white cursor-grab active:cursor-grabbing"
+            >
+              <span className="opacity-50 text-xs">⠿</span>
               {artist?.name}
               <input
                 type="number"
@@ -912,7 +1181,7 @@ function RecordingArtistField({
 }
 
 function PeopleField({
-  label, items, query, onQueryChange, suggestions, onAdd, onRemove,
+  label, items, query, onQueryChange, suggestions, onAdd, onRemove, onAddNew, pendingItems = [], onRemovePending,
 }: {
   label: string;
   items: Lookup[];
@@ -921,8 +1190,12 @@ function PeopleField({
   suggestions: Lookup[];
   onAdd: (p: Lookup) => void;
   onRemove: (id: string) => void;
+  onAddNew?: (name: string) => void;
+  pendingItems?: string[];
+  onRemovePending?: (name: string) => void;
 }) {
   const showSuggestions = query.trim().length > 0;
+  const trimmed = query.trim();
   return (
     <div className="space-y-2">
       <label className="block text-xs font-medium text-slate-600">{label}</label>
@@ -934,7 +1207,17 @@ function PeopleField({
             <button onClick={() => onRemove(p.id)} className="opacity-70 hover:opacity-100">×</button>
           </span>
         ))}
-        {!items.length && <span className="text-sm text-slate-400">None found.</span>}
+        {pendingItems.map((name) => (
+          <span key={name}
+            className="flex items-center gap-1.5 rounded-full border border-amber-400 bg-white px-3 py-1 text-sm text-amber-600">
+            {name}
+            <span className="text-xs opacity-60">(new)</span>
+            {onRemovePending && (
+              <button onClick={() => onRemovePending(name)} className="opacity-70 hover:opacity-100">×</button>
+            )}
+          </span>
+        ))}
+        {!items.length && !pendingItems.length && <span className="text-sm text-slate-400">None found.</span>}
       </div>
       <div className="relative">
         <input
@@ -955,7 +1238,17 @@ function PeopleField({
                 </button>
               </li>
             ))}
-            {!suggestions.length && (
+            {onAddNew && !suggestions.some((p) => p.name.toLowerCase() === trimmed.toLowerCase()) && (
+              <li>
+                <button
+                  onMouseDown={() => { onAddNew(trimmed); }}
+                  className="w-full px-3 py-2 text-left text-sm text-amber-700 hover:bg-amber-50"
+                >
+                  Create "{trimmed}" <span className="text-xs opacity-60">(new)</span>
+                </button>
+              </li>
+            )}
+            {!suggestions.length && !onAddNew && (
               <li className="px-3 py-2 text-sm text-slate-400">No match — add to database first</li>
             )}
           </ul>
@@ -1035,6 +1328,62 @@ function TagPillsField({
         {trimmed.length > 0 && filtered.length === 0 && !showCreate && (
           <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-md">
             <li className="px-3 py-2 text-sm text-slate-400">No match in database</li>
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TraditionalCultureField({
+  label, value, onChange, allCultures,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  allCultures: Lookup[];
+}) {
+  const [query, setQuery] = useState("");
+  const isSet = allCultures.some((c) => c.name.toLowerCase() === value.toLowerCase().trim());
+  const trimmed = query.trim();
+  const filtered = allCultures.filter(
+    (c) => c.name.toLowerCase().includes(trimmed.toLowerCase()) && c.name.toLowerCase() !== value.toLowerCase()
+  );
+  return (
+    <div className="space-y-2 pl-2 border-l-2 border-amber-200">
+      <label className="block text-xs font-medium text-slate-500">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {isSet ? (
+          <span className="flex items-center gap-1 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white">
+            {value}
+            <button type="button" onClick={() => { onChange(""); setQuery(""); }} className="opacity-70 hover:opacity-100 leading-none">×</button>
+          </span>
+        ) : (
+          <span className="text-sm text-slate-400">None set.</span>
+        )}
+      </div>
+      <div className="relative">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search cultures…"
+          className="input w-full"
+        />
+        {trimmed.length > 0 && (
+          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-md">
+            {filtered.slice(0, 6).map((c) => (
+              <li key={c.id}>
+                <button
+                  onMouseDown={() => { onChange(c.name); setQuery(""); }}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  {c.name}
+                </button>
+              </li>
+            ))}
+            {!filtered.length && (
+              <li className="px-3 py-2 text-sm text-slate-400">No match in database</li>
+            )}
           </ul>
         )}
       </div>

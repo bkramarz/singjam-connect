@@ -22,7 +22,7 @@ async function fetchMBWorkArtists(workId: string): Promise<{ name: string; year:
 
   const sorted = (data.recordings ?? [])
     .map((r: any) => ({
-      name: (r["artist-credit"] ?? []).map((ac: any) => ac.artist?.name).filter(Boolean).join(" & "),
+      name: (r["artist-credit"] ?? []).map((ac: any) => ac.artist?.name ?? "").filter((n: string) => n.trim()).join(", "),
       year: r["first-release-date"] ? parseInt(r["first-release-date"].slice(0, 4)) : null,
     }))
     .filter((e: any) => e.name)
@@ -38,7 +38,7 @@ async function fetchMBWorkArtists(workId: string): Promise<{ name: string; year:
       seen.add(e.name.toLowerCase());
       result.push(e);
     }
-    if (result.length >= 5) break;
+    // no cap — return all unique artists
   }
 
   return result;
@@ -110,7 +110,7 @@ async function enrichMusicBrainz(title: string, artist: string) {
     .map((ac: any) => ac.artist?.name)
     .filter(Boolean);
 
-  const displayArtist = recordingArtists.join(" & ") || undefined;
+  const displayArtist = recordingArtists.join(", ") || undefined;
 
   // Try work relation on the recording first
   let workData: WorkData = { composers: [], lyricists: [], languages: [] };
