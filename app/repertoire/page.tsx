@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { formatComposers } from "@/lib/formatComposers";
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
@@ -24,6 +25,7 @@ type Item = {
   first_line: string | null;
   hook: string | null;
   composers: string[];
+  cultures: string[];
 };
 
 type UserSongRow = {
@@ -36,6 +38,7 @@ type UserSongRow = {
     display_artist: string | null;
     song_composers: { people: { name: string } | null }[];
     song_lyricists: { people: { name: string } | null }[];
+    song_cultures: { cultures: { name: string } | null }[];
   } | null;
 };
 
@@ -93,7 +96,8 @@ export default function RepertoirePage() {
               first_line,
               hook,
               song_composers ( people ( name ) ),
-              song_lyricists ( people ( name ) )
+              song_lyricists ( people ( name ) ),
+              song_cultures ( cultures ( name ) )
             )
           `
           )
@@ -127,6 +131,7 @@ export default function RepertoirePage() {
               first_line: (r.songs as any).first_line ?? null,
               hook: (r.songs as any).hook ?? null,
               composers: [...names].sort(),
+              cultures: (r.songs!.song_cultures ?? []).map((c) => c.cultures?.name).filter(Boolean) as string[],
             };
           });
 
@@ -305,12 +310,7 @@ export default function RepertoirePage() {
                       </Link>
                       {it.composers.length > 0 && (
                         <span className="ml-1 font-normal text-slate-400">
-                          ({it.composers.map((name) => {
-                            const parts = name.trim().split(" ");
-                            return parts.length > 1
-                              ? `${parts[0][0]}. ${parts.slice(1).join(" ")}`
-                              : name;
-                          }).join(", ")})
+                          ({formatComposers(it.composers, it.cultures)})
                         </span>
                       )}
                     </div>

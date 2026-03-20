@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState, useCallback } from "react";
 import DeleteSongButton from "./DeleteSongButton";
+import { formatComposers } from "@/lib/formatComposers";
 
 type Song = {
   id: string;
@@ -19,6 +20,7 @@ type Song = {
   vibe: string | null;
   song_composers: { people: { name: string } | null }[];
   song_lyricists: { people: { name: string } | null }[];
+  song_cultures: { cultures: { name: string } | null }[];
   song_recording_artists: { year: number | null }[];
   song_genres: { genre_id: string }[];
   song_languages: { language_id: string }[];
@@ -137,7 +139,10 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
               ...s.song_composers.map((c) => c.people?.name).filter(Boolean) as string[],
               ...s.song_lyricists.map((l) => l.people?.name).filter(Boolean) as string[],
             ]);
-            const songwriters = [...songwriterNames].sort().join(", ") || "—";
+            const cultures = s.song_cultures.map((c) => c.cultures?.name).filter(Boolean) as string[];
+            const songwriters = songwriterNames.size
+              ? formatComposers([...songwriterNames].sort(), cultures)
+              : "—";
 
             const years = s.song_recording_artists
               .map((r) => r.year)

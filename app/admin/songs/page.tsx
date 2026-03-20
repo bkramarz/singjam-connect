@@ -15,6 +15,7 @@ export default async function AdminSongsPage() {
       song_recording_artists(year),
       song_genres(genre_id),
       song_languages(language_id),
+      song_cultures(cultures(name)),
       user_songs(count)
     `)
     .order("title")

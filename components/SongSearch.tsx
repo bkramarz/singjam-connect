@@ -12,6 +12,7 @@ type Result = {
   aka: string[] | null;
   score: number;
   composers: string[];
+  cultures: string[];
   year: number | null;
   slug: string | null;
 };
@@ -25,6 +26,8 @@ type PopularSong = {
   year: number | null;
   popularity: number;
 };
+
+import { formatComposers } from "@/lib/formatComposers";
 
 const LEVELS = [
   { key: "lead", label: "Lead" },
@@ -89,15 +92,15 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
       return;
     }
 
-    const songs = (data ?? []) as Omit<Result, "composers">[];
+    const songs = (data ?? []) as Omit<Result, "year" | "slug">[];
     if (!songs.length) { setResults([]); return; }
 
     const { data: songData } = await supabase
       .from("songs")
-      .select("id, year, year_written, slug, song_composers(people(name))")
+      .select("id, year, year_written, slug")
       .in("id", songs.map((s) => s.song_id));
 
-    const byId: Record<string, { composers: string[]; year: number | null; slug: string | null }> = {};
+    const byId: Record<string, { year: number | null; slug: string | null }> = {};
     for (const row of (songData ?? []) as any[]) {
       byId[row.id] = {
         year: (() => {
@@ -107,11 +110,10 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
           return yw ?? yr ?? null;
         })(),
         slug: row.slug ?? null,
-        composers: (row.song_composers ?? []).map((c: any) => c.people?.name).filter(Boolean).sort(),
       };
     }
 
-    setResults(songs.map((s) => ({ ...s, ...byId[s.song_id] ?? { composers: [], year: null, slug: null } })));
+    setResults(songs.map((s) => ({ ...s, ...byId[s.song_id] ?? { year: null, slug: null } })));
   }
 
   useEffect(() => {
@@ -218,10 +220,7 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                       {r.title}
                       {r.composers.length > 0 && (
                         <span className="ml-1 font-normal text-zinc-400">
-                          ({r.composers.map((name) => {
-                            const parts = name.trim().split(" ");
-                            return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
-                          }).join(", ")})
+                          ({formatComposers(r.composers, r.cultures ?? [])})
                         </span>
                       )}
                       {r.display_artist ? (

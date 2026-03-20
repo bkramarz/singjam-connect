@@ -3,6 +3,18 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 
+function formatComposersLong(names: string[], cultures: string[]): string {
+  const isTraditional = names.some((n) => n.toLowerCase() === "traditional");
+  const others = names.filter((n) => n.toLowerCase() !== "traditional");
+  const parts: string[] = [];
+  if (isTraditional) {
+    const culture = cultures[0];
+    parts.push(culture ? `Traditional - ${culture}` : "Traditional");
+  }
+  parts.push(...others);
+  return parts.join(", ");
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -43,7 +55,7 @@ export default async function SongPage({
       song_alternate_titles(title),
       song_genres(genres(name)),
       song_themes(themes(name)),
-      song_cultures(cultures(name)),
+      song_cultures(context, cultures(name)),
       song_languages(languages(name))
     `)
     .eq(isUuid ? "id" : "slug", slug)
@@ -63,6 +75,12 @@ export default async function SongPage({
 
   const composers = (song.song_composers as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
   const lyricists = (song.song_lyricists as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
+  const musicCultures = (song.song_cultures as any[])
+    .filter((x) => !x.context || x.context === "music")
+    .map((x) => x.cultures?.name).filter(Boolean) as string[];
+  const lyricsCultures = (song.song_cultures as any[])
+    .filter((x) => !x.context || x.context === "lyrics")
+    .map((x) => x.cultures?.name).filter(Boolean) as string[];
   const recordingArtists = (song.song_recording_artists as any[])
     .map((x) => ({ name: x.artists?.name as string, year: x.year as number | null, position: x.position as number | null }))
     .filter((x) => x.name)
@@ -110,12 +128,12 @@ export default async function SongPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Songwriter(s)</p>
             {composers.length > 0 && (
               <p className="text-sm text-slate-600">
-                <span className="font-medium">Music:</span> {composers.join(", ")}
+                <span className="font-medium">Music:</span> {formatComposersLong(composers, musicCultures)}
               </p>
             )}
             {lyricists.length > 0 && (
               <p className="text-sm text-slate-600">
-                <span className="font-medium">Lyrics:</span> {lyricists.join(", ")}
+                <span className="font-medium">Lyrics:</span> {formatComposersLong(lyricists, lyricsCultures)}
               </p>
             )}
           </div>
