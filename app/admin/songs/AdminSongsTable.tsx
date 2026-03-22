@@ -22,6 +22,7 @@ type Song = {
   song_lyricists: { people: { name: string } | null }[];
   song_cultures: { cultures: { name: string } | null }[];
   song_recording_artists: { year: number | null }[];
+  youtube_url: string | null;
   song_genres: { genre_id: string }[];
   song_languages: { language_id: string }[];
   user_songs: { count: number }[];
@@ -55,6 +56,7 @@ function missingFields(s: Song): string[] {
   if (!s.song_languages.length) missing.push("language");
   if (!s.vibe) missing.push("vibe");
   if (!s.chord_chart_url) missing.push("chord chart");
+  if (!s.youtube_url) missing.push("video");
   return missing;
 }
 

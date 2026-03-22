@@ -14,6 +14,7 @@ type Result = {
   score: number;
   composers: string[];
   cultures: string[];
+  productions: string[];
   year: number | null;
   slug: string | null;
 };
@@ -24,6 +25,7 @@ type PopularSong = {
   slug: string | null;
   display_artist: string | null;
   composers: string[];
+  productions: string[];
   year: number | null;
   popularity: number;
 };
@@ -206,7 +208,9 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                           ({formatComposers(r.composers, r.cultures ?? [])})
                         </span>
                       )}
-                      {r.display_artist ? (
+                      {r.productions && r.productions.length > 0 ? (
+                        <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
+                      ) : r.display_artist ? (
                         <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
                       ) : null}
                       {r.year && (
@@ -280,9 +284,11 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                               }).join(", ")})
                             </span>
                           )}
-                          {r.display_artist && (
+                          {r.productions && r.productions.length > 0 ? (
+                            <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
+                          ) : r.display_artist ? (
                             <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
-                          )}
+                          ) : null}
                           {r.year && (
                             <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
                           )}

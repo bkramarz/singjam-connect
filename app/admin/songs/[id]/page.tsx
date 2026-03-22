@@ -27,7 +27,7 @@ export default async function AdminSongPage({
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-  const [songRes, genresRes, themesRes, culturesRes, langsRes, peopleRes, artistsRes] =
+  const [songRes, genresRes, themesRes, culturesRes, langsRes, peopleRes, artistsRes, productionsRes] =
     await Promise.all([
       isNew
         ? Promise.resolve({ data: null })
@@ -42,7 +42,8 @@ export default async function AdminSongPage({
               song_composers(person_id),
               song_lyricists(person_id),
               song_recording_artists(artist_id, year, position),
-              song_alternate_titles(id, title)
+              song_alternate_titles(id, title),
+              song_productions(production_id)
             `)
             .eq(isUuid ? "id" : "slug", id)
             .single(),
@@ -52,6 +53,7 @@ export default async function AdminSongPage({
       supabase.from("languages").select("id, name").order("name"),
       supabase.from("people").select("id, name").order("name"),
       supabase.from("artists").select("id, name").order("name"),
+      supabase.from("productions").select("id, name").order("name"),
     ]);
 
   if (!isNew && !songRes.data) notFound();
@@ -66,6 +68,7 @@ export default async function AdminSongPage({
       allLanguages={langsRes.data ?? []}
       allPeople={peopleRes.data ?? []}
       allArtists={artistsRes.data ?? []}
+      allProductions={productionsRes.data ?? []}
     />
   );
 }

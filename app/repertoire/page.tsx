@@ -26,6 +26,7 @@ type Item = {
   hook: string | null;
   composers: string[];
   cultures: string[];
+  productions: string[];
 };
 
 type UserSongRow = {
@@ -39,6 +40,7 @@ type UserSongRow = {
     song_composers: { people: { name: string } | null }[];
     song_lyricists: { people: { name: string } | null }[];
     song_cultures: { cultures: { name: string } | null }[];
+    song_productions: { productions: { name: string } | null }[];
   } | null;
 };
 
@@ -91,7 +93,8 @@ export default function RepertoirePage() {
               hook,
               song_composers ( people ( name ) ),
               song_lyricists ( people ( name ) ),
-              song_cultures ( cultures ( name ) )
+              song_cultures ( cultures ( name ) ),
+              song_productions ( productions ( name ) )
             )
           `
           )
@@ -126,6 +129,7 @@ export default function RepertoirePage() {
               hook: (r.songs as any).hook ?? null,
               composers: [...names].sort(),
               cultures: (r.songs!.song_cultures ?? []).map((c) => c.cultures?.name).filter(Boolean) as string[],
+              productions: (r.songs!.song_productions ?? []).map((p) => p.productions?.name).filter(Boolean) as string[],
             };
           });
 
@@ -157,7 +161,7 @@ export default function RepertoirePage() {
       if (!matchesConfidence) return false;
       if (!q) return true;
 
-      const hay = [it.title, it.display_artist ?? "", ...it.composers, it.first_line ?? "", it.hook ?? ""]
+      const hay = [it.title, it.display_artist ?? "", ...it.composers, ...it.productions, it.first_line ?? "", it.hook ?? ""]
         .join(" ")
         .toLowerCase();
 
@@ -306,7 +310,9 @@ export default function RepertoirePage() {
                       )}
                     </div>
                     <div className="truncate text-sm text-muted-foreground">
-                      {it.display_artist ?? "—"}
+                      {it.productions.length > 0
+                        ? <>from <em>{it.productions.join(", ")}</em></>
+                        : it.display_artist ?? "—"}
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
