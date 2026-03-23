@@ -17,12 +17,15 @@ export default function TopNav() {
   const [signedIn, setSignedIn] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  async function loadProfile(userId: string) {
+  async function loadProfile(userId: string, bust = false) {
     const { data } = await supabase
       .from("profiles")
       .select("username, display_name, avatar_url")
       .eq("id", userId)
       .single();
+    if (data && bust && data.avatar_url) {
+      data.avatar_url = data.avatar_url + `?t=${Date.now()}`;
+    }
     setProfile(data ?? null);
   }
 
@@ -45,7 +48,7 @@ export default function TopNav() {
 
     function handleProfileUpdated() {
       supabase.auth.getUser().then(({ data }) => {
-        if (data.user) loadProfile(data.user.id);
+        if (data.user) loadProfile(data.user.id, true);
       });
     }
     window.addEventListener("profile-updated", handleProfileUpdated);
