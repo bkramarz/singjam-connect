@@ -61,6 +61,11 @@ export default function AccountPanel() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [draggingOver, setDraggingOver] = useState(false);
 
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
+
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -212,6 +217,21 @@ export default function AccountPanel() {
     setStatus(error ? error.message : "Saved!");
   }
 
+  async function changeEmail() {
+    if (!newEmail.trim()) return;
+    setEmailBusy(true);
+    setEmailStatus(null);
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+    setEmailBusy(false);
+    if (error) {
+      setEmailStatus(error.message);
+    } else {
+      setEmailStatus(`Confirmation sent to ${newEmail.trim()}. Click the link to complete the change.`);
+      setChangingEmail(false);
+      setNewEmail("");
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/");
@@ -280,7 +300,44 @@ export default function AccountPanel() {
         {email && (
           <div>
             <label className="block text-sm font-medium">Email</label>
-            <div className="mt-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">{email}</div>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">{email}</div>
+              <button
+                type="button"
+                onClick={() => { setChangingEmail((v) => !v); setEmailStatus(null); setNewEmail(""); }}
+                className="shrink-0 rounded-lg border border-zinc-200 px-3 py-2 text-xs hover:bg-zinc-50"
+              >
+                Change
+              </button>
+            </div>
+            {changingEmail && (
+              <div className="mt-2 space-y-2">
+                <input
+                  type="email"
+                  className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="New email address"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={changeEmail}
+                    disabled={!newEmail.trim() || emailBusy}
+                    className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {emailBusy ? "Sending…" : "Send confirmation"}
+                  </button>
+                  <button
+                    onClick={() => { setChangingEmail(false); setNewEmail(""); setEmailStatus(null); }}
+                    className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {emailStatus && <div className="mt-1 text-xs text-zinc-500">{emailStatus}</div>}
           </div>
         )}
 
