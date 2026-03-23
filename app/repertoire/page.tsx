@@ -323,12 +323,11 @@ export default function RepertoirePage() {
 
                   <div className="flex items-center gap-2 sm:shrink-0">
                     <select
-                      value={(it.confidence ?? "") as ConfidenceKey | ""}
+                      value={(it.confidence ?? "") as ConfidenceKey}
                       onChange={(e) => updateConfidence(it.song_id, e.target.value)}
                       className="rounded-md border px-2 py-1.5 text-sm"
                       aria-label="Confidence"
                     >
-                      <option value="">Unrated</option>
                       {CONFIDENCE_LEVELS.map((l) => (
                         <option key={l.key} value={l.key}>
                           {l.label}
