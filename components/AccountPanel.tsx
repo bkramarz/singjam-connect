@@ -144,6 +144,7 @@ export default function AccountPanel() {
       setStatus("Failed to save avatar.");
     } else {
       setAvatarUrl(publicUrl + `?t=${Date.now()}`);
+      window.dispatchEvent(new CustomEvent("profile-updated"));
     }
     setUploadingAvatar(false);
   }

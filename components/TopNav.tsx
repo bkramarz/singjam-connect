@@ -43,7 +43,17 @@ export default function TopNav() {
       }
     });
 
-    return () => sub.subscription.unsubscribe();
+    function handleProfileUpdated() {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user) loadProfile(data.user.id);
+      });
+    }
+    window.addEventListener("profile-updated", handleProfileUpdated);
+
+    return () => {
+      sub.subscription.unsubscribe();
+      window.removeEventListener("profile-updated", handleProfileUpdated);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
