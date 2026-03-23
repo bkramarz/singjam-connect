@@ -1,27 +1,57 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import LogoutButton from "./LogoutButton";
 
+type UserProfile = {
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
 export default function TopNav() {
   const supabase = supabaseBrowser();
   const [signedIn, setSignedIn] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  async function loadProfile(userId: string) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("username, display_name, avatar_url")
+      .eq("id", userId)
+      .single();
+    setProfile(data ?? null);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(!!data.session);
+      if (data.session?.user) {
+        setSignedIn(true);
+        loadProfile(data.session.user.id);
+      }
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setSignedIn(!!session);
+      if (session?.user) {
+        loadProfile(session.user.id);
+      } else {
+        setProfile(null);
+      }
     });
 
-    return () => {
-      sub.subscription.unsubscribe();
-    };
-  }, [supabase]);
+    return () => sub.subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const displayLabel = profile?.username
+    ? `@${profile.username}`
+    : profile?.display_name ?? "Account";
+
+  const initial = (profile?.display_name ?? profile?.username ?? "?")[0].toUpperCase();
 
   return (
     <nav className="flex items-center gap-1 text-sm">
@@ -42,8 +72,20 @@ export default function TopNav() {
 
       {signedIn ? (
         <>
-          <Link href="/account" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
-            Account
+          <Link
+            href="/account"
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+          >
+            <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full bg-slate-600">
+              {profile?.avatar_url ? (
+                <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-xs font-medium text-slate-200">
+                  {initial}
+                </span>
+              )}
+            </span>
+            <span className="max-w-[100px] truncate">{displayLabel}</span>
           </Link>
           <LogoutButton />
         </>

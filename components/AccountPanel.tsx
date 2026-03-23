@@ -50,6 +50,7 @@ export default function AccountPanel() {
   const originalUsername = useRef<string>("");
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [draggingOver, setDraggingOver] = useState(false);
 
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -110,9 +111,8 @@ export default function AccountPanel() {
     }, 400);
   }
 
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !userId) return;
+  async function uploadAvatar(file: File) {
+    if (!userId) return;
 
     if (file.size > 5 * 1024 * 1024) {
       setStatus("Avatar must be under 5 MB.");
@@ -146,6 +146,18 @@ export default function AccountPanel() {
       setAvatarUrl(publicUrl + `?t=${Date.now()}`);
     }
     setUploadingAvatar(false);
+  }
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadAvatar(file);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDraggingOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("image/")) uploadAvatar(file);
   }
 
   async function save() {
@@ -207,7 +219,12 @@ export default function AccountPanel() {
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-5">
 
         {/* Avatar */}
-        <div className="flex items-center gap-4">
+        <div
+          className={`flex items-center gap-4 rounded-xl border-2 border-dashed p-3 transition-colors ${draggingOver ? "border-amber-400 bg-amber-50" : "border-transparent"}`}
+          onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
+          onDragLeave={() => setDraggingOver(false)}
+          onDrop={handleDrop}
+        >
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -229,7 +246,7 @@ export default function AccountPanel() {
           </button>
           <div>
             <div className="text-sm font-medium">Profile photo</div>
-            <div className="text-xs text-zinc-500">JPG, PNG or WebP · max 5 MB</div>
+            <div className="text-xs text-zinc-500">Click to upload or drag and drop · JPG, PNG, WebP · max 5 MB</div>
           </div>
           <input
             ref={fileRef}
