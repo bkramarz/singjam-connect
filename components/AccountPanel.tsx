@@ -20,14 +20,14 @@ const SINGING_OPTIONS = [
 const RESERVED = new Set(["admin", "support", "help", "singjam", "sing", "jam", "connect", "api", "www", "mail"]);
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-type SingingVoice = "lead" | "backup" | "none" | null;
+type SingingVoice = string[];
 type Profile = {
   display_name: string | null;
   last_name: string | null;
   username: string | null;
   avatar_url: string | null;
   neighborhood: string | null;
-  singing_voice: SingingVoice;
+  singing_voice: string | null;
   instrument_levels: Record<string, string> | null;
 };
 
@@ -53,7 +53,7 @@ export default function AccountPanel() {
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
-  const [singingVoice, setSingingVoice] = useState<SingingVoice>(null);
+  const [singingVoice, setSingingVoice] = useState<SingingVoice>([]);
   const [instrumentLevels, setInstrumentLevels] = useState<Record<string, string>>({});
   const [pendingInstrument, setPendingInstrument] = useState<string | null>(null);
 
@@ -89,7 +89,7 @@ export default function AccountPanel() {
             setLastName(profile.last_name ?? "");
             setAvatarUrl(profile.avatar_url ?? null);
             setNeighborhood(profile.neighborhood ?? "");
-            setSingingVoice(profile.singing_voice ?? null);
+            setSingingVoice(profile.singing_voice ? profile.singing_voice.split(",") : []);
             setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
 
             const savedUsername = profile.username ?? "";
@@ -203,7 +203,7 @@ export default function AccountPanel() {
       last_name: lastName || null,
       username: username || null,
       neighborhood: neighborhood || null,
-      singing_voice: singingVoice,
+      singing_voice: singingVoice.length ? singingVoice.join(",") : null,
       instrument_levels: instrumentLevels,
       updated_at: new Date().toISOString(),
     });
@@ -405,17 +405,39 @@ export default function AccountPanel() {
         <div>
           <div className="text-sm font-medium">Singing</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {SINGING_OPTIONS.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => setSingingVoice(singingVoice === o.value ? null : o.value)}
-                className={`rounded-xl border px-3 py-1.5 text-sm ${singingVoice === o.value ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}
-              >
-                {o.label}
-              </button>
-            ))}
+            {SINGING_OPTIONS.map((o) => {
+              const selected = singingVoice.includes(o.value);
+              const doesntSing = singingVoice.includes("none");
+              const blocked = o.value !== "none" && doesntSing;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  disabled={blocked}
+                  onClick={() => {
+                    if (o.value === "none") {
+                      setSingingVoice(selected ? [] : ["none"]);
+                    } else {
+                      setSingingVoice(selected
+                        ? singingVoice.filter((v) => v !== o.value)
+                        : [...singingVoice.filter((v) => v !== "none"), o.value]
+                      );
+                    }
+                  }}
+                  className={`rounded-xl border px-3 py-1.5 text-sm transition-colors ${
+                    selected ? "bg-zinc-900 text-white border-zinc-900"
+                    : blocked ? "border-zinc-200 text-zinc-300 cursor-not-allowed"
+                    : "border-zinc-200 hover:bg-zinc-50"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
           </div>
+          {singingVoice.includes("none") && (
+            <div className="mt-1 text-xs text-zinc-400">Uncheck "I don't sing" to select a vocal role.</div>
+          )}
         </div>
 
         {/* Instruments */}
