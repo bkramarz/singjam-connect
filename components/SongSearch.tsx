@@ -47,14 +47,16 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [level, setLevel] = useState<(typeof LEVELS)[number]["key"]>("support");
   const [status, setStatus] = useState<string | null>(null);
+  // song_id of the card currently showing the level picker, null otherwise
+  const [pendingAddId, setPendingAddId] = useState<string | null>(null);
 
   // Map of song_id → confidence for songs already in repertoire
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
   const [visiblePopular, setVisiblePopular] = useState(popularSongs);
 
   const debounceRef = useRef<number | null>(null);
+  const [debouncing, setDebouncing] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -111,6 +113,7 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
 
     debounceRef.current = window.setTimeout(() => {
+      setDebouncing(false);
       runSearch(q);
     }, 200);
 
@@ -120,8 +123,9 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  async function addSong(songId: string) {
+  async function addSong(songId: string, level: string) {
     setStatus(null);
+    setPendingAddId(null);
 
     const { data } = await supabase.auth.getSession();
     const session = data.session;
@@ -153,38 +157,21 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[240px]">
-            <label className="block text-sm font-medium">Search</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder='Try: "wagon weel", "i once was lost", "beatls", "cohen", "shlomo carlebach"'
-            />
-            <div className="mt-1 text-xs text-zinc-500">
-              Tip: searching a person name returns songs connected via composer credits or recordings.
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium">Add as</label>
-            <select
-              className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-              value={level}
-              onChange={(e) => setLevel(e.target.value as any)}
-            >
-              {LEVELS.map((l) => (
-                <option key={l.key} value={l.key}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
+        <div>
+          <label className="block text-sm font-medium">Search</label>
+          <input
+            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setDebouncing(!!e.target.value.trim()); }}
+            placeholder='Try: "wagon weel", "i once was lost", "beatls", "cohen", "shlomo carlebach"'
+          />
+          <div className="mt-1 text-xs text-zinc-500">
+            Tip: searching a person name returns songs connected via composer credits or recordings.
           </div>
         </div>
 
         <div className="text-xs text-zinc-500">
-          {loading ? "Searching…" : q.trim() ? `${results.length} song(s)` : "Type to search"}
+          {loading || debouncing ? "Searching…" : q.trim() ? `${results.length} song(s)` : "Type to search"}
         </div>
 
         {status ? <div className="text-sm text-zinc-700">{status}</div> : null}
@@ -202,7 +189,9 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium truncate">
-                      {r.title}
+                      <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
+                        {r.title}
+                      </Link>
                       {r.composers.length > 0 && (
                         <span className="ml-1 font-normal text-zinc-400">
                           ({formatComposers(r.composers, r.cultures ?? [])})
@@ -230,25 +219,47 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <Link
-                      href={`/songs/${r.slug ?? r.song_id}`}
-                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                    >
-                      View
-                    </Link>
-                    <button
-                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                      onClick={() => addSong(r.song_id)}
-                    >
-                      {inRepertoire ? "Update" : "Add"}
-                    </button>
+                    {pendingAddId === r.song_id ? (
+                      <>
+                        {LEVELS.map((l) => (
+                          <button
+                            key={l.key}
+                            className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
+                            onClick={() => addSong(r.song_id, l.key)}
+                          >
+                            {l.label}
+                          </button>
+                        ))}
+                        <button
+                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                          onClick={() => setPendingAddId(null)}
+                        >
+                          ✕
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/songs/${r.slug ?? r.song_id}`}
+                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                        >
+                          View
+                        </Link>
+                        <button
+                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                          onClick={() => setPendingAddId(r.song_id)}
+                        >
+                          {inRepertoire ? "Update" : "Add"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
 
-          {!loading && results.length === 0 ? (
+          {!loading && !debouncing && results.length === 0 ? (
             <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
               No songs found.
               <div className="mt-2 text-xs text-zinc-500">
@@ -261,12 +272,12 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
         <div className="space-y-2">
           {visiblePopular.length > 0 && (
             <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
-              Popular songs{popularSongs.length < 10 ? "" : " · Top 10"}
+              Popular songs · Top 10
             </p>
           )}
           {visiblePopular.length > 0 ? (
             <div className="grid gap-2">
-              {visiblePopular.map((r) => {
+              {visiblePopular.slice(0, 10).map((r) => {
                 const inRepertoire = repertoire.has(r.song_id);
                 const confidence = repertoire.get(r.song_id);
                 const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
@@ -275,7 +286,9 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="font-medium truncate">
-                          {r.title}
+                          <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
+                            {r.title}
+                          </Link>
                           {r.composers.length > 0 && (
                             <span className="ml-1 font-normal text-zinc-400">
                               ({r.composers.map((name) => {
@@ -300,18 +313,40 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <Link
-                          href={`/songs/${r.slug ?? r.song_id}`}
-                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                        >
-                          View
-                        </Link>
-                        <button
-                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                          onClick={() => addSong(r.song_id)}
-                        >
-                          {inRepertoire ? "Update" : "Add"}
-                        </button>
+                        {pendingAddId === r.song_id ? (
+                          <>
+                            {LEVELS.map((l) => (
+                              <button
+                                key={l.key}
+                                className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
+                                onClick={() => addSong(r.song_id, l.key)}
+                              >
+                                {l.label}
+                              </button>
+                            ))}
+                            <button
+                              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                              onClick={() => setPendingAddId(null)}
+                            >
+                              ✕
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <Link
+                              href={`/songs/${r.slug ?? r.song_id}`}
+                              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                            >
+                              View
+                            </Link>
+                            <button
+                              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                              onClick={() => setPendingAddId(r.song_id)}
+                            >
+                              {inRepertoire ? "Update" : "Add"}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

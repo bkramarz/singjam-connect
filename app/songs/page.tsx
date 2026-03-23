@@ -48,7 +48,7 @@ export default async function SongsPage() {
     }))
     .filter((s) => !repertoireSongIds.has(s.song_id))
     .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title))
-    .slice(0, 10);
+    .slice(0, 30);
 
   return (
     <div className="space-y-4">

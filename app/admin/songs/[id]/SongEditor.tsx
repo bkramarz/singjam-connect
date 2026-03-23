@@ -58,6 +58,7 @@ type Song = {
   display_artist: string | null;
   first_line: string | null;
   hook: string | null;
+  notes: string | null;
   genius_url: string | null;
   chord_chart_url: string | null;
   youtube_url: string | null;
@@ -113,6 +114,7 @@ export default function SongEditor({
   const [displayArtist, setDisplayArtist] = useState(song?.display_artist ?? "");
   const [firstLine, setFirstLine] = useState(song?.first_line ?? "");
   const [hook, setHook] = useState(song?.hook ?? "");
+  const [notes, setNotes] = useState(song?.notes ?? "");
   const [geniusUrl, setGeniusUrl] = useState(song?.genius_url ?? "");
   const [chordChartUrl, setChordChartUrl] = useState(song?.chord_chart_url ?? "");
   const [youtubeUrl, setYoutubeUrl] = useState(song?.youtube_url ?? "");
@@ -187,6 +189,8 @@ export default function SongEditor({
       const data = await res.json();
       const url = data.genius?.lyrics_url;
       if (url) setGeniusUrl(url);
+      if (data.genius?.first_line && !firstLine.trim()) setFirstLine(data.genius.first_line);
+      if (data.genius?.hook && !hook.trim()) setHook(data.genius.hook);
     } catch {
       // leave field blank if it fails
     } finally {
@@ -543,9 +547,10 @@ export default function SongEditor({
       const payload = {
         title: title.trim(),
         slug: resolvedSlug,
-        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || displayArtist.trim() || null,
+        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || (originalRecordingArtistIds.length === 0 ? displayArtist.trim() : null) || null,
         first_line: firstLine.trim() || null,
         hook: hook.trim() || null,
+        notes: notes.trim() || null,
         genius_url: geniusUrl.trim() || null,
         chord_chart_url: chordChartUrl.trim() || null,
         youtube_url: youtubeUrl.trim() || null,
@@ -789,6 +794,7 @@ export default function SongEditor({
                       setNewLyricistName("");
                     }}
                     onRemovePending={(name) => setPendingLyricistNames((prev) => prev.filter((n) => n !== name))}
+                    pendingItems={pendingLyricistNames}
                   />
                   {lyricistIsTraditional && (
                     <TraditionalCultureField
@@ -913,6 +919,9 @@ export default function SongEditor({
                 )}
                 onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
                 onRemove={(id) => { setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setComposerTraditionalCulture(""); }}
+                onAddNew={(name) => { if (!pendingComposerNames.includes(name)) setPendingComposerNames((prev) => [...prev, name]); setNewComposerName(""); }}
+                onRemovePending={(name) => setPendingComposerNames((prev) => prev.filter((n) => n !== name))}
+                pendingItems={pendingComposerNames}
               />
               {composerIsTraditional && (
                 <TraditionalCultureField
@@ -932,6 +941,9 @@ export default function SongEditor({
                 )}
                 onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
                 onRemove={(id) => { setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setLyricistTraditionalCulture(""); }}
+                onAddNew={(name) => { if (!pendingLyricistNames.includes(name)) setPendingLyricistNames((prev) => [...prev, name]); setNewLyricistName(""); }}
+                onRemovePending={(name) => setPendingLyricistNames((prev) => prev.filter((n) => n !== name))}
+                pendingItems={pendingLyricistNames}
               />
               {lyricistIsTraditional && (
                 <TraditionalCultureField
@@ -1170,6 +1182,15 @@ export default function SongEditor({
               <span className="text-sm text-slate-400">None added yet.</span>
             )}
           </div>
+        </section>
+      )}
+
+      {/* Additional notes */}
+      {!isNew && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700">Additional notes</h2>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+            className="input min-h-[80px] resize-y" placeholder="Any extra context, performance notes, etc." />
         </section>
       )}
 

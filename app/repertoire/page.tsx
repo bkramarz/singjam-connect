@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
+import { matchesSearch } from "@/lib/normalizeSearch";
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
@@ -24,6 +25,7 @@ type Item = {
   display_artist: string | null;
   first_line: string | null;
   hook: string | null;
+  notes: string | null;
   composers: string[];
   cultures: string[];
   productions: string[];
@@ -91,6 +93,7 @@ export default function RepertoirePage() {
               display_artist,
               first_line,
               hook,
+              notes,
               song_composers ( people ( name ) ),
               song_lyricists ( people ( name ) ),
               song_cultures ( cultures ( name ) ),
@@ -127,6 +130,7 @@ export default function RepertoirePage() {
               display_artist: r.songs!.display_artist,
               first_line: (r.songs as any).first_line ?? null,
               hook: (r.songs as any).hook ?? null,
+              notes: (r.songs as any).notes ?? null,
               composers: [...names].sort(),
               cultures: (r.songs!.song_cultures ?? []).map((c) => c.cultures?.name).filter(Boolean) as string[],
               productions: (r.songs!.song_productions ?? []).map((p) => p.productions?.name).filter(Boolean) as string[],
@@ -152,20 +156,14 @@ export default function RepertoirePage() {
   }, []);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
     return items.filter((it) => {
       const matchesConfidence =
         confidenceFilter === "all" ? true : (it.confidence ?? "") === confidenceFilter;
 
       if (!matchesConfidence) return false;
-      if (!q) return true;
 
-      const hay = [it.title, it.display_artist ?? "", ...it.composers, ...it.productions, it.first_line ?? "", it.hook ?? ""]
-        .join(" ")
-        .toLowerCase();
-
-      return hay.includes(q);
+      const hay = [it.title, it.display_artist ?? "", ...it.composers, ...it.productions, it.first_line ?? "", it.hook ?? "", it.notes ?? ""].join(" ");
+      return matchesSearch(hay, query);
     });
   }, [items, query, confidenceFilter]);
 

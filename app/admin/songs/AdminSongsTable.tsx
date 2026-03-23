@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useState, useCallback, useMemo } from "react";
 import DeleteSongButton from "./DeleteSongButton";
 import { formatComposers } from "@/lib/formatComposers";
+import { matchesSearch } from "@/lib/normalizeSearch";
 
 type Song = {
   id: string;
@@ -107,6 +108,7 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
         ...s.song_lyricists.map((l) => l.people?.name).filter(Boolean) as string[],
       ]);
       const cultures = s.song_cultures.map((c) => c.cultures?.name).filter(Boolean) as string[];
+      const songwriterNamesRaw = [...songwriterNames].sort().join(" ");
       const songwriters = songwriterNames.size
         ? formatComposers([...songwriterNames].sort(), cultures)
         : "—";
@@ -117,24 +119,15 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
       const yw = s.year_written ?? null;
       const firstYear = yw && firstRecording ? Math.min(yw, firstRecording) : yw ?? firstRecording ?? null;
       const missing = missingFields(s);
-      return { ...s, songwriters, firstYear, missing };
+      return { ...s, songwriters, songwriterNamesRaw, firstYear, missing };
     }),
   [songs]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q
-      ? enriched.filter((s) => {
-          const hay = [
-            s.title,
-            s.display_artist ?? "",
-            s.songwriters,
-            s.first_line ?? "",
-            s.hook ?? "",
-          ].join(" ").toLowerCase();
-          return hay.includes(q);
-        })
-      : enriched;
+    return enriched.filter((s) => {
+      const hay = [s.title, s.display_artist ?? "", s.songwriterNamesRaw, s.first_line ?? "", s.hook ?? ""].join(" ");
+      return matchesSearch(hay, query);
+    });
   }, [enriched, query]);
 
   const sorted = useMemo(() => {

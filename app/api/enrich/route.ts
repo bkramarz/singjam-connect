@@ -384,6 +384,53 @@ async function enrichLastFm(title: string, artist: string) {
 
 
 // ─── Genius ──────────────────────────────────────────────────────────────────
+async function scrapeGeniusLyrics(url: string): Promise<{ first_line?: string; hook?: string }> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SingJamConnect/1.0)" },
+    });
+    if (!res.ok) return {};
+    const html = await res.text();
+
+    // Lyrics live in one or more data-lyrics-container divs
+    const containers = html.match(/data-lyrics-container="true"[\s\S]*?(?=data-lyrics-container="true"|<\/div>\s*<div[^>]+data-exclude)/g)
+      ?? html.match(/data-lyrics-container="true"[^>]*>([\s\S]*?)<\/div>/g)
+      ?? [];
+
+    const raw = containers.join("\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&#x27;/g, "'")
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+
+    let first_line: string | undefined;
+    let hook: string | undefined;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!first_line && /^\[verse\s*1\b/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          if (!/^\[/.test(lines[j])) { first_line = lines[j]; break; }
+        }
+      }
+      if (!hook && /^\[chorus\b/i.test(line)) {
+        for (let j = i + 1; j < lines.length; j++) {
+          if (!/^\[/.test(lines[j])) { hook = lines[j]; break; }
+        }
+      }
+      if (first_line && hook) break;
+    }
+
+    return { first_line, hook };
+  } catch {
+    return {};
+  }
+}
+
 async function enrichGenius(title: string, artist: string) {
   const token = process.env.GENIUS_ACCESS_TOKEN;
   if (!token) return null;
@@ -399,10 +446,12 @@ async function enrichGenius(title: string, artist: string) {
   const hit = data.response?.hits?.[0]?.result;
   if (!hit) return null;
 
+  const { first_line, hook } = await scrapeGeniusLyrics(hit.url as string);
+
   return {
     lyrics_url: hit.url as string,
-    // Genius API doesn't return lyrics text — the URL lets the admin copy the first line manually
-    first_line: undefined as string | undefined,
+    first_line,
+    hook,
   };
 }
 
