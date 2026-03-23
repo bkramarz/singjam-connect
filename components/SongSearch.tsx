@@ -325,15 +325,25 @@ export default function SongSearch({ initialQuery = "", popularSongs = [], singi
                       <div className="flex shrink-0 items-center gap-1.5">
                         {pendingAddId === r.song_id ? (
                           <>
-                            {LEVELS.map((l) => (
-                              <button
-                                key={l.key}
-                                className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
-                                onClick={() => addSong(r.song_id, l.key)}
-                              >
-                                {l.label}
-                              </button>
-                            ))}
+                            {LEVELS.map((l) => {
+                              const blocked = l.key === "lead" && singingVoice === "none";
+                              return (
+                                <span key={l.key} className="relative group">
+                                  <button
+                                    disabled={blocked}
+                                    className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
+                                    onClick={() => !blocked && addSong(r.song_id, l.key)}
+                                  >
+                                    {l.label}
+                                  </button>
+                                  {blocked && (
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
+                                      Only available for singers
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })}
                             <button
                               className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
                               onClick={() => setPendingAddId(null)}
