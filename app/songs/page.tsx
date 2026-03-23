@@ -13,6 +13,7 @@ export default async function SongsPage() {
         id, title, slug, display_artist, year_written,
         song_composers(people(name)),
         song_recording_artists(year),
+        song_productions(productions(name)),
         user_songs(count)
       `)
       .limit(500),
@@ -29,6 +30,7 @@ export default async function SongsPage() {
       title: s.title as string,
       slug: (s.slug ?? null) as string | null,
       display_artist: (s.display_artist ?? null) as string | null,
+      productions: ((s.song_productions ?? []) as any[]).map((p: any) => p.productions?.name as string).filter(Boolean) as string[],
       composers: ((s.song_composers ?? []) as any[])
         .map((c: any) => c.people?.name as string)
         .filter(Boolean)
@@ -46,7 +48,7 @@ export default async function SongsPage() {
     }))
     .filter((s) => !repertoireSongIds.has(s.song_id))
     .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title))
-    .slice(0, 10);
+    .slice(0, 30);
 
   return (
     <div className="space-y-4">

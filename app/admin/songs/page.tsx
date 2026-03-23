@@ -9,7 +9,7 @@ export default async function AdminSongsPage() {
     .from("songs")
     .select(`
       id, title, slug, display_artist,
-      first_line, hook, genius_url, chord_chart_url, tonality, meter, vibe, year_written,
+      first_line, hook, genius_url, chord_chart_url, youtube_url, tonality, meter, vibe, year_written,
       song_composers(people(name)),
       song_lyricists(people(name)),
       song_recording_artists(year),

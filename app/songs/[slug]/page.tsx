@@ -2,6 +2,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
+import RepertoireButton from "@/components/RepertoireButton";
 
 function formatComposersLong(names: string[], cultures: string[]): string {
   const isTraditional = names.some((n) => n.toLowerCase() === "traditional");
@@ -48,7 +49,7 @@ export default async function SongPage({
   const { data: song } = await supabase
     .from("songs")
     .select(`
-      id, title, slug, display_artist, first_line, hook, genius_url, chord_chart_url, year, year_written, tonality, meter, vibe,
+      id, title, slug, display_artist, first_line, hook, notes, genius_url, chord_chart_url, youtube_url, year, year_written, tonality, meter, vibe,
       song_composers(people(name)),
       song_lyricists(people(name)),
       song_recording_artists(year, position, artists(name)),
@@ -56,7 +57,8 @@ export default async function SongPage({
       song_genres(genres(name)),
       song_themes(themes(name)),
       song_cultures(context, cultures(name)),
-      song_languages(languages(name))
+      song_languages(languages(name)),
+      song_productions(productions(name))
     `)
     .eq(isUuid ? "id" : "slug", slug)
     .single();
@@ -75,11 +77,13 @@ export default async function SongPage({
 
   const composers = (song.song_composers as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
   const lyricists = (song.song_lyricists as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
-  const musicCultures = (song.song_cultures as any[])
-    .filter((x) => !x.context || x.context === "music")
+  const cultureRows = song.song_cultures as any[];
+  const musicSpecificRows = cultureRows.filter((x) => x.context === "music");
+  const lyricsSpecificRows = cultureRows.filter((x) => x.context === "lyrics");
+  const noContextRows = cultureRows.filter((x) => !x.context);
+  const musicCultures = (musicSpecificRows.length ? musicSpecificRows : noContextRows)
     .map((x) => x.cultures?.name).filter(Boolean) as string[];
-  const lyricsCultures = (song.song_cultures as any[])
-    .filter((x) => !x.context || x.context === "lyrics")
+  const lyricsCultures = (lyricsSpecificRows.length ? lyricsSpecificRows : noContextRows)
     .map((x) => x.cultures?.name).filter(Boolean) as string[];
   const recordingArtists = (song.song_recording_artists as any[])
     .map((x) => ({ name: x.artists?.name as string, year: x.year as number | null, position: x.position as number | null }))
@@ -90,6 +94,8 @@ export default async function SongPage({
   const themes = (song.song_themes as any[]).map((x) => x.themes?.name as string).filter(Boolean);
   const cultures = [...new Set((song.song_cultures as any[]).map((x) => x.cultures?.name as string).filter(Boolean))];
   const languages = (song.song_languages as any[]).map((x) => x.languages?.name as string).filter(Boolean);
+
+  const songProductions = (song.song_productions as any[]).map((x) => x.productions?.name as string).filter(Boolean);
 
   const firstRecorded = recordingArtists.find((a) => a.year)?.year ?? (song as any).year;
 
@@ -103,22 +109,21 @@ export default async function SongPage({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{song.title}</h1>
-            {song.display_artist && (
+            {songProductions.length > 0 ? (
+              <p className="mt-0.5 text-base text-slate-500">from <em>{songProductions.join(", ")}</em></p>
+            ) : song.display_artist ? (
               <p className="mt-0.5 text-base text-slate-500">{song.display_artist}</p>
-            )}
+            ) : null}
             {altTitles.length > 0 && (
               <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
             )}
           </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
+          <div className="flex flex-col items-end gap-2 shrink-0">
             {firstRecorded && (
               <span className="text-sm text-slate-400">{firstRecorded}</span>
             )}
-            {userSongConfidence !== null && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700">
-                ✓ In your repertoire
-                {userSongConfidence && ` · ${userSongConfidence.charAt(0).toUpperCase() + userSongConfidence.slice(1)}`}
-              </span>
+            {user && (
+              <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} />
             )}
           </div>
         </div>
@@ -165,6 +170,24 @@ export default async function SongPage({
           )}
         </section>
       )}
+
+      {/* YouTube embed */}
+      {(song as any).youtube_url && (() => {
+        const videoId = new URL((song as any).youtube_url).searchParams.get("v");
+        if (!videoId) return null;
+        return (
+          <section className="rounded-xl overflow-hidden border border-slate-200">
+            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                className="absolute inset-0 w-full h-full"
+                src={`https://www.youtube.com/embed/${videoId}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Lyric data */}
       {(song.first_line || song.hook || song.genius_url || (song as any).chord_chart_url) && (
@@ -232,18 +255,31 @@ export default async function SongPage({
         </section>
       )}
 
+      {/* Additional notes */}
+      {(song as any).notes && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</h2>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{(song as any).notes}</p>
+        </section>
+      )}
+
       <div className="flex items-center justify-between pt-2">
         <Link href="/songs" className="text-sm text-slate-500 hover:text-slate-700">
           ← Back to search
         </Link>
-        {isAdmin && (
-          <Link
-            href={`/admin/songs/${song.slug ?? song.id}`}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Edit
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {user && (
+            <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} />
+          )}
+          {isAdmin && (
+            <Link
+              href={`/admin/songs/${song.slug ?? song.id}`}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Edit
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

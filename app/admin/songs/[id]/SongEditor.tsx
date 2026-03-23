@@ -58,8 +58,10 @@ type Song = {
   display_artist: string | null;
   first_line: string | null;
   hook: string | null;
+  notes: string | null;
   genius_url: string | null;
   chord_chart_url: string | null;
+  youtube_url: string | null;
   year: number | null;
   year_written: number | null;
   tonality: string | null;
@@ -73,6 +75,7 @@ type Song = {
   song_lyricists: { person_id: string }[];
   song_recording_artists: { artist_id: string; year: number | null; position: number | null }[];
   song_alternate_titles: AltTitle[];
+  song_productions: { production_id: string }[];
 };
 
 type Props = {
@@ -84,6 +87,7 @@ type Props = {
   allLanguages: Lookup[];
   allPeople: Lookup[];
   allArtists: Lookup[];
+  allProductions: Lookup[];
 };
 
 function toSet(ids: string[]) {
@@ -99,6 +103,7 @@ export default function SongEditor({
   allLanguages,
   allPeople,
   allArtists,
+  allProductions,
 }: Props) {
   const supabase = supabaseBrowser();
   const router = useRouter();
@@ -109,8 +114,12 @@ export default function SongEditor({
   const [displayArtist, setDisplayArtist] = useState(song?.display_artist ?? "");
   const [firstLine, setFirstLine] = useState(song?.first_line ?? "");
   const [hook, setHook] = useState(song?.hook ?? "");
+  const [notes, setNotes] = useState(song?.notes ?? "");
   const [geniusUrl, setGeniusUrl] = useState(song?.genius_url ?? "");
   const [chordChartUrl, setChordChartUrl] = useState(song?.chord_chart_url ?? "");
+  const [youtubeUrl, setYoutubeUrl] = useState(song?.youtube_url ?? "");
+  const [youtubeResults, setYoutubeResults] = useState<{ videoId: string; title: string; channel: string; url: string }[]>([]);
+  const [findingYoutube, setFindingYoutube] = useState(false);
   const [year, setYear] = useState(song?.year?.toString() ?? "");
   const [yearWritten, setYearWritten] = useState(song?.year_written?.toString() ?? "");
   const [tonalities, setTonalities] = useState<string[]>(() =>
@@ -136,6 +145,13 @@ export default function SongEditor({
     ? initialRecordingArtistEntries
     : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null }));
   const [recordingArtists, setRecordingArtists] = useState<RecordingArtistEntry[]>(seededRecordingArtistEntries);
+
+  // Production
+  const initialProductionIds = (song?.song_productions ?? []).map((x) => x.production_id);
+  const [isFromProduction, setIsFromProduction] = useState(initialProductionIds.length > 0);
+  const [productions, setProductions] = useState<Set<string>>(new Set(initialProductionIds));
+  const [pendingProductionNames, setPendingProductionNames] = useState<string[]>([]);
+  const [productionQuery, setProductionQuery] = useState("");
 
   // Tag pill arrays
   const [genres, setGenres] = useState<string[]>(() =>
@@ -173,10 +189,28 @@ export default function SongEditor({
       const data = await res.json();
       const url = data.genius?.lyrics_url;
       if (url) setGeniusUrl(url);
+      if (data.genius?.first_line && !firstLine.trim()) setFirstLine(data.genius.first_line);
+      if (data.genius?.hook && !hook.trim()) setHook(data.genius.hook);
     } catch {
       // leave field blank if it fails
     } finally {
       setOpeningGenius(false);
+    }
+  }
+
+  async function handleFindYoutube() {
+    if (!title.trim()) return;
+    setFindingYoutube(true);
+    setYoutubeResults([]);
+    try {
+      const artist = recordingArtists[0] ? allArtists.find((a) => a.id === recordingArtists[0].id)?.name ?? "" : displayArtist.trim();
+      const res = await fetch(`/api/youtube?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
+      const data = await res.json();
+      setYoutubeResults(data.items ?? []);
+    } catch {
+      // leave results empty
+    } finally {
+      setFindingYoutube(false);
     }
   }
 
@@ -513,11 +547,13 @@ export default function SongEditor({
       const payload = {
         title: title.trim(),
         slug: resolvedSlug,
-        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || displayArtist.trim() || null,
+        display_artist: recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || (originalRecordingArtistIds.length === 0 ? displayArtist.trim() : null) || null,
         first_line: firstLine.trim() || null,
         hook: hook.trim() || null,
+        notes: notes.trim() || null,
         genius_url: geniusUrl.trim() || null,
         chord_chart_url: chordChartUrl.trim() || null,
+        youtube_url: youtubeUrl.trim() || null,
         year: year ? parseInt(year) : null,
         year_written: yearWritten ? parseInt(yearWritten) : null,
         tonality: tonalities.join(", ") || null,
@@ -615,6 +651,15 @@ export default function SongEditor({
           await supabase.from("song_cultures").insert({ song_id: songId!, culture_id: culture.id, context });
         }
       }
+
+      // Sync productions
+      const resolvedProductionIds = new Set<string>([...productions]);
+      for (const name of pendingProductionNames) {
+        const { data } = await supabase.from("productions").upsert({ name }, { onConflict: "name" }).select("id").single();
+        if (data?.id) resolvedProductionIds.add(data.id);
+      }
+      const originalProductionIds = (song?.song_productions ?? []).map((x) => x.production_id);
+      await syncJoinTable(songId!, "song_productions", "production_id", resolvedProductionIds, originalProductionIds);
 
       setSlug(resolvedSlug);
       router.push(`/admin/songs/${resolvedSlug}`);
@@ -749,6 +794,7 @@ export default function SongEditor({
                       setNewLyricistName("");
                     }}
                     onRemovePending={(name) => setPendingLyricistNames((prev) => prev.filter((n) => n !== name))}
+                    pendingItems={pendingLyricistNames}
                   />
                   {lyricistIsTraditional && (
                     <TraditionalCultureField
@@ -873,6 +919,9 @@ export default function SongEditor({
                 )}
                 onAdd={(p) => { setComposers((prev) => new Set([...prev, p.id])); setNewComposerName(""); }}
                 onRemove={(id) => { setComposers((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setComposerTraditionalCulture(""); }}
+                onAddNew={(name) => { if (!pendingComposerNames.includes(name)) setPendingComposerNames((prev) => [...prev, name]); setNewComposerName(""); }}
+                onRemovePending={(name) => setPendingComposerNames((prev) => prev.filter((n) => n !== name))}
+                pendingItems={pendingComposerNames}
               />
               {composerIsTraditional && (
                 <TraditionalCultureField
@@ -892,6 +941,9 @@ export default function SongEditor({
                 )}
                 onAdd={(p) => { setLyricists((prev) => new Set([...prev, p.id])); setNewLyricistName(""); }}
                 onRemove={(id) => { setLyricists((prev) => { const s = new Set(prev); s.delete(id); return s; }); if (id === traditionalId) setLyricistTraditionalCulture(""); }}
+                onAddNew={(name) => { if (!pendingLyricistNames.includes(name)) setPendingLyricistNames((prev) => [...prev, name]); setNewLyricistName(""); }}
+                onRemovePending={(name) => setPendingLyricistNames((prev) => prev.filter((n) => n !== name))}
+                pendingItems={pendingLyricistNames}
               />
               {lyricistIsTraditional && (
                 <TraditionalCultureField
@@ -914,6 +966,41 @@ export default function SongEditor({
           onYearChange={(id, year) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year } : e))}
           onReorder={setRecordingArtists}
         />
+
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isFromProduction}
+              onChange={(e) => {
+                setIsFromProduction(e.target.checked);
+                if (!e.target.checked) {
+                  setProductions(new Set());
+                  setPendingProductionNames([]);
+                  setProductionQuery("");
+                }
+              }}
+              className="rounded border-slate-300"
+            />
+            From theater, movie, or TV?
+          </label>
+          {isFromProduction && (
+            <PeopleField
+              label="Production"
+              items={[...productions].map((id) => allProductions.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
+              query={productionQuery}
+              onQueryChange={setProductionQuery}
+              suggestions={allProductions.filter(
+                (p) => p.name.toLowerCase().includes(productionQuery.toLowerCase()) && !productions.has(p.id)
+              )}
+              onAdd={(p) => { setProductions((prev) => new Set([...prev, p.id])); setProductionQuery(""); }}
+              onRemove={(id) => setProductions((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+              onAddNew={(name) => { setPendingProductionNames((prev) => [...prev, name]); setProductionQuery(""); }}
+              pendingItems={pendingProductionNames}
+              onRemovePending={(name) => setPendingProductionNames((prev) => prev.filter((n) => n !== name))}
+            />
+          )}
+        </div>
 
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Year written</label>
@@ -997,6 +1084,47 @@ export default function SongEditor({
             )}
           </div>
         </Field>
+        <Field label="YouTube URL">
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)}
+                className="input flex-1" placeholder="https://www.youtube.com/watch?v=…" />
+              {youtubeUrl && (
+                <a href={youtubeUrl} target="_blank" rel="noopener noreferrer"
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 shrink-0">
+                  ↗
+                </a>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleFindYoutube}
+              disabled={findingYoutube || !title.trim()}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
+            >
+              {findingYoutube ? "Searching…" : "▶ Find on YouTube"}
+            </button>
+            {youtubeResults.length > 0 && (
+              <div className="space-y-1 rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                {youtubeResults.map((r) => (
+                  <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
+                      <div className="text-xs text-slate-400 truncate">{r.channel}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setYoutubeUrl(r.url); setYoutubeResults([]); }}
+                      className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
+                    >
+                      Select
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Field>
         <Field label="First line">
           <input value={firstLine} onChange={(e) => setFirstLine(e.target.value)}
             className="input" placeholder="First sung line of the song" />
@@ -1054,6 +1182,15 @@ export default function SongEditor({
               <span className="text-sm text-slate-400">None added yet.</span>
             )}
           </div>
+        </section>
+      )}
+
+      {/* Additional notes */}
+      {!isNew && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700">Additional notes</h2>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+            className="input min-h-[80px] resize-y" placeholder="Any extra context, performance notes, etc." />
         </section>
       )}
 
