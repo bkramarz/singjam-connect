@@ -1,38 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function ResetPasswordPage() {
   const supabase = supabaseBrowser();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const [ready, setReady] = useState(false);
-  const [exchangeError, setExchangeError] = useState<string | null>(null);
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    const code = searchParams.get("code");
-    if (!code) {
-      setExchangeError("Invalid or expired reset link. Please request a new one.");
-      return;
-    }
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) {
-        setExchangeError(error.message);
-      } else {
-        setReady(true);
-      }
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function submit() {
     if (password !== confirm) {
@@ -56,29 +36,12 @@ export default function ResetPasswordPage() {
     }
   }
 
-  if (exchangeError) {
-    return (
-      <div className="mx-auto max-w-md">
-        <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Link expired</h2>
-          <p className="mt-2 text-sm text-slate-500">{exchangeError}</p>
-          <button
-            onClick={() => router.push("/auth")}
-            className="mt-4 text-sm text-amber-600 hover:underline"
-          >
-            Back to sign in
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (done) {
     return (
       <div className="mx-auto max-w-md">
         <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <h2 className="text-xl font-semibold text-slate-900">Password updated</h2>
-          <p className="mt-2 text-sm text-slate-500">Your password has been changed. You can now use it to sign in.</p>
+          <p className="mt-2 text-sm text-slate-500">Your password has been changed.</p>
           <button
             onClick={() => router.push("/account")}
             className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
@@ -88,10 +51,6 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     );
-  }
-
-  if (!ready) {
-    return <div className="text-sm text-zinc-500">Verifying link…</div>;
   }
 
   return (

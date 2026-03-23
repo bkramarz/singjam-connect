@@ -50,7 +50,7 @@ export default function AuthPanel() {
     setBusy(true);
     setStatus(null);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
     });
     setBusy(false);
     if (error) {
