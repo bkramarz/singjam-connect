@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import LogoutButton from "./LogoutButton";
 
@@ -14,6 +15,7 @@ type UserProfile = {
 
 export default function TopNav() {
   const supabase = supabaseBrowser();
+  const pathname = usePathname();
   const [signedIn, setSignedIn] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
@@ -65,6 +67,8 @@ export default function TopNav() {
     : profile?.display_name ?? "Account";
 
   const initial = (profile?.display_name ?? profile?.username ?? "?")[0].toUpperCase();
+
+  if (pathname === "/auth/reset-password") return null;
 
   return (
     <nav className="flex items-center gap-1 text-sm">

@@ -11,6 +11,7 @@ export default function AuthPanel() {
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signedUp, setSignedUp] = useState(false);
@@ -26,11 +27,15 @@ export default function AuthPanel() {
     if (error) {
       setStatus(error.message);
     } else {
-      router.push("/onboarding");
+      router.push("/repertoire");
     }
   }
 
   async function signUp() {
+    if (password !== confirmPassword) {
+      setStatus("Passwords do not match.");
+      return;
+    }
     setBusy(true);
     setStatus(null);
 
@@ -195,9 +200,22 @@ export default function AuthPanel() {
           />
         </div>
 
+        {mode === "signup" && (
+          <div>
+            <label className="text-sm font-medium text-slate-700">Confirm password</label>
+            <input
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              type="password"
+              placeholder="••••••••"
+            />
+          </div>
+        )}
+
         <button
           onClick={mode === "signin" ? signInWithPassword : signUp}
-          disabled={!email || !password || busy}
+          disabled={!email || !password || (mode === "signup" && !confirmPassword) || busy}
           className="w-full rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600 disabled:opacity-50 transition-colors"
         >
           {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
