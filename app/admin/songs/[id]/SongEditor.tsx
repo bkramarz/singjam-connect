@@ -543,6 +543,7 @@ export default function SongEditor({
     try {
       const composerNamesForSlug = [...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
       const resolvedSlug = slug.trim() || generateSlug(title.trim(), composerNamesForSlug);
+      const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
 
       const payload = {
         title: title.trim(),
@@ -601,7 +602,6 @@ export default function SongEditor({
       ]);
       const originalComposers = song?.song_composers.map((x) => x.person_id) ?? [];
       const originalLyricists = song?.song_lyricists.map((x) => x.person_id) ?? [];
-      const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
       const newRecordingArtistIds = recordingArtists.map((e) => e.id);
       const toDeleteArtists = originalRecordingArtistIds.filter((id) => !newRecordingArtistIds.includes(id));
 
