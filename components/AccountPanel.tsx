@@ -205,7 +205,6 @@ export default function AccountPanel() {
       neighborhood: neighborhood || null,
       singing_voice: singingVoice,
       instrument_levels: instrumentLevels,
-      vibes,
       updated_at: new Date().toISOString(),
     });
 
