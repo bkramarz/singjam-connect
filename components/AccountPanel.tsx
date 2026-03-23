@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const INSTRUMENTS = ["Vocals", "Guitar", "Ukulele", "Piano/Keys", "Bass", "Percussion", "Other"];
 const ROLES = ["Lead vocal", "Harmony", "Chords", "Bassline", "Percussion groove", "Facilitator/leader"];
 const VIBES = ["Living-room friendly", "Family-friendly", "Spiritual", "Secular", "Upbeat", "Reflective", "Improvisational", "Structured setlist"];
+const RESERVED = new Set(["admin", "support", "help", "singjam", "sing", "jam", "connect", "api", "www", "mail"]);
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
 type Profile = {
   display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
   neighborhood: string | null;
   instruments: string[] | null;
   roles: string[] | null;
@@ -24,34 +29,52 @@ function toggle(arr: string[], v: string) {
 export default function AccountPanel() {
   const supabase = supabaseBrowser();
   const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
   const [instruments, setInstruments] = useState<string[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
   const [comfort, setComfort] = useState<Profile["comfort_level"]>("Comfortable");
   const [vibes, setVibes] = useState<string[]>([]);
 
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+  const usernameTimerRef = useRef<number | null>(null);
+  const originalUsername = useRef<string>("");
+
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) return;
+      setUserId(data.user.id);
       supabase
         .from("profiles")
-        .select("display_name, neighborhood, instruments, roles, comfort_level, vibes")
+        .select("display_name, username, avatar_url, neighborhood, instruments, roles, comfort_level, vibes")
         .eq("id", data.user.id)
         .single()
         .then(({ data: profile }) => {
           if (profile) {
             setName(profile.display_name ?? "");
+            setUsername(profile.username ?? "");
+            setAvatarUrl(profile.avatar_url ?? null);
             setNeighborhood(profile.neighborhood ?? "");
             setInstruments(profile.instruments ?? []);
             setRoles(profile.roles ?? []);
             setComfort(profile.comfort_level ?? "Comfortable");
             setVibes(profile.vibes ?? []);
+            originalUsername.current = profile.username ?? "";
           }
           setLoading(false);
         });
@@ -59,7 +82,78 @@ export default function AccountPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function handleUsernameChange(val: string) {
+    const lower = val.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    setUsername(lower);
+
+    if (usernameTimerRef.current) clearTimeout(usernameTimerRef.current);
+
+    if (!lower || lower === originalUsername.current) {
+      setUsernameStatus("idle");
+      return;
+    }
+
+    if (!USERNAME_RE.test(lower) || RESERVED.has(lower)) {
+      setUsernameStatus("invalid");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    usernameTimerRef.current = window.setTimeout(async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("username", lower)
+        .neq("id", userId ?? "")
+        .maybeSingle();
+      setUsernameStatus(data ? "taken" : "available");
+    }, 400);
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setStatus("Avatar must be under 5 MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${userId}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) {
+      setStatus("Avatar upload failed: " + uploadError.message);
+      setUploadingAvatar(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", userId);
+
+    if (updateError) {
+      setStatus("Failed to save avatar.");
+    } else {
+      setAvatarUrl(publicUrl + `?t=${Date.now()}`);
+    }
+    setUploadingAvatar(false);
+  }
+
   async function save() {
+    if (usernameStatus === "taken" || usernameStatus === "invalid") {
+      setStatus("Please fix your username before saving.");
+      return;
+    }
+
     setBusy(true);
     setStatus(null);
 
@@ -70,6 +164,7 @@ export default function AccountPanel() {
     const { error } = await supabase.from("profiles").upsert({
       id: uid,
       display_name: name || null,
+      username: username || null,
       neighborhood: neighborhood || null,
       instruments,
       roles,
@@ -79,10 +174,28 @@ export default function AccountPanel() {
     });
 
     setBusy(false);
+    if (!error) {
+      originalUsername.current = username;
+      setUsernameStatus("idle");
+    }
     setStatus(error ? error.message : "Saved!");
   }
 
   async function signOut() {
+    await supabase.auth.signOut();
+    router.push("/");
+  }
+
+  async function deleteAccount() {
+    if (deleteConfirm !== "DELETE") return;
+    setDeleting(true);
+    const res = await fetch("/api/account/delete", { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      setStatus(body.error ?? "Failed to delete account.");
+      setDeleting(false);
+      return;
+    }
     await supabase.auth.signOut();
     router.push("/");
   }
@@ -92,17 +205,92 @@ export default function AccountPanel() {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-5">
-        <div>
-          <label className="block text-sm font-medium">First name</label>
-          <input className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ben" />
+
+        {/* Avatar */}
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-100 hover:opacity-80 transition-opacity"
+            title="Change photo"
+          >
+            {avatarUrl ? (
+              <Image src={avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center text-2xl text-zinc-400">
+                {name?.[0]?.toUpperCase() ?? "?"}
+              </span>
+            )}
+            {uploadingAvatar && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-white">
+                Uploading…
+              </span>
+            )}
+          </button>
+          <div>
+            <div className="text-sm font-medium">Profile photo</div>
+            <div className="text-xs text-zinc-500">JPG, PNG or WebP · max 5 MB</div>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
         </div>
 
+        {/* Name */}
+        <div>
+          <label className="block text-sm font-medium">First name</label>
+          <input
+            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ben"
+          />
+        </div>
+
+        {/* Username */}
+        <div>
+          <label className="block text-sm font-medium">Username</label>
+          <div className="relative mt-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400">@</span>
+            <input
+              className="w-full rounded-xl border border-zinc-300 pl-7 pr-8 py-2 text-sm"
+              value={username}
+              onChange={(e) => handleUsernameChange(e.target.value)}
+              placeholder="jamfan"
+              maxLength={20}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
+              {usernameStatus === "checking" && <span className="text-zinc-400">…</span>}
+              {usernameStatus === "available" && <span className="text-emerald-500">✓</span>}
+              {(usernameStatus === "taken" || usernameStatus === "invalid") && <span className="text-red-500">✗</span>}
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-zinc-500">
+            {usernameStatus === "invalid"
+              ? "3–20 characters, letters, numbers and underscores only."
+              : usernameStatus === "taken"
+              ? "That username is already taken."
+              : "3–20 characters · letters, numbers, underscores"}
+          </div>
+        </div>
+
+        {/* Neighborhood */}
         <div>
           <label className="block text-sm font-medium">Neighborhood / city</label>
-          <input className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="Berkeley" />
+          <input
+            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+            value={neighborhood}
+            onChange={(e) => setNeighborhood(e.target.value)}
+            placeholder="Berkeley"
+          />
           <div className="mt-1 text-xs text-zinc-500">We only show neighborhood-level info until an invite is accepted.</div>
         </div>
 
+        {/* Instruments */}
         <div>
           <div className="text-sm font-medium">Instruments</div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -115,6 +303,7 @@ export default function AccountPanel() {
           </div>
         </div>
 
+        {/* Roles */}
         <div>
           <div className="text-sm font-medium">Roles</div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -127,13 +316,21 @@ export default function AccountPanel() {
           </div>
         </div>
 
+        {/* Comfort level */}
         <div>
           <label className="block text-sm font-medium">Comfort level</label>
-          <select className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" value={comfort ?? "Comfortable"} onChange={(e) => setComfort(e.target.value as any)}>
-            {["Beginner", "Comfortable", "Strong", "Leader"].map((v) => <option key={v} value={v}>{v}</option>)}
+          <select
+            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+            value={comfort ?? "Comfortable"}
+            onChange={(e) => setComfort(e.target.value as Profile["comfort_level"])}
+          >
+            {["Beginner", "Comfortable", "Strong", "Leader"].map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
           </select>
         </div>
 
+        {/* Vibe */}
         <div>
           <div className="text-sm font-medium">Vibe</div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -146,17 +343,62 @@ export default function AccountPanel() {
           </div>
         </div>
 
-        <button onClick={save} disabled={busy}
-          className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50">
+        <button
+          onClick={save}
+          disabled={busy}
+          className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+        >
           {busy ? "Saving..." : "Save"}
         </button>
         {status && <div className="text-sm text-zinc-600">{status}</div>}
       </div>
 
+      {/* Sign out */}
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
         <button onClick={signOut} className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50">
           Sign out
         </button>
+      </div>
+
+      {/* Delete account */}
+      <div className="rounded-2xl border border-red-200 p-5 shadow-sm">
+        <div className="text-sm font-medium text-red-700">Delete account</div>
+        <div className="mt-1 text-xs text-zinc-500">
+          Permanently deletes your account and all your data. This cannot be undone.
+        </div>
+        {!showDelete ? (
+          <button
+            onClick={() => setShowDelete(true)}
+            className="mt-3 rounded-xl border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+          >
+            Delete my account
+          </button>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <div className="text-xs text-zinc-600">Type <strong>DELETE</strong> to confirm:</div>
+            <input
+              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="DELETE"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={deleteAccount}
+                disabled={deleteConfirm !== "DELETE" || deleting}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-40"
+              >
+                {deleting ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button
+                onClick={() => { setShowDelete(false); setDeleteConfirm(""); }}
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

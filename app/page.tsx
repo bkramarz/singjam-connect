@@ -16,8 +16,8 @@ export default function HomePage() {
             <span className="text-amber-400">Sing and jam with friends.</span>
           </h1>
           <p className="mt-4 max-w-lg text-base text-slate-400">
-            Find people to sing and play music with — based on the songs you already know.
-            No cold starts. Just real overlap.
+            Find people to sing and play music with based on the songs you already know.
+            Discover new songs and new jam friends.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -40,7 +40,7 @@ export default function HomePage() {
           </div>
           <div className="mt-4 text-base font-semibold text-slate-900">Real matching</div>
           <div className="mt-1.5 text-sm text-slate-500">
-            See how many songs you share with each person, plus complementary roles and distance — not just profile photos.
+            See how many songs you share with each person, plus complementary roles and location.
           </div>
         </div>
 
