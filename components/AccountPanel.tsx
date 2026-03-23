@@ -17,7 +17,6 @@ const SINGING_OPTIONS = [
   { value: "backup", label: "Backup vocals" },
   { value: "none", label: "I don't sing" },
 ] as const;
-const VIBES = ["Living-room friendly", "Family-friendly", "Spiritual", "Secular", "Upbeat", "Reflective", "Improvisational", "Structured setlist"];
 const RESERVED = new Set(["admin", "support", "help", "singjam", "sing", "jam", "connect", "api", "www", "mail"]);
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
@@ -30,13 +29,7 @@ type Profile = {
   neighborhood: string | null;
   singing_voice: SingingVoice;
   instrument_levels: Record<string, string> | null;
-  comfort_level: "Beginner" | "Comfortable" | "Strong" | "Leader" | null;
-  vibes: string[] | null;
 };
-
-function toggle(arr: string[], v: string) {
-  return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
-}
 
 function suggestUsername(email: string): string {
   const prefix = email.split("@")[0] ?? "";
@@ -62,8 +55,7 @@ export default function AccountPanel() {
   const [neighborhood, setNeighborhood] = useState("");
   const [singingVoice, setSingingVoice] = useState<SingingVoice>(null);
   const [instrumentLevels, setInstrumentLevels] = useState<Record<string, string>>({});
-  const [comfort, setComfort] = useState<Profile["comfort_level"]>("Comfortable");
-  const [vibes, setVibes] = useState<string[]>([]);
+  const [pendingInstrument, setPendingInstrument] = useState<string | null>(null);
 
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const usernameTimerRef = useRef<number | null>(null);
@@ -88,7 +80,7 @@ export default function AccountPanel() {
       setEmail(data.user.email ?? null);
       supabase
         .from("profiles")
-        .select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, comfort_level, vibes")
+        .select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels")
         .eq("id", data.user.id)
         .single()
         .then(({ data: profile }) => {
@@ -99,8 +91,6 @@ export default function AccountPanel() {
             setNeighborhood(profile.neighborhood ?? "");
             setSingingVoice(profile.singing_voice ?? null);
             setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
-            setComfort(profile.comfort_level ?? "Comfortable");
-            setVibes(profile.vibes ?? []);
 
             const savedUsername = profile.username ?? "";
             if (savedUsername) {
@@ -215,7 +205,6 @@ export default function AccountPanel() {
       neighborhood: neighborhood || null,
       singing_voice: singingVoice,
       instrument_levels: instrumentLevels,
-      comfort_level: comfort,
       vibes,
       updated_at: new Date().toISOString(),
     });
@@ -433,18 +422,14 @@ export default function AccountPanel() {
         {/* Instruments */}
         <div>
           <div className="text-sm font-medium">Instruments</div>
+
+          {/* Added instruments */}
           {Object.keys(instrumentLevels).length > 0 && (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 space-y-1.5">
               {Object.entries(instrumentLevels).map(([name, level]) => (
                 <div key={name} className="flex items-center gap-2">
-                  <span className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm">{name}</span>
-                  <select
-                    value={level}
-                    onChange={(e) => setInstrumentLevels({ ...instrumentLevels, [name]: e.target.value })}
-                    className="rounded-xl border border-zinc-200 px-2 py-1.5 text-sm"
-                  >
-                    {INSTRUMENT_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-                  </select>
+                  <span className="w-32 shrink-0 text-sm">{name}</span>
+                  <span className="flex-1 text-xs text-zinc-500">{level}</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -460,50 +445,49 @@ export default function AccountPanel() {
               ))}
             </div>
           )}
-          <div className="mt-2">
-            <select
-              value=""
-              onChange={(e) => {
-                const name = e.target.value;
-                if (name && !instrumentLevels[name]) {
-                  setInstrumentLevels({ ...instrumentLevels, [name]: "Intermediate" });
-                }
-              }}
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-500"
-            >
-              <option value="">+ Add an instrument…</option>
-              {SEEDED_INSTRUMENTS.filter((i) => !instrumentLevels[i]).map((i) => (
-                <option key={i} value={i}>{i}</option>
+
+          {/* Pending level pick */}
+          {pendingInstrument && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-zinc-500">{pendingInstrument} —</span>
+              {INSTRUMENT_LEVELS.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => {
+                    setInstrumentLevels({ ...instrumentLevels, [pendingInstrument]: l });
+                    setPendingInstrument(null);
+                  }}
+                  className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
+                >
+                  {l}
+                </button>
               ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Comfort level */}
-        <div>
-          <label className="block text-sm font-medium">Comfort level</label>
-          <select
-            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-            value={comfort ?? "Comfortable"}
-            onChange={(e) => setComfort(e.target.value as Profile["comfort_level"])}
-          >
-            {["Beginner", "Comfortable", "Strong", "Leader"].map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Vibe */}
-        <div>
-          <div className="text-sm font-medium">Vibe</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {VIBES.map((v) => (
-              <button key={v} type="button" onClick={() => setVibes(toggle(vibes, v))}
-                className={`rounded-xl border px-3 py-1.5 text-sm ${vibes.includes(v) ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}>
-                {v}
+              <button
+                type="button"
+                onClick={() => setPendingInstrument(null)}
+                className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+              >
+                ✕
               </button>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {/* Instrument picker */}
+          {!pendingInstrument && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {SEEDED_INSTRUMENTS.filter((i) => !instrumentLevels[i]).map((i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setPendingInstrument(i)}
+                  className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                >
+                  {i}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <button

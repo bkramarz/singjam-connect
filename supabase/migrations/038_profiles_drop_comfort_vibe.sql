@@ -1,0 +1,2 @@
+ALTER TABLE profiles DROP COLUMN IF EXISTS comfort_level;
+ALTER TABLE profiles DROP COLUMN IF EXISTS vibes;
