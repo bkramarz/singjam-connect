@@ -13,6 +13,7 @@ const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
 type Profile = {
   display_name: string | null;
+  last_name: string | null;
   username: string | null;
   avatar_url: string | null;
   neighborhood: string | null;
@@ -26,6 +27,12 @@ function toggle(arr: string[], v: string) {
   return arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 }
 
+function suggestUsername(email: string): string {
+  const prefix = email.split("@")[0] ?? "";
+  const clean = prefix.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+  return USERNAME_RE.test(clean) && !RESERVED.has(clean) ? clean : "";
+}
+
 export default function AccountPanel() {
   const supabase = supabaseBrowser();
   const router = useRouter();
@@ -35,8 +42,10 @@ export default function AccountPanel() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
@@ -60,22 +69,30 @@ export default function AccountPanel() {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) return;
       setUserId(data.user.id);
+      setEmail(data.user.email ?? null);
       supabase
         .from("profiles")
-        .select("display_name, username, avatar_url, neighborhood, instruments, roles, comfort_level, vibes")
+        .select("display_name, last_name, username, avatar_url, neighborhood, instruments, roles, comfort_level, vibes")
         .eq("id", data.user.id)
         .single()
         .then(({ data: profile }) => {
           if (profile) {
             setName(profile.display_name ?? "");
-            setUsername(profile.username ?? "");
+            setLastName(profile.last_name ?? "");
             setAvatarUrl(profile.avatar_url ?? null);
             setNeighborhood(profile.neighborhood ?? "");
             setInstruments(profile.instruments ?? []);
             setRoles(profile.roles ?? []);
             setComfort(profile.comfort_level ?? "Comfortable");
             setVibes(profile.vibes ?? []);
-            originalUsername.current = profile.username ?? "";
+
+            const savedUsername = profile.username ?? "";
+            if (savedUsername) {
+              setUsername(savedUsername);
+              originalUsername.current = savedUsername;
+            } else if (data.user.email) {
+              setUsername(suggestUsername(data.user.email));
+            }
           }
           setLoading(false);
         });
@@ -177,6 +194,7 @@ export default function AccountPanel() {
     const { error } = await supabase.from("profiles").upsert({
       id: uid,
       display_name: name || null,
+      last_name: lastName || null,
       username: username || null,
       neighborhood: neighborhood || null,
       instruments,
@@ -258,15 +276,34 @@ export default function AccountPanel() {
           />
         </div>
 
+        {/* Email */}
+        {email && (
+          <div>
+            <label className="block text-sm font-medium">Email</label>
+            <div className="mt-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">{email}</div>
+          </div>
+        )}
+
         {/* Name */}
-        <div>
-          <label className="block text-sm font-medium">First name</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ben"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium">First name</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ben"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Last name</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Kramarz"
+            />
+          </div>
         </div>
 
         {/* Username */}
