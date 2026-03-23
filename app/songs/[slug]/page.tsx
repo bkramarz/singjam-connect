@@ -39,9 +39,11 @@ export default async function SongPage({
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
 
   const { data: { user } } = await supabase.auth.getUser();
-  const isAdmin = user
-    ? (await supabase.from("profiles").select("is_admin").eq("id", user.id).single()).data?.is_admin ?? false
-    : false;
+  const profileData = user
+    ? (await supabase.from("profiles").select("is_admin, singing_voice").eq("id", user.id).single()).data
+    : null;
+  const isAdmin = (profileData as any)?.is_admin ?? false;
+  const singingVoice = (profileData as any)?.singing_voice ?? null;
 
   // Check if song is in user's repertoire (fetched after we know the song id below)
   let userSongConfidence: string | null = null;
@@ -123,7 +125,7 @@ export default async function SongPage({
               <span className="text-sm text-slate-400">{firstRecorded}</span>
             )}
             {user && (
-              <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} />
+              <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
             )}
           </div>
         </div>

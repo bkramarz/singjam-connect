@@ -5,20 +5,31 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-const INSTRUMENTS = ["Vocals", "Guitar", "Ukulele", "Piano/Keys", "Bass", "Percussion", "Other"];
-const ROLES = ["Lead vocal", "Harmony", "Chords", "Bassline", "Percussion groove", "Facilitator/leader"];
+const SEEDED_INSTRUMENTS = [
+  "Guitar", "Bass", "Piano/Keys", "Drums", "Violin", "Viola", "Cello",
+  "Banjo", "Mandolin", "Ukulele", "Flute", "Clarinet", "Saxophone",
+  "Trumpet", "Trombone", "Harmonica", "Accordion", "Harp", "Dobro",
+  "Pedal Steel", "Organ", "Synthesizer", "Other",
+];
+const INSTRUMENT_LEVELS = ["Beginner", "Intermediate", "Advanced", "Professional"] as const;
+const SINGING_OPTIONS = [
+  { value: "lead", label: "Lead vocals" },
+  { value: "backup", label: "Backup vocals" },
+  { value: "none", label: "I don't sing" },
+] as const;
 const VIBES = ["Living-room friendly", "Family-friendly", "Spiritual", "Secular", "Upbeat", "Reflective", "Improvisational", "Structured setlist"];
 const RESERVED = new Set(["admin", "support", "help", "singjam", "sing", "jam", "connect", "api", "www", "mail"]);
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
+type SingingVoice = "lead" | "backup" | "none" | null;
 type Profile = {
   display_name: string | null;
   last_name: string | null;
   username: string | null;
   avatar_url: string | null;
   neighborhood: string | null;
-  instruments: string[] | null;
-  roles: string[] | null;
+  singing_voice: SingingVoice;
+  instrument_levels: Record<string, string> | null;
   comfort_level: "Beginner" | "Comfortable" | "Strong" | "Leader" | null;
   vibes: string[] | null;
 };
@@ -49,8 +60,8 @@ export default function AccountPanel() {
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
-  const [instruments, setInstruments] = useState<string[]>([]);
-  const [roles, setRoles] = useState<string[]>([]);
+  const [singingVoice, setSingingVoice] = useState<SingingVoice>(null);
+  const [instrumentLevels, setInstrumentLevels] = useState<Record<string, string>>({});
   const [comfort, setComfort] = useState<Profile["comfort_level"]>("Comfortable");
   const [vibes, setVibes] = useState<string[]>([]);
 
@@ -77,7 +88,7 @@ export default function AccountPanel() {
       setEmail(data.user.email ?? null);
       supabase
         .from("profiles")
-        .select("display_name, last_name, username, avatar_url, neighborhood, instruments, roles, comfort_level, vibes")
+        .select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, comfort_level, vibes")
         .eq("id", data.user.id)
         .single()
         .then(({ data: profile }) => {
@@ -86,8 +97,8 @@ export default function AccountPanel() {
             setLastName(profile.last_name ?? "");
             setAvatarUrl(profile.avatar_url ?? null);
             setNeighborhood(profile.neighborhood ?? "");
-            setInstruments(profile.instruments ?? []);
-            setRoles(profile.roles ?? []);
+            setSingingVoice(profile.singing_voice ?? null);
+            setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
             setComfort(profile.comfort_level ?? "Comfortable");
             setVibes(profile.vibes ?? []);
 
@@ -202,8 +213,8 @@ export default function AccountPanel() {
       last_name: lastName || null,
       username: username || null,
       neighborhood: neighborhood || null,
-      instruments,
-      roles,
+      singing_voice: singingVoice,
+      instrument_levels: instrumentLevels,
       comfort_level: comfort,
       vibes,
       updated_at: new Date().toISOString(),
@@ -402,29 +413,69 @@ export default function AccountPanel() {
           <div className="mt-1 text-xs text-zinc-500">We only show neighborhood-level info until an invite is accepted.</div>
         </div>
 
-        {/* Instruments */}
+        {/* Singing voice */}
         <div>
-          <div className="text-sm font-medium">Instruments</div>
+          <div className="text-sm font-medium">Singing</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {INSTRUMENTS.map((v) => (
-              <button key={v} type="button" onClick={() => setInstruments(toggle(instruments, v))}
-                className={`rounded-xl border px-3 py-1.5 text-sm ${instruments.includes(v) ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}>
-                {v}
+            {SINGING_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setSingingVoice(singingVoice === o.value ? null : o.value)}
+                className={`rounded-xl border px-3 py-1.5 text-sm ${singingVoice === o.value ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}
+              >
+                {o.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Roles */}
+        {/* Instruments */}
         <div>
-          <div className="text-sm font-medium">Roles</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {ROLES.map((v) => (
-              <button key={v} type="button" onClick={() => setRoles(toggle(roles, v))}
-                className={`rounded-xl border px-3 py-1.5 text-sm ${roles.includes(v) ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}>
-                {v}
-              </button>
-            ))}
+          <div className="text-sm font-medium">Instruments</div>
+          {Object.keys(instrumentLevels).length > 0 && (
+            <div className="mt-2 space-y-2">
+              {Object.entries(instrumentLevels).map(([name, level]) => (
+                <div key={name} className="flex items-center gap-2">
+                  <span className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm">{name}</span>
+                  <select
+                    value={level}
+                    onChange={(e) => setInstrumentLevels({ ...instrumentLevels, [name]: e.target.value })}
+                    className="rounded-xl border border-zinc-200 px-2 py-1.5 text-sm"
+                  >
+                    {INSTRUMENT_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = { ...instrumentLevels };
+                      delete next[name];
+                      setInstrumentLevels(next);
+                    }}
+                    className="text-zinc-400 hover:text-zinc-700 text-sm px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-2">
+            <select
+              value=""
+              onChange={(e) => {
+                const name = e.target.value;
+                if (name && !instrumentLevels[name]) {
+                  setInstrumentLevels({ ...instrumentLevels, [name]: "Intermediate" });
+                }
+              }}
+              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-500"
+            >
+              <option value="">+ Add an instrument…</option>
+              {SEEDED_INSTRUMENTS.filter((i) => !instrumentLevels[i]).map((i) => (
+                <option key={i} value={i}>{i}</option>
+              ))}
+            </select>
           </div>
         </div>
 

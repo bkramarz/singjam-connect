@@ -54,6 +54,7 @@ export default function RepertoirePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [singingVoice, setSingingVoice] = useState<string | null>(null);
 
   const [items, setItems] = useState<Item[]>([]);
   const [query, setQuery] = useState("");
@@ -79,6 +80,9 @@ export default function RepertoirePage() {
 
         const uid = data.session.user.id;
         setUserId(uid);
+
+        supabase.from("profiles").select("singing_voice").eq("id", uid).single()
+          .then(({ data: p }) => setSingingVoice((p as any)?.singing_voice ?? null));
 
         const { data: rows, error } = await supabase
           .from("user_songs")
@@ -329,8 +333,12 @@ export default function RepertoirePage() {
                       aria-label="Confidence"
                     >
                       {CONFIDENCE_LEVELS.map((l) => (
-                        <option key={l.key} value={l.key}>
-                          {l.label}
+                        <option
+                          key={l.key}
+                          value={l.key}
+                          disabled={l.key === "lead" && singingVoice === "none"}
+                        >
+                          {l.key === "lead" && singingVoice === "none" ? "Lead (singers only)" : l.label}
                         </option>
                       ))}
                     </select>

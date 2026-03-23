@@ -6,7 +6,7 @@ export default async function SongsPage() {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [songsRes, repertoireRes] = await Promise.all([
+  const [songsRes, repertoireRes, profileRes] = await Promise.all([
     supabase
       .from("songs")
       .select(`
@@ -21,9 +21,13 @@ export default async function SongsPage() {
     user
       ? supabase.from("user_songs").select("song_id").eq("user_id", user.id)
       : Promise.resolve({ data: [] }),
+    user
+      ? supabase.from("profiles").select("singing_voice").eq("id", user.id).single()
+      : Promise.resolve({ data: null }),
   ]);
 
   const repertoireSongIds = new Set((repertoireRes.data ?? []).map((r: any) => r.song_id));
+  const singingVoice = (profileRes.data as any)?.singing_voice ?? null;
 
   const popularSongs = (songsRes.data ?? [])
     .map((s: any) => ({
@@ -57,7 +61,7 @@ export default async function SongsPage() {
       <p className="text-sm text-zinc-600">
         Search by title, first line, recording artist, or composer. Autocomplete is typo-tolerant.
       </p>
-      <SongSearch popularSongs={popularSongs} />
+      <SongSearch popularSongs={popularSongs} singingVoice={singingVoice} />
     </div>
   );
 }
