@@ -412,29 +412,21 @@ export default function AccountPanel() {
           <div className="mt-2 flex flex-wrap gap-2">
             {SINGING_OPTIONS.map((o) => {
               const selected = singingVoice.includes(o.value);
-              const hasVocal = singingVoice.includes("lead") || singingVoice.includes("backup");
-              const doesntSing = singingVoice.includes("none");
-              const blocked = (o.value === "none" && hasVocal) || (o.value !== "none" && doesntSing);
               return (
                 <button
                   key={o.value}
                   type="button"
-                  disabled={blocked}
                   onClick={() => {
                     if (o.value === "none") {
                       setSingingVoice(selected ? [] : ["none"]);
                     } else {
                       setSingingVoice(selected
                         ? singingVoice.filter((v) => v !== o.value)
-                        : [...singingVoice, o.value]
+                        : [...singingVoice.filter((v) => v !== "none"), o.value]
                       );
                     }
                   }}
-                  className={`rounded-xl border px-3 py-1.5 text-sm transition-colors ${
-                    selected ? "bg-zinc-900 text-white border-zinc-900"
-                    : blocked ? "border-zinc-200 text-zinc-300 cursor-not-allowed"
-                    : "border-zinc-200 hover:bg-zinc-50"
-                  }`}
+                  className={`rounded-xl border px-3 py-1.5 text-sm transition-colors ${selected ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}
                 >
                   {o.label}
                 </button>
