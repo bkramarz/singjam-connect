@@ -31,6 +31,52 @@ type Profile = {
   instrument_levels: Record<string, string> | null;
 };
 
+function InstrumentSearch({
+  seeded,
+  added,
+  onSelect,
+}: {
+  seeded: string[];
+  added: Record<string, string>;
+  onSelect: (name: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const available = seeded.filter((i) => !added[i]);
+  const filtered = q.trim()
+    ? available.filter((i) => i.toLowerCase().includes(q.toLowerCase()))
+    : [];
+
+  return (
+    <div className="relative mt-2">
+      <input
+        className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+        placeholder="Search instruments…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+      {filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white shadow-md overflow-hidden">
+          {filtered.map((i) => (
+            <button
+              key={i}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); onSelect(i); setQ(""); }}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50"
+            >
+              {i}
+            </button>
+          ))}
+        </div>
+      )}
+      {q.trim() && filtered.length === 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-400 shadow-md">
+          No matches
+        </div>
+      )}
+    </div>
+  );
+}
+
 function suggestUsername(email: string): string {
   const prefix = email.split("@")[0] ?? "";
   const clean = prefix.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
@@ -439,13 +485,14 @@ export default function AccountPanel() {
         <div>
           <div className="text-sm font-medium">Instruments</div>
 
-          {/* Added instruments */}
+          {/* Pills for added instruments */}
           {Object.keys(instrumentLevels).length > 0 && (
-            <div className="mt-2 space-y-1.5">
+            <div className="mt-2 flex flex-wrap gap-2">
               {Object.entries(instrumentLevels).map(([name, level]) => (
-                <div key={name} className="flex items-center gap-2">
-                  <span className="w-32 shrink-0 text-sm">{name}</span>
-                  <span className="flex-1 text-xs text-zinc-500">{level}</span>
+                <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-2 py-1 text-sm text-zinc-700">
+                  <span className="font-medium">{name}</span>
+                  <span className="text-zinc-400">·</span>
+                  <span className="text-zinc-500">{level}</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -453,11 +500,11 @@ export default function AccountPanel() {
                       delete next[name];
                       setInstrumentLevels(next);
                     }}
-                    className="text-zinc-400 hover:text-zinc-700 text-sm px-1"
+                    className="ml-0.5 text-zinc-400 hover:text-zinc-700 leading-none"
                   >
-                    ✕
+                    ×
                   </button>
-                </div>
+                </span>
               ))}
             </div>
           )}
@@ -489,20 +536,13 @@ export default function AccountPanel() {
             </div>
           )}
 
-          {/* Instrument picker */}
+          {/* Searchable instrument input */}
           {!pendingInstrument && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {SEEDED_INSTRUMENTS.filter((i) => !instrumentLevels[i]).map((i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setPendingInstrument(i)}
-                  className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                >
-                  {i}
-                </button>
-              ))}
-            </div>
+            <InstrumentSearch
+              seeded={SEEDED_INSTRUMENTS}
+              added={instrumentLevels}
+              onSelect={setPendingInstrument}
+            />
           )}
         </div>
 
