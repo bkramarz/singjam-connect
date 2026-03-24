@@ -17,8 +17,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.className} overflow-x-hidden`}>
-      <body className="min-h-screen bg-slate-50 overflow-x-hidden">
+    <html lang="en" className={inter.className}>
+      <body className="min-h-screen bg-slate-50">
         <header className="sticky top-0 z-10 bg-slate-900">
           <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
             <Link href="/" className="flex items-center gap-2.5">
@@ -36,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
+        <div className="overflow-x-hidden">
         <main className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">{children}</main>
 
         <footer className="mx-auto hidden max-w-4xl px-6 py-10 sm:block">
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             © {new Date().getFullYear()} SingJam · Community-first matching by repertoire
           </div>
         </footer>
+        </div>
 
         <BottomNav />
       </body>
