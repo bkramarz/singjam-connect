@@ -165,7 +165,45 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
           <p className="mt-2 text-xs text-zinc-500">{filtered.length} of {songs.length} songs</p>
         )}
       </div>
-      <div className="flex justify-end">
+
+      {/* Mobile card list */}
+      <div className="sm:hidden space-y-2">
+        {sorted.map((s) => {
+          const editHref = `/admin/songs/${s.slug ?? s.id}`;
+          return (
+            <div key={s.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-900 truncate">{s.title}</div>
+                  {s.songwriters !== "—" && (
+                    <div className="mt-0.5 text-xs text-slate-500 truncate">{s.songwriters}</div>
+                  )}
+                  {s.missing.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {s.missing.map((m) => (
+                        <span key={m} className="rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-xs text-red-500">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Link href={editHref} className="shrink-0 text-sm font-medium text-amber-600 hover:text-amber-500">
+                  Edit
+                </Link>
+              </div>
+            </div>
+          );
+        })}
+        {!sorted.length && (
+          <p className="py-8 text-center text-sm text-slate-400">
+            {query.trim() ? "No songs match that search." : "No songs yet."}
+          </p>
+        )}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden sm:flex justify-end">
         <button
           onClick={() => setWrap((w) => !w)}
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
@@ -173,7 +211,7 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
           {wrap ? "Clip cells" : "Wrap cells"}
         </button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
           <colgroup>
             {widths.map((w, i) => <col key={i} style={{ width: w }} />)}

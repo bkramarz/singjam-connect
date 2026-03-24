@@ -850,11 +850,11 @@ export default function SongEditor({
 
   return (
     <div className="space-y-6 pb-16">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-slate-900">
           {title || "Edit song"}
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {slug && (
             <a
               href={`/songs/${slug}`}
@@ -870,7 +870,7 @@ export default function SongEditor({
             disabled={standardizing || !title.trim()}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            {standardizing ? "Finding…" : "✦ Find additional recordings"}
+            {standardizing ? "Finding…" : <><span className="sm:hidden">✦ Find recordings</span><span className="hidden sm:inline">✦ Find additional recordings</span></>}
           </button>
           <button
             onClick={handleSave}
