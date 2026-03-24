@@ -26,15 +26,6 @@ const RESERVED = new Set(["admin", "support", "help", "singjam", "sing", "jam", 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
 type SingingVoice = string[];
-type Profile = {
-  display_name: string | null;
-  last_name: string | null;
-  username: string | null;
-  avatar_url: string | null;
-  neighborhood: string | null;
-  singing_voice: string | null;
-  instrument_levels: Record<string, string> | null;
-};
 
 const FEATURED_INSTRUMENTS = ["Guitar", "Piano/Keys", "Electric Bass", "Upright Bass", "Drums", "Percussion", "Violin/Fiddle", "Cello", "Saxophone", "Clarinet", "Trumpet"];
 
@@ -117,18 +108,20 @@ function GenreSearch({
   const filtered = trimmed
     ? available.filter((g) => g.toLowerCase().includes(trimmed.toLowerCase()))
     : [];
-  const featured = topGenres.filter((g) => !selected.includes(g));
 
   return (
     <div className="relative mt-2">
-      {featured.length > 0 && !trimmed && (
+      {topGenres.length > 0 && !trimmed && (
         <div className="mb-2 flex flex-wrap gap-2">
-          {featured.map((g) => (
-            <button key={g} type="button" onClick={() => onToggle(g)}
-              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
-              + {g}
-            </button>
-          ))}
+          {topGenres.map((g) => {
+            const isSelected = selected.includes(g);
+            return (
+              <button key={g} type="button" onClick={() => onToggle(g)}
+                className={`rounded-xl border px-3 py-1.5 text-sm transition-colors ${isSelected ? "bg-zinc-900 text-white border-zinc-900" : "border-zinc-200 hover:bg-zinc-50"}`}>
+                {isSelected ? `✓ ${g}` : `+ ${g}`}
+              </button>
+            );
+          })}
         </div>
       )}
       <input
@@ -184,7 +177,6 @@ export default function AccountPanel() {
   const [pendingInstrument, setPendingInstrument] = useState<string | null>(null);
   const [favoriteGenres, setFavoriteGenres] = useState<string[]>([]);
   const [allGenres, setAllGenres] = useState<string[]>([]);
-  const [topGenres, setTopGenres] = useState<string[]>([]);
 
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const usernameTimerRef = useRef<number | null>(null);
@@ -207,48 +199,43 @@ export default function AccountPanel() {
       if (!data.user) return;
       setUserId(data.user.id);
       setEmail(data.user.email ?? null);
-      supabase
-        .from("profiles")
-        .select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels")
-        .eq("id", data.user.id)
-        .single()
-        .then(({ data: profile }) => {
-          if (profile) {
-            setName(profile.display_name ?? "");
-            setLastName(profile.last_name ?? "");
-            setAvatarUrl(profile.avatar_url ?? null);
-            setNeighborhood(profile.neighborhood ?? "");
-            setSingingVoice(profile.singing_voice ? profile.singing_voice.split(",") : []);
-            setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
+      Promise.all([
+        supabase.from("profiles").select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, favorite_genres").eq("id", data.user.id).single(),
+        supabase.from("song_genres").select("genres(name)"),
+      ]).then(([{ data: profile }, { data: genreRows }]) => {
+        const favorites: string[] = (profile as any)?.favorite_genres ?? [];
 
-            setFavoriteGenres((profile as any).favorite_genres ?? []);
+        if (profile) {
+          setName(profile.display_name ?? "");
+          setLastName(profile.last_name ?? "");
+          setAvatarUrl(profile.avatar_url ?? null);
+          setNeighborhood(profile.neighborhood ?? "");
+          setSingingVoice(profile.singing_voice ? profile.singing_voice.split(",") : []);
+          setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
+          setFavoriteGenres(favorites);
 
-            const savedUsername = profile.username ?? "";
-            if (savedUsername) {
-              setUsername(savedUsername);
-              originalUsername.current = savedUsername;
-            } else if (data.user.email) {
-              setUsername(suggestUsername(data.user.email));
-            }
+          const savedUsername = profile.username ?? "";
+          if (savedUsername) {
+            setUsername(savedUsername);
+            originalUsername.current = savedUsername;
+          } else if (data.user.email) {
+            setUsername(suggestUsername(data.user.email));
           }
-          setLoading(false);
-        });
+        }
 
-      // Fetch genres and compute top 10 by frequency
-      supabase
-        .from("song_genres")
-        .select("genres(name)")
-        .then(({ data }) => {
-          if (!data) return;
+        if (genreRows) {
           const counts: Record<string, number> = {};
-          for (const row of data) {
+          for (const row of genreRows) {
             const name = (row.genres as any)?.name;
             if (name) counts[name] = (counts[name] ?? 0) + 1;
           }
           const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n]) => n);
-          setTopGenres(sorted.slice(0, 10));
+          console.log("Genres by frequency:", Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} (${c})`));
           setAllGenres(sorted);
-        });
+        }
+
+        setLoading(false);
+      });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -348,6 +335,12 @@ export default function AccountPanel() {
     const uid = userData.user?.id;
     if (!uid) { setBusy(false); setStatus("Not signed in."); return; }
 
+    await fetch("/api/account/update-name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: [name, lastName].filter(Boolean).join(" ") || null }),
+    });
+
     const { error } = await supabase.from("profiles").upsert({
       id: uid,
       display_name: name || null,
@@ -366,7 +359,8 @@ export default function AccountPanel() {
       setUsernameStatus("idle");
       window.dispatchEvent(new CustomEvent("profile-updated"));
     }
-    setStatus(error ? error.message : "Saved!");
+    if (!error) router.push("/profile");
+    else setStatus(error.message);
   }
 
   async function changeEmail() {
@@ -501,7 +495,6 @@ export default function AccountPanel() {
               className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ben"
             />
           </div>
           <div>
@@ -510,7 +503,6 @@ export default function AccountPanel() {
               className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              placeholder="Kramarz"
             />
           </div>
         </div>
@@ -544,12 +536,11 @@ export default function AccountPanel() {
 
         {/* Neighborhood */}
         <div>
-          <label className="block text-sm font-medium">Neighborhood / city</label>
+          <label className="block text-sm font-medium">City / zip code</label>
           <input
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={neighborhood}
             onChange={(e) => setNeighborhood(e.target.value)}
-            placeholder="Berkeley"
           />
           <div className="mt-1 text-xs text-zinc-500">We only show neighborhood-level info until an invite is accepted.</div>
         </div>
@@ -690,11 +681,8 @@ export default function AccountPanel() {
             <GenreSearch
               allGenres={allGenres}
               selected={favoriteGenres}
-              topGenres={topGenres}
-              onToggle={(g) => {
-                setFavoriteGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
-                setTopGenres((prev) => prev.includes(g) ? prev : [g, ...prev].slice(0, 10));
-              }}
+              topGenres={allGenres.filter(g => !favoriteGenres.includes(g)).slice(0, 10)}
+              onToggle={(g) => setFavoriteGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g])}
             />
           </div>
         </div>
