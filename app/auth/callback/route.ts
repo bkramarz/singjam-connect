@@ -47,10 +47,10 @@ export async function GET(request: Request) {
     if (!destination && sessionData?.user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("display_name")
+        .select("username")
         .eq("id", sessionData.user.id)
         .single();
-      destination = !profile?.display_name ? "/account" : "/repertoire";
+      destination = !profile?.username ? "/account" : "/repertoire";
     }
     destination = destination ?? "/account";
 
