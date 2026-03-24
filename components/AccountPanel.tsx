@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 const SEEDED_INSTRUMENTS = [
-  "Guitar", "Bass", "Piano/Keys", "Drums", "Violin", "Viola", "Cello",
+  "Guitar", "Bass", "Piano/Keys", "Drums", "Percussion", "Violin/Fiddle", "Viola", "Cello",
   "Banjo", "Mandolin", "Ukulele", "Flute", "Clarinet", "Saxophone",
   "Trumpet", "Trombone", "Harmonica", "Accordion", "Harp", "Dobro",
   "Pedal Steel", "Organ", "Synthesizer", "Other",
@@ -31,7 +31,7 @@ type Profile = {
   instrument_levels: Record<string, string> | null;
 };
 
-const FEATURED_INSTRUMENTS = ["Guitar", "Piano/Keys", "Bass", "Drums"];
+const FEATURED_INSTRUMENTS = ["Guitar", "Piano/Keys", "Bass", "Drums", "Percussion", "Violin/Fiddle", "Cello", "Saxophone", "Clarinet", "Trumpet"];
 
 function InstrumentSearch({
   seeded,
