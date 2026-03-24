@@ -3,7 +3,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin: requestOrigin } = new URL(request.url);
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestOrigin;
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "";
   const next = /^\/[^/]/.test(rawNext) ? rawNext : null;
