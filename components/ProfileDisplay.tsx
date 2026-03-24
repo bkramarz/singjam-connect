@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import LogoutButton from "@/components/LogoutButton";
 
 const INSTRUMENT_LEVEL_ORDER = ["Professional", "Advanced", "Intermediate", "Beginner"];
 
@@ -166,14 +167,19 @@ export default function ProfileDisplay({
       })()}
 
       {/* Actions */}
-      <div className="flex">
+      <div className="flex gap-2">
         {isOwner ? (
-          <Link
-            href="/account"
-            className="flex-1 rounded-xl border border-zinc-200 px-4 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 sm:flex-none"
-          >
-            Edit profile
-          </Link>
+          <>
+            <Link
+              href="/account"
+              className="flex-1 rounded-xl border border-zinc-200 px-4 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 sm:flex-none"
+            >
+              Edit profile
+            </Link>
+            <div className="sm:hidden">
+              <LogoutButton variant="light" />
+            </div>
+          </>
         ) : (
           <Link
             href={`/jam/new?invite=${profile.username}`}

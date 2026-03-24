@@ -108,26 +108,26 @@ export default async function SongPage({
     <div className="space-y-6 pb-16">
       {/* Header */}
       <div>
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div>
+          <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-slate-900">{song.title}</h1>
-            {songProductions.length > 0 ? (
-              <p className="mt-0.5 text-base text-slate-500">from <em>{songProductions.join(", ")}</em></p>
-            ) : song.display_artist ? (
-              <p className="mt-0.5 text-base text-slate-500">{song.display_artist}</p>
-            ) : null}
-            {altTitles.length > 0 && (
-              <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-2 shrink-0">
             {firstRecorded && (
-              <span className="text-sm text-slate-400">{firstRecorded}</span>
-            )}
-            {user && (
-              <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
+              <span className="shrink-0 text-sm text-slate-400">{firstRecorded}</span>
             )}
           </div>
+          {songProductions.length > 0 ? (
+            <p className="mt-0.5 text-base text-slate-500">from <em>{songProductions.join(", ")}</em></p>
+          ) : song.display_artist ? (
+            <p className="mt-0.5 text-base text-slate-500">{song.display_artist}</p>
+          ) : null}
+          {altTitles.length > 0 && (
+            <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
+          )}
+          {user && (
+            <div className="mt-3">
+              <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
+            </div>
+          )}
         </div>
 
         {(composers.length > 0 || lyricists.length > 0) && (
@@ -265,11 +265,8 @@ export default async function SongPage({
         </section>
       )}
 
-      <div className="flex items-center justify-between pt-2">
-        <Link href="/songs" className="text-sm text-slate-500 hover:text-slate-700">
-          ← Back to search
-        </Link>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           {user && (
             <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} />
           )}
@@ -282,6 +279,12 @@ export default async function SongPage({
             </Link>
           )}
         </div>
+        <Link
+          href={userSongConfidence ? "/repertoire" : "/search"}
+          className="mt-2 text-center text-sm text-slate-500 hover:text-slate-700 sm:mt-0 sm:text-left"
+        >
+          {userSongConfidence ? "← Back to repertoire" : "← Back to search"}
+        </Link>
       </div>
     </div>
   );

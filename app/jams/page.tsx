@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { getSessionServer, supabaseServer } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 
 export default async function JamsPage() {
   const session = await getSessionServer();
-  if (!session) redirect("/auth");
-
   const supabase = await supabaseServer();
   const { data: jams } = await supabase
     .from("jams")
@@ -15,17 +12,19 @@ export default async function JamsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Jams</h1>
           <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
         </div>
-        <Link
-          href="/jam/new"
-          className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
-        >
-          Post a jam
-        </Link>
+        {session && (
+          <Link
+            href="/jam/new"
+            className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
+          >
+            Post a jam
+          </Link>
+        )}
       </div>
 
       {!jams || jams.length === 0 ? (

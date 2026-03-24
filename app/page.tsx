@@ -12,19 +12,25 @@ export default function HomePage() {
             Bay Area music community
           </div>
           <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-5xl">
-            Build your repertoire<br />
+            Build your repertoire.<br />
             <span className="text-amber-400">Sing and jam with friends.</span>
           </h1>
           <p className="mt-4 max-w-lg text-base text-slate-400">
             Find people to sing and play music with based on the songs you already know.
-            Discover new songs and new jam friends.
+            Discover new songs and new friends.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/songs"
+              href="/search"
               className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 transition-colors"
             >
               Add songs
+            </Link>
+            <Link
+              href="/jams"
+              className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100 transition-colors"
+            >
+              Join a jam
             </Link>
           </div>
         </div>

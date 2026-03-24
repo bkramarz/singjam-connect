@@ -72,13 +72,13 @@ export default function TopNav() {
 
   return (
     <nav className="flex items-center gap-1 text-sm">
-      <Link href="/songs" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <Link href="/search" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Song Search
       </Link>
       <Link href="/repertoire" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Repertoire
       </Link>
-      <Link href="/matches" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <Link href="/friends" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Friends
       </Link>
       <Link href="/jams" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">

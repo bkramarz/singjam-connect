@@ -14,7 +14,7 @@ type UserProfile = {
 
 const TABS = [
   {
-    href: "/songs",
+    href: "/search",
     label: "Search",
     icon: (active: boolean) => (
       <svg className={`h-6 w-6 ${active ? "text-amber-500" : "text-slate-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2 : 1.5}>
@@ -32,7 +32,7 @@ const TABS = [
     ),
   },
   {
-    href: "/matches",
+    href: "/friends",
     label: "Friends",
     icon: (active: boolean) => (
       <svg className={`h-6 w-6 ${active ? "text-amber-500" : "text-slate-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2 : 1.5}>
