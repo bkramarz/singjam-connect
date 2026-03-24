@@ -508,16 +508,16 @@ export default function AccountPanel() {
             <div className="mt-2 flex flex-wrap gap-2">
               {Object.entries(instrumentLevels).map(([name, level]) => (
                 <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-2 py-1 text-sm text-zinc-700">
+                  <span className="font-medium">{name}</span>
+                  <span className="text-zinc-400">·</span>
                   <button
                     type="button"
                     onClick={() => setPendingInstrument(name)}
-                    className="font-medium hover:text-amber-600"
+                    className="text-amber-600 hover:text-amber-700 hover:underline"
                     title="Change level"
                   >
-                    {name}
+                    {level}
                   </button>
-                  <span className="text-zinc-400">·</span>
-                  <span className="text-zinc-500">{level}</span>
                   <button
                     type="button"
                     onClick={() => {
