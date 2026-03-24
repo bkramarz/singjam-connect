@@ -31,6 +31,8 @@ type Profile = {
   instrument_levels: Record<string, string> | null;
 };
 
+const FEATURED_INSTRUMENTS = ["Guitar", "Piano/Keys", "Bass", "Drums"];
+
 function InstrumentSearch({
   seeded,
   added,
@@ -42,15 +44,31 @@ function InstrumentSearch({
 }) {
   const [q, setQ] = useState("");
   const available = seeded.filter((i) => !added[i]);
-  const filtered = q.trim()
-    ? available.filter((i) => i.toLowerCase().includes(q.toLowerCase()))
+  const trimmed = q.trim();
+  const filtered = trimmed
+    ? available.filter((i) => i.toLowerCase().includes(trimmed.toLowerCase()))
     : [];
+  const featured = FEATURED_INSTRUMENTS.filter((i) => !added[i]);
 
   return (
     <div className="relative mt-2">
+      {featured.length > 0 && !trimmed && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {featured.map((i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(i)}
+              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+            >
+              + {i}
+            </button>
+          ))}
+        </div>
+      )}
       <input
         className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-        placeholder="Search instruments…"
+        placeholder="Search all instruments…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
@@ -68,7 +86,7 @@ function InstrumentSearch({
           ))}
         </div>
       )}
-      {q.trim() && filtered.length === 0 && (
+      {trimmed && filtered.length === 0 && (
         <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-400 shadow-md">
           No matches
         </div>
@@ -490,7 +508,14 @@ export default function AccountPanel() {
             <div className="mt-2 flex flex-wrap gap-2">
               {Object.entries(instrumentLevels).map(([name, level]) => (
                 <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-2 py-1 text-sm text-zinc-700">
-                  <span className="font-medium">{name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingInstrument(name)}
+                    className="font-medium hover:text-amber-600"
+                    title="Change level"
+                  >
+                    {name}
+                  </button>
                   <span className="text-zinc-400">·</span>
                   <span className="text-zinc-500">{level}</span>
                   <button
