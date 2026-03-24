@@ -507,17 +507,15 @@ export default function AccountPanel() {
           {Object.keys(instrumentLevels).length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {Object.entries(instrumentLevels).map(([name, level]) => (
-                <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-2 py-1 text-sm text-zinc-700">
+                <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-1 py-1 text-sm text-zinc-700">
                   <span className="font-medium">{name}</span>
-                  <span className="text-zinc-400">·</span>
-                  <button
-                    type="button"
-                    onClick={() => setPendingInstrument(name)}
-                    className="text-amber-600 hover:text-amber-700 hover:underline"
-                    title="Change level"
+                  <select
+                    value={level}
+                    onChange={(e) => setInstrumentLevels({ ...instrumentLevels, [name]: e.target.value })}
+                    className="rounded border-0 bg-transparent text-xs text-zinc-500 focus:outline-none cursor-pointer"
                   >
-                    {level}
-                  </button>
+                    {INSTRUMENT_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
                   <button
                     type="button"
                     onClick={() => {
@@ -525,7 +523,7 @@ export default function AccountPanel() {
                       delete next[name];
                       setInstrumentLevels(next);
                     }}
-                    className="ml-0.5 text-zinc-400 hover:text-zinc-700 leading-none"
+                    className="text-zinc-400 hover:text-zinc-700 leading-none px-1"
                   >
                     ×
                   </button>
