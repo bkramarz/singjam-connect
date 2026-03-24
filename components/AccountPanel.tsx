@@ -212,6 +212,7 @@ export default function AccountPanel() {
     if (!error) {
       originalUsername.current = username;
       setUsernameStatus("idle");
+      window.dispatchEvent(new CustomEvent("profile-updated"));
     }
     setStatus(error ? error.message : "Saved!");
   }
