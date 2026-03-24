@@ -431,7 +431,11 @@ export default function AccountPanel() {
           </button>
           <div>
             <div className="text-sm font-medium">Profile photo</div>
-            <div className="text-xs text-zinc-500">Click to upload or drag and drop · JPG, PNG, WebP · max 5 MB</div>
+            <div className="text-xs text-zinc-500">
+              <span className="hidden sm:inline">Click to upload or drag and drop · JPG, PNG, WebP · </span>
+              <span className="sm:hidden">Tap to upload · </span>
+              max 5 MB
+            </div>
           </div>
           <input
             ref={fileRef}

@@ -224,7 +224,7 @@ export default function RepertoirePage() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div>
         <h1 className="text-2xl font-semibold">My Repertoire</h1>
         <div className="mt-4 text-sm text-muted-foreground">Loading…</div>
       </div>
@@ -232,7 +232,7 @@ export default function RepertoirePage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">My Repertoire</h1>
         <p className="text-sm text-muted-foreground">

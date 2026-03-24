@@ -77,9 +77,9 @@ export default function MatchesPage() {
           const initial = (m.display_name ?? m.username ?? "?")[0].toUpperCase();
 
           return (
-            <div key={m.user_id} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div key={m.user_id} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm overflow-hidden">
               {/* Header */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-100">
                   {m.avatar_url ? (
                     <Image src={m.avatar_url} alt={fullName || "Avatar"} fill className="object-cover" unoptimized />
@@ -90,7 +90,7 @@ export default function MatchesPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-zinc-900 truncate">
+                  <div className="font-semibold text-zinc-900">
                     {fullName || m.username || "Someone"}
                     {m.username && <span className="ml-1.5 text-xs font-normal text-zinc-400">@{m.username}</span>}
                   </div>
@@ -138,16 +138,16 @@ export default function MatchesPage() {
               {/* Actions */}
               <div className="mt-4 flex gap-2">
                 <a
-                  className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm no-underline hover:bg-zinc-50"
+                  className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm no-underline hover:bg-zinc-50 sm:flex-none sm:py-1.5"
                   href={m.username ? `/u/${m.username}` : `/profile/${m.user_id}`}
                 >
                   View profile
                 </a>
                 <a
-                  className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm no-underline hover:bg-zinc-50"
+                  className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm no-underline hover:bg-zinc-50 sm:flex-none sm:py-1.5"
                   href={`/jam/new?invite=${m.user_id}`}
                 >
-                  Invite
+                  Invite to jam
                 </a>
               </div>
             </div>

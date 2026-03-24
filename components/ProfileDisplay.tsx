@@ -166,18 +166,18 @@ export default function ProfileDisplay({
       })()}
 
       {/* Actions */}
-      <div className="flex justify-end">
+      <div className="flex">
         {isOwner ? (
           <Link
             href="/account"
-            className="rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="flex-1 rounded-xl border border-zinc-200 px-4 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 sm:flex-none"
           >
             Edit profile
           </Link>
         ) : (
           <Link
             href={`/jam/new?invite=${profile.username}`}
-            className="rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
+            className="flex-1 rounded-xl border border-zinc-200 px-4 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 sm:flex-none"
           >
             Invite to jam
           </Link>
