@@ -1,5 +1,5 @@
--- Extend the Google sync trigger to also copy first/last name from auth metadata.
--- Google provides full_name (e.g. "Alice Apple"), not separate given_name/family_name.
+-- Fix Google name sync: Google provides full_name, not separate given_name/family_name.
+-- Replaces the trigger function from 047 with the correct field parsing.
 CREATE OR REPLACE FUNCTION public.sync_google_avatar()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
@@ -15,10 +15,10 @@ BEGIN
   );
   space_pos := position(' ' IN full_name);
   IF space_pos > 0 THEN
-    first_name   := left(full_name, space_pos - 1);
+    first_name    := left(full_name, space_pos - 1);
     last_name_val := substring(full_name from space_pos + 1);
   ELSE
-    first_name   := full_name;
+    first_name    := full_name;
     last_name_val := NULL;
   END IF;
 
@@ -30,7 +30,7 @@ BEGIN
   WHERE id = NEW.id
     AND (
       (avatar_url   IS NULL AND NEW.raw_user_meta_data->>'avatar_url' IS NOT NULL) OR
-      (display_name IS NULL AND NULLIF(first_name, '')   IS NOT NULL) OR
+      (display_name IS NULL AND NULLIF(first_name, '')    IS NOT NULL) OR
       (last_name    IS NULL AND NULLIF(last_name_val, '') IS NOT NULL)
     );
   RETURN NEW;
@@ -40,8 +40,17 @@ $$;
 -- Backfill existing Google users missing name fields
 UPDATE public.profiles p
 SET
-  display_name = COALESCE(p.display_name, NULLIF(split_part(COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', ''), ' ', 1), '')),
-  last_name    = COALESCE(p.last_name,    NULLIF(trim(substring(COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', '') from position(' ' IN COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', '')) + 1)), ''))
+  display_name = COALESCE(
+    p.display_name,
+    NULLIF(split_part(COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', ''), ' ', 1), '')
+  ),
+  last_name = COALESCE(
+    p.last_name,
+    NULLIF(trim(substring(
+      COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', '')
+      FROM position(' ' IN COALESCE(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name', '')) + 1
+    )), '')
+  )
 FROM auth.users u
 WHERE p.id = u.id
   AND u.raw_user_meta_data->>'avatar_url' IS NOT NULL

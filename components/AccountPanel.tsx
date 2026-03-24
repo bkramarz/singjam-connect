@@ -206,8 +206,12 @@ export default function AccountPanel() {
         const favorites: string[] = (profile as any)?.favorite_genres ?? [];
 
         const meta = data.user.user_metadata ?? {};
-        setName(profile?.display_name ?? meta.given_name ?? "");
-        setLastName(profile?.last_name ?? meta.family_name ?? "");
+        const fullName: string = meta.full_name ?? meta.name ?? "";
+        const spaceIdx = fullName.indexOf(" ");
+        const metaFirst = spaceIdx > -1 ? fullName.slice(0, spaceIdx) : fullName;
+        const metaLast = spaceIdx > -1 ? fullName.slice(spaceIdx + 1) : "";
+        setName(profile?.display_name ?? metaFirst);
+        setLastName(profile?.last_name ?? metaLast);
         setAvatarUrl(profile?.avatar_url ?? meta.avatar_url ?? null);
         setNeighborhood(profile?.neighborhood ?? "");
         setSingingVoice(profile?.singing_voice ? profile.singing_voice.split(",") : []);
