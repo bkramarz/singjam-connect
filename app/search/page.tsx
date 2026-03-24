@@ -62,7 +62,7 @@ export default async function SongsPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Song Library</h1>
       <p className="text-sm text-zinc-600">
-        Search by title, first line, recording artist, or composer. Autocomplete is typo-tolerant.
+        Search by title, recording artist, first line or composer.
       </p>
       <SongSearch popularSongs={popularSongs} singingVoice={singingVoice} />
     </div>
