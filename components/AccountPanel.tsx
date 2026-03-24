@@ -513,7 +513,11 @@ export default function AccountPanel() {
             <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
               <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">You play</div>
               <div className="flex flex-wrap gap-2">
-              {Object.entries(instrumentLevels).map(([name, level]) => (
+              {Object.entries(instrumentLevels).sort(([aName, aLevel], [bName, bLevel]) => {
+                const order = INSTRUMENT_LEVELS.slice().reverse();
+                const diff = order.indexOf(aLevel as typeof INSTRUMENT_LEVELS[number]) - order.indexOf(bLevel as typeof INSTRUMENT_LEVELS[number]);
+                return diff !== 0 ? diff : aName.localeCompare(bName);
+              }).map(([name, level]) => (
                 <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-1 py-1 text-sm text-zinc-700">
                   <span className="font-medium">{name}</span>
                   <select
