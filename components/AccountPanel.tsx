@@ -12,6 +12,8 @@ const SEEDED_INSTRUMENTS = [
   "Pedal Steel", "Organ", "Synthesizer",
   "Sitar", "Tabla", "Harmonium", "Sarod", "Bansuri", "Veena", "Mridangam", "Sarangi", "Tanpura", "Dholak",
   "Oud", "Darbuka", "Qanun", "Ney", "Riq", "Rebab", "Buzuq",
+  "Djembe", "Kora", "Mbira", "Balafon", "Kalimba", "Talking Drum", "Ngoni", "Shekere", "Dundun",
+  "Erhu", "Guzheng", "Pipa", "Shamisen", "Koto", "Shakuhachi", "Gayageum", "Dizi", "Taiko",
   "Other",
 ];
 const INSTRUMENT_LEVELS = ["Beginner", "Intermediate", "Advanced", "Professional"] as const;
@@ -508,7 +510,9 @@ export default function AccountPanel() {
 
           {/* Pills for added instruments */}
           {Object.keys(instrumentLevels).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">You play</div>
+              <div className="flex flex-wrap gap-2">
               {Object.entries(instrumentLevels).map(([name, level]) => (
                 <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-1 py-1 text-sm text-zinc-700">
                   <span className="font-medium">{name}</span>
@@ -532,6 +536,7 @@ export default function AccountPanel() {
                   </button>
                 </span>
               ))}
+            </div>
             </div>
           )}
 
@@ -562,13 +567,16 @@ export default function AccountPanel() {
             </div>
           )}
 
-          {/* Searchable instrument input */}
+          {/* Add instruments */}
           {!pendingInstrument && (
-            <InstrumentSearch
-              seeded={SEEDED_INSTRUMENTS}
-              added={instrumentLevels}
-              onSelect={setPendingInstrument}
-            />
+            <div className="mt-3 rounded-xl border border-dashed border-zinc-200 p-3">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">Add an instrument</div>
+              <InstrumentSearch
+                seeded={SEEDED_INSTRUMENTS}
+                added={instrumentLevels}
+                onSelect={setPendingInstrument}
+              />
+            </div>
           )}
         </div>
 
