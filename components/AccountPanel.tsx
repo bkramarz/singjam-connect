@@ -100,6 +100,63 @@ function InstrumentSearch({
   );
 }
 
+function GenreSearch({
+  allGenres,
+  selected,
+  topGenres,
+  onToggle,
+}: {
+  allGenres: string[];
+  selected: string[];
+  topGenres: string[];
+  onToggle: (name: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const trimmed = q.trim();
+  const available = allGenres.filter((g) => !selected.includes(g));
+  const filtered = trimmed
+    ? available.filter((g) => g.toLowerCase().includes(trimmed.toLowerCase()))
+    : [];
+  const featured = topGenres.filter((g) => !selected.includes(g));
+
+  return (
+    <div className="relative mt-2">
+      {featured.length > 0 && !trimmed && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {featured.map((g) => (
+            <button key={g} type="button" onClick={() => onToggle(g)}
+              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+              + {g}
+            </button>
+          ))}
+        </div>
+      )}
+      <input
+        className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+        placeholder="Search all genres…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+      {filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white shadow-md overflow-hidden">
+          {filtered.map((g) => (
+            <button key={g} type="button"
+              onMouseDown={(e) => { e.preventDefault(); onToggle(g); setQ(""); }}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50">
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+      {trimmed && filtered.length === 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-400 shadow-md">
+          No matches
+        </div>
+      )}
+    </div>
+  );
+}
+
 function suggestUsername(email: string): string {
   const prefix = email.split("@")[0] ?? "";
   const clean = prefix.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
@@ -125,6 +182,9 @@ export default function AccountPanel() {
   const [singingVoice, setSingingVoice] = useState<SingingVoice>([]);
   const [instrumentLevels, setInstrumentLevels] = useState<Record<string, string>>({});
   const [pendingInstrument, setPendingInstrument] = useState<string | null>(null);
+  const [favoriteGenres, setFavoriteGenres] = useState<string[]>([]);
+  const [allGenres, setAllGenres] = useState<string[]>([]);
+  const [topGenres, setTopGenres] = useState<string[]>([]);
 
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const usernameTimerRef = useRef<number | null>(null);
@@ -161,6 +221,8 @@ export default function AccountPanel() {
             setSingingVoice(profile.singing_voice ? profile.singing_voice.split(",") : []);
             setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
 
+            setFavoriteGenres((profile as any).favorite_genres ?? []);
+
             const savedUsername = profile.username ?? "";
             if (savedUsername) {
               setUsername(savedUsername);
@@ -170,6 +232,22 @@ export default function AccountPanel() {
             }
           }
           setLoading(false);
+        });
+
+      // Fetch genres and compute top 10 by frequency
+      supabase
+        .from("song_genres")
+        .select("genres(name)")
+        .then(({ data }) => {
+          if (!data) return;
+          const counts: Record<string, number> = {};
+          for (const row of data) {
+            const name = (row.genres as any)?.name;
+            if (name) counts[name] = (counts[name] ?? 0) + 1;
+          }
+          const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+          setTopGenres(sorted.slice(0, 10));
+          setAllGenres(sorted);
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -278,6 +356,7 @@ export default function AccountPanel() {
       neighborhood: neighborhood || null,
       singing_voice: singingVoice.length ? singingVoice.join(",") : null,
       instrument_levels: instrumentLevels,
+      favorite_genres: favoriteGenres.length ? favoriteGenres : null,
       updated_at: new Date().toISOString(),
     });
 
@@ -582,6 +661,42 @@ export default function AccountPanel() {
               />
             </div>
           )}
+        </div>
+
+        {/* Favorite genres */}
+        <div>
+          <div className="text-sm font-medium">Favorite genres</div>
+
+          {favoriteGenres.length > 0 && (
+            <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">Your genres</div>
+              <div className="flex flex-wrap gap-2">
+                {favoriteGenres.slice().sort((a, b) => a.localeCompare(b)).map((g) => (
+                  <span key={g} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-1 py-1 text-sm text-zinc-700">
+                    <span className="font-medium">{g}</span>
+                    <button type="button"
+                      onClick={() => setFavoriteGenres(favoriteGenres.filter((x) => x !== g))}
+                      className="text-zinc-400 hover:text-zinc-700 leading-none px-1">
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3 rounded-xl border border-dashed border-zinc-200 p-3">
+            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">Add a genre</div>
+            <GenreSearch
+              allGenres={allGenres}
+              selected={favoriteGenres}
+              topGenres={topGenres}
+              onToggle={(g) => {
+                setFavoriteGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
+                setTopGenres((prev) => prev.includes(g) ? prev : [g, ...prev].slice(0, 10));
+              }}
+            />
+          </div>
         </div>
 
         <button
