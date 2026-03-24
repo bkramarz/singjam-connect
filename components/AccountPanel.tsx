@@ -543,7 +543,7 @@ export default function AccountPanel() {
 
         {/* Neighborhood */}
         <div>
-          <label className="block text-sm font-medium">City / zip code</label>
+          <label className="block text-sm font-medium">City</label>
           <input
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={neighborhood}
