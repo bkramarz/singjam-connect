@@ -39,7 +39,7 @@ const LEVELS = [
   { key: "learn", label: "Learn" },
 ] as const;
 
-export default function SongSearch({ initialQuery = "", popularSongs = [] }: { initialQuery?: string; popularSongs?: PopularSong[] }) {
+export default function SongSearch({ initialQuery = "", popularSongs = [], singingVoice = null }: { initialQuery?: string; popularSongs?: PopularSong[]; singingVoice?: string | null }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
@@ -163,7 +163,7 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={q}
             onChange={(e) => { setQ(e.target.value); setDebouncing(!!e.target.value.trim()); }}
-            placeholder='Try: "wagon weel", "i once was lost", "beatls", "cohen", "shlomo carlebach"'
+            placeholder='Search by title, first line, recording artist, or composer'
           />
           <div className="mt-1 text-xs text-zinc-500">
             Tip: searching a person name returns songs connected via composer credits or recordings.
@@ -184,76 +184,82 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
             const inRepertoire = repertoire.has(r.song_id);
             const confidence = repertoire.get(r.song_id);
             const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
+            const picking = pendingAddId === r.song_id;
             return (
               <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
-                        {r.title}
-                      </Link>
-                      {r.composers.length > 0 && (
-                        <span className="ml-1 font-normal text-zinc-400">
-                          ({formatComposers(r.composers, r.cultures ?? [])})
-                        </span>
-                      )}
-                      {r.productions && r.productions.length > 0 ? (
-                        <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
-                      ) : r.display_artist ? (
-                        <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
-                      ) : null}
-                      {r.year && (
-                        <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
-                      )}
-                    </div>
-
-                    {r.aka && r.aka.length ? (
-                      <div className="text-xs text-zinc-500 truncate">aka: {r.aka.join(" · ")}</div>
+                <div className="min-w-0">
+                  <div className="font-medium">
+                    <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
+                      {r.title}
+                    </Link>
+                    {r.composers.length > 0 && (
+                      <span className="ml-1 font-normal text-zinc-400">
+                        ({formatComposers(r.composers, r.cultures ?? [])})
+                      </span>
+                    )}
+                    {r.productions && r.productions.length > 0 ? (
+                      <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
+                    ) : r.display_artist ? (
+                      <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
                     ) : null}
-
-                    {inRepertoire && (
-                      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
-                        ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-                      </div>
+                    {r.year && (
+                      <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
                     )}
                   </div>
-
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {pendingAddId === r.song_id ? (
-                      <>
-                        {LEVELS.map((l) => (
-                          <button
-                            key={l.key}
-                            className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
-                            onClick={() => addSong(r.song_id, l.key)}
-                          >
-                            {l.label}
-                          </button>
-                        ))}
-                        <button
-                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                          onClick={() => setPendingAddId(null)}
-                        >
-                          ✕
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <Link
-                          href={`/songs/${r.slug ?? r.song_id}`}
-                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                        >
-                          View
-                        </Link>
-                        <button
-                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                          onClick={() => setPendingAddId(r.song_id)}
-                        >
-                          {inRepertoire ? "Update" : "Add"}
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  {r.aka && r.aka.length ? (
+                    <div className="text-xs text-zinc-500">aka: {r.aka.join(" · ")}</div>
+                  ) : null}
+                  {inRepertoire && (
+                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+                      ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {picking ? (
+                    <>
+                      {LEVELS.map((l) => {
+                        const blocked = l.key === "lead" && singingVoice === "none";
+                        return (
+                          <span key={l.key} className="relative group">
+                            <button
+                              disabled={blocked}
+                              className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
+                              onClick={() => !blocked && addSong(r.song_id, l.key)}
+                            >
+                              {l.label}
+                            </button>
+                            {blocked && (
+                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
+                                Only available for singers
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                      <button
+                        className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                        onClick={() => setPendingAddId(null)}
+                      >
+                        ✕
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href={`/songs/${r.slug ?? r.song_id}`}
+                        className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                      >
+                        View
+                      </Link>
+                      <button
+                        className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                        onClick={() => setPendingAddId(r.song_id)}
+                      >
+                        {inRepertoire ? "Update" : "Add"}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -281,73 +287,82 @@ export default function SongSearch({ initialQuery = "", popularSongs = [] }: { i
                 const inRepertoire = repertoire.has(r.song_id);
                 const confidence = repertoire.get(r.song_id);
                 const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
+                const picking = pendingAddId === r.song_id;
                 return (
                   <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
-                            {r.title}
-                          </Link>
-                          {r.composers.length > 0 && (
-                            <span className="ml-1 font-normal text-zinc-400">
-                              ({r.composers.map((name) => {
-                                const parts = name.trim().split(" ");
-                                return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
-                              }).join(", ")})
-                            </span>
-                          )}
-                          {r.productions && r.productions.length > 0 ? (
-                            <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
-                          ) : r.display_artist ? (
-                            <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
-                          ) : null}
-                          {r.year && (
-                            <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
-                          )}
+                    <div className="min-w-0">
+                      <div className="font-medium">
+                        <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
+                          {r.title}
+                        </Link>
+                        {r.composers.length > 0 && (
+                          <span className="ml-1 font-normal text-zinc-400">
+                            ({r.composers.map((name) => {
+                              const parts = name.trim().split(" ");
+                              return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
+                            }).join(", ")})
+                          </span>
+                        )}
+                        {r.productions && r.productions.length > 0 ? (
+                          <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
+                        ) : r.display_artist ? (
+                          <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
+                        ) : null}
+                        {r.year && (
+                          <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
+                        )}
+                      </div>
+                      {inRepertoire && (
+                        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+                          ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
                         </div>
-                        {inRepertoire && (
-                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
-                            ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {pendingAddId === r.song_id ? (
-                          <>
-                            {LEVELS.map((l) => (
-                              <button
-                                key={l.key}
-                                className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
-                                onClick={() => addSong(r.song_id, l.key)}
-                              >
-                                {l.label}
-                              </button>
-                            ))}
-                            <button
-                              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                              onClick={() => setPendingAddId(null)}
-                            >
-                              ✕
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <Link
-                              href={`/songs/${r.slug ?? r.song_id}`}
-                              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                            >
-                              View
-                            </Link>
-                            <button
-                              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                              onClick={() => setPendingAddId(r.song_id)}
-                            >
-                              {inRepertoire ? "Update" : "Add"}
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {picking ? (
+                        <>
+                          {LEVELS.map((l) => {
+                            const blocked = l.key === "lead" && singingVoice === "none";
+                            return (
+                              <span key={l.key} className="relative group">
+                                <button
+                                  disabled={blocked}
+                                  className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
+                                  onClick={() => !blocked && addSong(r.song_id, l.key)}
+                                >
+                                  {l.label}
+                                </button>
+                                {blocked && (
+                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
+                                    Only available for singers
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })}
+                          <button
+                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                            onClick={() => setPendingAddId(null)}
+                          >
+                            ✕
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Link
+                            href={`/songs/${r.slug ?? r.song_id}`}
+                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                          >
+                            View
+                          </Link>
+                          <button
+                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+                            onClick={() => setPendingAddId(r.song_id)}
+                          >
+                            {inRepertoire ? "Update" : "Add"}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

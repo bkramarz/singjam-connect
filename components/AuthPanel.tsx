@@ -8,9 +8,10 @@ export default function AuthPanel() {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signedUp, setSignedUp] = useState(false);
@@ -26,11 +27,15 @@ export default function AuthPanel() {
     if (error) {
       setStatus(error.message);
     } else {
-      router.push("/onboarding");
+      router.push("/repertoire");
     }
   }
 
   async function signUp() {
+    if (password !== confirmPassword) {
+      setStatus("Passwords do not match.");
+      return;
+    }
     setBusy(true);
     setStatus(null);
 
@@ -45,17 +50,73 @@ export default function AuthPanel() {
     }
   }
 
+  async function sendResetEmail() {
+    if (!email) return;
+    setBusy(true);
+    setStatus(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      setStatus(error.message);
+    } else {
+      setStatus(`Password reset link sent to ${email}.`);
+    }
+  }
+
   async function signInWithGoogle() {
     setBusy(true);
     setStatus(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: { prompt: "select_account" },
+      },
     });
     if (error) {
       setStatus(error.message);
       setBusy(false);
     }
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+        <h2 className="text-xl font-semibold text-slate-900">Reset your password</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Enter your email and we'll send you a reset link.{" "}
+          <button onClick={() => { setMode("signin"); setStatus(null); }} className="text-amber-600 hover:underline">
+            Back to sign in
+          </button>
+        </p>
+        <div className="mt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Email</label>
+            <input
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              placeholder="you@example.com"
+            />
+          </div>
+          <button
+            onClick={sendResetEmail}
+            disabled={!email || busy}
+            className="w-full rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600 disabled:opacity-50 transition-colors"
+          >
+            {busy ? "Sending…" : "Send reset link"}
+          </button>
+          {status && (
+            <div className={`rounded-lg px-4 py-3 text-sm ring-1 ${status.includes("sent") ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-red-50 text-red-600 ring-red-100"}`}>
+              {status}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (signedUp) {
@@ -121,7 +182,18 @@ export default function AuthPanel() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700">Password</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-slate-700">Password</label>
+            {mode === "signin" && (
+              <button
+                type="button"
+                onClick={() => { setMode("forgot"); setStatus(null); }}
+                className="text-xs text-amber-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            )}
+          </div>
           <input
             className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition"
             value={password}
@@ -131,9 +203,22 @@ export default function AuthPanel() {
           />
         </div>
 
+        {mode === "signup" && (
+          <div>
+            <label className="text-sm font-medium text-slate-700">Confirm password</label>
+            <input
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              type="password"
+              placeholder="••••••••"
+            />
+          </div>
+        )}
+
         <button
           onClick={mode === "signin" ? signInWithPassword : signUp}
-          disabled={!email || !password || busy}
+          disabled={!email || !password || (mode === "signup" && !confirmPassword) || busy}
           className="w-full rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600 disabled:opacity-50 transition-colors"
         >
           {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
