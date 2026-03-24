@@ -185,6 +185,10 @@ export default function AccountPanel() {
   }
 
   async function save() {
+    if (!username.trim()) {
+      setStatus("A username is required.");
+      return;
+    }
     if (usernameStatus === "taken" || usernameStatus === "invalid") {
       setStatus("Please fix your username before saving.");
       return;
