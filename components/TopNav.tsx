@@ -90,7 +90,7 @@ export default function TopNav() {
       {signedIn ? (
         <>
           <Link
-            href="/account"
+            href="/profile"
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
           >
             <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full bg-slate-600">

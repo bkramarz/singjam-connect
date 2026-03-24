@@ -163,7 +163,7 @@ export default function SongSearch({ initialQuery = "", popularSongs = [], singi
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={q}
             onChange={(e) => { setQ(e.target.value); setDebouncing(!!e.target.value.trim()); }}
-            placeholder='Try: "wagon weel", "i once was lost", "beatls", "cohen", "shlomo carlebach"'
+            placeholder='Search by title, first line, recording artist, or composer'
           />
           <div className="mt-1 text-xs text-zinc-500">
             Tip: searching a person name returns songs connected via composer credits or recordings.
