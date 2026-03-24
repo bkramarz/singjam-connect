@@ -205,10 +205,11 @@ export default function AccountPanel() {
       ]).then(([{ data: profile }, { data: genreRows }]) => {
         const favorites: string[] = (profile as any)?.favorite_genres ?? [];
 
+        const meta = data.user.user_metadata ?? {};
         if (profile) {
-          setName(profile.display_name ?? "");
-          setLastName(profile.last_name ?? "");
-          setAvatarUrl(profile.avatar_url ?? null);
+          setName(profile.display_name ?? meta.given_name ?? "");
+          setLastName(profile.last_name ?? meta.family_name ?? "");
+          setAvatarUrl(profile.avatar_url ?? meta.avatar_url ?? null);
           setNeighborhood(profile.neighborhood ?? "");
           setSingingVoice(profile.singing_voice ? profile.singing_voice.split(",") : []);
           setInstrumentLevels((profile.instrument_levels as Record<string, string>) ?? {});
