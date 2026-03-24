@@ -9,7 +9,10 @@ const SEEDED_INSTRUMENTS = [
   "Guitar", "Electric Bass", "Upright Bass", "Piano/Keys", "Drums", "Percussion", "Violin/Fiddle", "Viola", "Cello",
   "Banjo", "Mandolin", "Ukulele", "Flute", "Clarinet", "Saxophone",
   "Trumpet", "Trombone", "Harmonica", "Accordion", "Harp", "Dobro",
-  "Pedal Steel", "Organ", "Synthesizer", "Other",
+  "Pedal Steel", "Organ", "Synthesizer",
+  "Sitar", "Tabla", "Harmonium", "Sarod", "Bansuri", "Veena", "Mridangam", "Sarangi", "Tanpura", "Dholak",
+  "Oud", "Darbuka", "Qanun", "Ney", "Riq", "Rebab", "Buzuq",
+  "Other",
 ];
 const INSTRUMENT_LEVELS = ["Beginner", "Intermediate", "Advanced", "Professional"] as const;
 const SINGING_OPTIONS = [
