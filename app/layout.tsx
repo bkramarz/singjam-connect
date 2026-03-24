@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import Link from "next/link";
 import TopNav from "@/components/TopNav";
 import BottomNav from "@/components/BottomNav";
+import MobileHeaderProfile from "@/components/MobileHeaderProfile";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="hidden sm:flex">
               <TopNav />
             </div>
+            <MobileHeaderProfile />
           </div>
         </header>
 
