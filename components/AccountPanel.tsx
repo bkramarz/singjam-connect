@@ -412,8 +412,9 @@ export default function AccountPanel() {
           <div className="mt-2 flex flex-wrap gap-2">
             {SINGING_OPTIONS.map((o) => {
               const selected = singingVoice.includes(o.value);
+              const hasVocal = singingVoice.includes("lead") || singingVoice.includes("backup");
               const doesntSing = singingVoice.includes("none");
-              const blocked = o.value !== "none" && doesntSing;
+              const blocked = (o.value === "none" && hasVocal) || (o.value !== "none" && doesntSing);
               return (
                 <button
                   key={o.value}
@@ -425,7 +426,7 @@ export default function AccountPanel() {
                     } else {
                       setSingingVoice(selected
                         ? singingVoice.filter((v) => v !== o.value)
-                        : [...singingVoice.filter((v) => v !== "none"), o.value]
+                        : [...singingVoice, o.value]
                       );
                     }
                   }}
@@ -440,9 +441,6 @@ export default function AccountPanel() {
               );
             })}
           </div>
-          {singingVoice.includes("none") && (
-            <div className="mt-1 text-xs text-zinc-400">Uncheck "I don't sing" to select a vocal role.</div>
-          )}
         </div>
 
         {/* Instruments */}
