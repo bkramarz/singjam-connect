@@ -20,7 +20,8 @@ export default async function SongsPage() {
         song_productions(productions(name)),
         song_genres(genres(name)),
         song_languages(languages(name)),
-        song_cultures(cultures(name))
+        song_cultures(cultures(name)),
+        song_themes(themes(name))
       `)
       .limit(2000),
     supabase.rpc("song_popularity_counts"),
@@ -54,6 +55,7 @@ export default async function SongsPage() {
       genres: ((s.song_genres ?? []) as any[]).map((g: any) => g.genres?.name as string).filter(Boolean) as string[],
       languages: ((s.song_languages ?? []) as any[]).map((l: any) => l.languages?.name as string).filter(Boolean) as string[],
       cultures: ((s.song_cultures ?? []) as any[]).map((c: any) => c.cultures?.name as string).filter(Boolean) as string[],
+      themes: ((s.song_themes ?? []) as any[]).map((t: any) => t.themes?.name as string).filter(Boolean) as string[],
       year: (() => {
         const firstRecording = ((s.song_recording_artists ?? []) as any[])
           .map((r: any) => r.year as number)

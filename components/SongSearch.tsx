@@ -30,6 +30,7 @@ type PopularSong = {
   productions: string[];
   genres: string[];
   languages: string[];
+  themes: string[];
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
@@ -70,6 +71,7 @@ export default function SongSearch({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
   const [selectedLanguages, setSelectedLanguages] = useState<Set<string>>(new Set());
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [selectedVibe, setSelectedVibe] = useState("");
   const [selectedTonality, setSelectedTonality] = useState("");
   const [selectedMeter, setSelectedMeter] = useState("");
@@ -82,15 +84,17 @@ export default function SongSearch({
   const filterOptions = useMemo(() => {
     const genres = Array.from(new Set(popularSongs.flatMap((s) => s.genres))).sort();
     const languages = Array.from(new Set(popularSongs.flatMap((s) => s.languages))).sort();
+    const themes = Array.from(new Set(popularSongs.flatMap((s) => s.themes))).sort();
     const vibes = Array.from(new Set(popularSongs.map((s) => s.vibe).filter(Boolean) as string[])).sort();
     const tonalities = Array.from(new Set(popularSongs.flatMap((s) => s.tonality ? s.tonality.split(/,\s*/) : []))).sort();
     const meters = Array.from(new Set(popularSongs.map((s) => s.meter).filter(Boolean) as string[])).sort();
-    return { genres, languages, vibes, tonalities, meters };
+    return { genres, languages, themes, vibes, tonalities, meters };
   }, [popularSongs]);
 
   const activeFilterCount =
     selectedGenres.size +
     selectedLanguages.size +
+    selectedThemes.size +
     (selectedVibe ? 1 : 0) +
     (selectedTonality ? 1 : 0) +
     (selectedMeter ? 1 : 0);
@@ -105,6 +109,7 @@ export default function SongSearch({
     if (!meta) return true; // unknown song — don't exclude
     if (selectedGenres.size > 0 && !meta.genres.some((g) => selectedGenres.has(g))) return false;
     if (selectedLanguages.size > 0 && !meta.languages.some((l) => selectedLanguages.has(l))) return false;
+    if (selectedThemes.size > 0 && !meta.themes.some((t) => selectedThemes.has(t))) return false;
     if (selectedVibe && meta.vibe !== selectedVibe) return false;
     if (selectedTonality && !meta.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
     if (selectedMeter && meta.meter !== selectedMeter) return false;
@@ -118,19 +123,19 @@ export default function SongSearch({
       return matchesFilters(s);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popularSongs, repertoire, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+  }, [popularSongs, repertoire, selectedGenres, selectedLanguages, selectedThemes, selectedVibe, selectedTonality, selectedMeter]);
 
   // Search results: apply active filters using the metadata map
   const filteredResults = useMemo(() => {
     if (activeFilterCount === 0) return results;
     return results.filter((r) => matchesFilters(songMetaMap.get(r.song_id)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results, songMetaMap, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter, activeFilterCount]);
+  }, [results, songMetaMap, selectedGenres, selectedLanguages, selectedThemes, selectedVibe, selectedTonality, selectedMeter, activeFilterCount]);
 
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+  }, [selectedGenres, selectedLanguages, selectedThemes, selectedVibe, selectedTonality, selectedMeter]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -255,9 +260,18 @@ export default function SongSearch({
     });
   }
 
+  function toggleTheme(t: string) {
+    setSelectedThemes((prev) => {
+      const next = new Set(prev);
+      next.has(t) ? next.delete(t) : next.add(t);
+      return next;
+    });
+  }
+
   function clearFilters() {
     setSelectedGenres(new Set());
     setSelectedLanguages(new Set());
+    setSelectedThemes(new Set());
     setSelectedVibe("");
     setSelectedTonality("");
     setSelectedMeter("");
@@ -354,6 +368,27 @@ export default function SongSearch({
                         }`}
                       >
                         {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filterOptions.themes.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Theme</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterOptions.themes.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => toggleTheme(t)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          selectedThemes.has(t)
+                            ? "border-amber-400 bg-amber-50 text-amber-700"
+                            : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                        }`}
+                      >
+                        {t}
                       </button>
                     ))}
                   </div>
