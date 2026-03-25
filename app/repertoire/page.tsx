@@ -31,6 +31,7 @@ type Item = {
   productions: string[];
   genres: string[];
   languages: string[];
+  themes: string[];
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
@@ -53,6 +54,7 @@ export default function RepertoirePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
   const [selectedLanguages, setSelectedLanguages] = useState<Set<string>>(new Set());
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [selectedVibe, setSelectedVibe] = useState("");
   const [selectedTonality, setSelectedTonality] = useState("");
   const [selectedMeter, setSelectedMeter] = useState("");
@@ -103,7 +105,8 @@ export default function RepertoirePage() {
               song_cultures ( cultures ( name ) ),
               song_productions ( productions ( name ) ),
               song_genres ( genres ( name ) ),
-              song_languages ( languages ( name ) )
+              song_languages ( languages ( name ) ),
+              song_themes ( themes ( name ) )
             )
           `
           )
@@ -145,6 +148,7 @@ export default function RepertoirePage() {
               productions: (r.songs.song_productions ?? []).map((p: any) => p.productions?.name).filter(Boolean),
               genres: (r.songs.song_genres ?? []).map((g: any) => g.genres?.name).filter(Boolean),
               languages: (r.songs.song_languages ?? []).map((l: any) => l.languages?.name).filter(Boolean),
+              themes: (r.songs.song_themes ?? []).map((t: any) => t.themes?.name).filter(Boolean),
             };
           });
 
@@ -166,15 +170,17 @@ export default function RepertoirePage() {
   const filterOptions = useMemo(() => {
     const genres = Array.from(new Set(items.flatMap((i) => i.genres))).sort();
     const languages = Array.from(new Set(items.flatMap((i) => i.languages))).sort();
+    const themes = Array.from(new Set(items.flatMap((i) => i.themes))).sort();
     const vibes = Array.from(new Set(items.map((i) => i.vibe).filter(Boolean) as string[])).sort();
     const tonalities = Array.from(new Set(items.flatMap((i) => i.tonality ? i.tonality.split(/,\s*/) : []))).sort();
     const meters = Array.from(new Set(items.map((i) => i.meter).filter(Boolean) as string[])).sort();
-    return { genres, languages, vibes, tonalities, meters };
+    return { genres, languages, themes, vibes, tonalities, meters };
   }, [items]);
 
   const activeFilterCount =
     selectedGenres.size +
     selectedLanguages.size +
+    selectedThemes.size +
     (selectedVibe ? 1 : 0) +
     (selectedTonality ? 1 : 0) +
     (selectedMeter ? 1 : 0);
@@ -184,13 +190,14 @@ export default function RepertoirePage() {
       if (confidenceFilter !== "all" && (it.confidence ?? "") !== confidenceFilter) return false;
       if (selectedGenres.size > 0 && !it.genres.some((g) => selectedGenres.has(g))) return false;
       if (selectedLanguages.size > 0 && !it.languages.some((l) => selectedLanguages.has(l))) return false;
+      if (selectedThemes.size > 0 && !it.themes.some((t) => selectedThemes.has(t))) return false;
       if (selectedVibe && it.vibe !== selectedVibe) return false;
       if (selectedTonality && !it.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
       if (selectedMeter && it.meter !== selectedMeter) return false;
       const hay = [it.title, it.display_artist ?? "", ...it.composers, ...it.productions, it.first_line ?? "", it.hook ?? "", it.notes ?? ""].join(" ");
       return matchesSearch(hay, query);
     });
-  }, [items, query, confidenceFilter, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+  }, [items, query, confidenceFilter, selectedGenres, selectedLanguages, selectedThemes, selectedVibe, selectedTonality, selectedMeter]);
 
   const confidenceLabel = (key: string | null) => {
     if (!key) return "Unrated";
@@ -233,9 +240,13 @@ export default function RepertoirePage() {
   function toggleLanguage(l: string) {
     setSelectedLanguages((prev) => { const next = new Set(prev); next.has(l) ? next.delete(l) : next.add(l); return next; });
   }
+  function toggleTheme(t: string) {
+    setSelectedThemes((prev) => { const next = new Set(prev); next.has(t) ? next.delete(t) : next.add(t); return next; });
+  }
   function clearFilters() {
     setSelectedGenres(new Set());
     setSelectedLanguages(new Set());
+    setSelectedThemes(new Set());
     setSelectedVibe("");
     setSelectedTonality("");
     setSelectedMeter("");
@@ -363,6 +374,27 @@ export default function RepertoirePage() {
                         }`}
                       >
                         {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filterOptions.themes.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Theme</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterOptions.themes.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => toggleTheme(t)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          selectedThemes.has(t)
+                            ? "border-amber-400 bg-amber-50 text-amber-700"
+                            : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                        }`}
+                      >
+                        {t}
                       </button>
                     ))}
                   </div>
