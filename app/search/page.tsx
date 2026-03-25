@@ -9,7 +9,7 @@ export default async function SongsPage() {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [songsRes, repertoireRes, profileRes] = await Promise.all([
+  const [songsRes, popularityRes, profileRes] = await Promise.all([
     supabase
       .from("songs")
       .select(`
@@ -20,19 +20,21 @@ export default async function SongsPage() {
         song_productions(productions(name)),
         song_genres(genres(name)),
         song_languages(languages(name)),
-        song_cultures(cultures(name)),
-        user_songs(count)
+        song_cultures(cultures(name))
       `)
       .limit(2000),
-    user
-      ? supabase.from("user_songs").select("song_id").eq("user_id", user.id)
-      : Promise.resolve({ data: [] }),
+    supabase.rpc("song_popularity_counts"),
     user
       ? supabase.from("profiles").select("singing_voice").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
 
-  const repertoireSongIds = new Set((repertoireRes.data ?? []).map((r: any) => r.song_id));
+  const popularityMap = new Map<string, number>(
+    ((popularityRes.data ?? []) as { song_id: string; user_count: number }[]).map(
+      (r) => [r.song_id, r.user_count]
+    )
+  );
+
   const singingVoice = (profileRes.data as any)?.singing_voice ?? null;
 
   const popularSongs = (songsRes.data ?? [])
@@ -61,9 +63,8 @@ export default async function SongsPage() {
         if (yearWritten && firstRecording) return Math.min(yearWritten, firstRecording);
         return yearWritten ?? firstRecording ?? null;
       })(),
-      popularity: ((s.user_songs as any[])[0]?.count ?? 0) as number,
+      popularity: popularityMap.get(s.id) ?? 0,
     }))
-    .filter((s) => !repertoireSongIds.has(s.song_id))
     .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
 
   return (
