@@ -53,7 +53,7 @@ export default async function JamsPage() {
                 className="block rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm hover:border-zinc-300 transition-colors"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="font-semibold text-zinc-900 capitalize">{jam.jam_type} jam</div>
+                  <div className="font-semibold text-zinc-900">{jam.jam_type}</div>
                   {startsAt && (
                     <span className="shrink-0 text-xs text-zinc-400">{startsAt}</span>
                   )}
