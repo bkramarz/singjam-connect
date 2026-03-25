@@ -29,25 +29,14 @@ type Item = {
   composers: string[];
   cultures: string[];
   productions: string[];
-};
-
-type UserSongRow = {
-  song_id: string;
-  confidence: string | null;
-  updated_at: string | null;
-  songs: {
-    title: string;
-    slug: string | null;
-    display_artist: string | null;
-    song_composers: { people: { name: string } | null }[];
-    song_lyricists: { people: { name: string } | null }[];
-    song_cultures: { cultures: { name: string } | null }[];
-    song_productions: { productions: { name: string } | null }[];
-  } | null;
+  genres: string[];
+  languages: string[];
+  vibe: string | null;
+  tonality: string | null;
+  meter: string | null;
 };
 
 export default function RepertoirePage() {
-  // IMPORTANT: keep Supabase client stable across renders
   const supabase = useMemo(() => supabaseBrowser(), []);
   const router = useRouter();
 
@@ -59,6 +48,14 @@ export default function RepertoirePage() {
   const [items, setItems] = useState<Item[]>([]);
   const [query, setQuery] = useState("");
   const [confidenceFilter, setConfidenceFilter] = useState<string>("all");
+
+  // Filter state
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
+  const [selectedLanguages, setSelectedLanguages] = useState<Set<string>>(new Set());
+  const [selectedVibe, setSelectedVibe] = useState("");
+  const [selectedTonality, setSelectedTonality] = useState("");
+  const [selectedMeter, setSelectedMeter] = useState("");
 
   const [isPending, startTransition] = useTransition();
 
@@ -98,10 +95,15 @@ export default function RepertoirePage() {
               first_line,
               hook,
               notes,
+              vibe,
+              tonality,
+              meter,
               song_composers ( people ( name ) ),
               song_lyricists ( people ( name ) ),
               song_cultures ( cultures ( name ) ),
-              song_productions ( productions ( name ) )
+              song_productions ( productions ( name ) ),
+              song_genres ( genres ( name ) ),
+              song_languages ( languages ( name ) )
             )
           `
           )
@@ -117,27 +119,32 @@ export default function RepertoirePage() {
           return;
         }
 
-        const typed = (rows ?? []) as unknown as UserSongRow[];
+        const typed = (rows ?? []) as any[];
         const flattened: Item[] = typed
           .filter((r) => r.songs)
           .map((r) => {
             const names = new Set<string>([
-              ...(r.songs!.song_composers ?? []).map((c) => c.people?.name).filter(Boolean) as string[],
-              ...(r.songs!.song_lyricists ?? []).map((l) => l.people?.name).filter(Boolean) as string[],
+              ...(r.songs.song_composers ?? []).map((c: any) => c.people?.name).filter(Boolean),
+              ...(r.songs.song_lyricists ?? []).map((l: any) => l.people?.name).filter(Boolean),
             ]);
             return {
               song_id: r.song_id,
-              slug: r.songs!.slug ?? null,
+              slug: r.songs.slug ?? null,
               confidence: r.confidence,
               updated_at: r.updated_at,
-              title: r.songs!.title,
-              display_artist: r.songs!.display_artist,
-              first_line: (r.songs as any).first_line ?? null,
-              hook: (r.songs as any).hook ?? null,
-              notes: (r.songs as any).notes ?? null,
+              title: r.songs.title,
+              display_artist: r.songs.display_artist,
+              first_line: r.songs.first_line ?? null,
+              hook: r.songs.hook ?? null,
+              notes: r.songs.notes ?? null,
+              vibe: r.songs.vibe ?? null,
+              tonality: r.songs.tonality ?? null,
+              meter: r.songs.meter ?? null,
               composers: [...names].sort(),
-              cultures: (r.songs!.song_cultures ?? []).map((c) => c.cultures?.name).filter(Boolean) as string[],
-              productions: (r.songs!.song_productions ?? []).map((p) => p.productions?.name).filter(Boolean) as string[],
+              cultures: (r.songs.song_cultures ?? []).map((c: any) => c.cultures?.name).filter(Boolean),
+              productions: (r.songs.song_productions ?? []).map((p: any) => p.productions?.name).filter(Boolean),
+              genres: (r.songs.song_genres ?? []).map((g: any) => g.genres?.name).filter(Boolean),
+              languages: (r.songs.song_languages ?? []).map((l: any) => l.languages?.name).filter(Boolean),
             };
           });
 
@@ -152,24 +159,38 @@ export default function RepertoirePage() {
     }
 
     load();
-
-    return () => {
-      cancelled = true;
-    };
-    // NOTE: supabase is memoized; we only depend on router
+    return () => { cancelled = true; };
   }, []);
+
+  // Derive filter options from loaded items
+  const filterOptions = useMemo(() => {
+    const genres = Array.from(new Set(items.flatMap((i) => i.genres))).sort();
+    const languages = Array.from(new Set(items.flatMap((i) => i.languages))).sort();
+    const vibes = Array.from(new Set(items.map((i) => i.vibe).filter(Boolean) as string[])).sort();
+    const tonalities = Array.from(new Set(items.map((i) => i.tonality).filter(Boolean) as string[])).sort();
+    const meters = Array.from(new Set(items.map((i) => i.meter).filter(Boolean) as string[])).sort();
+    return { genres, languages, vibes, tonalities, meters };
+  }, [items]);
+
+  const activeFilterCount =
+    selectedGenres.size +
+    selectedLanguages.size +
+    (selectedVibe ? 1 : 0) +
+    (selectedTonality ? 1 : 0) +
+    (selectedMeter ? 1 : 0);
 
   const filtered = useMemo(() => {
     return items.filter((it) => {
-      const matchesConfidence =
-        confidenceFilter === "all" ? true : (it.confidence ?? "") === confidenceFilter;
-
-      if (!matchesConfidence) return false;
-
+      if (confidenceFilter !== "all" && (it.confidence ?? "") !== confidenceFilter) return false;
+      if (selectedGenres.size > 0 && !it.genres.some((g) => selectedGenres.has(g))) return false;
+      if (selectedLanguages.size > 0 && !it.languages.some((l) => selectedLanguages.has(l))) return false;
+      if (selectedVibe && it.vibe !== selectedVibe) return false;
+      if (selectedTonality && it.tonality !== selectedTonality) return false;
+      if (selectedMeter && it.meter !== selectedMeter) return false;
       const hay = [it.title, it.display_artist ?? "", ...it.composers, ...it.productions, it.first_line ?? "", it.hook ?? "", it.notes ?? ""].join(" ");
       return matchesSearch(hay, query);
     });
-  }, [items, query, confidenceFilter]);
+  }, [items, query, confidenceFilter, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
 
   const confidenceLabel = (key: string | null) => {
     if (!key) return "Unrated";
@@ -178,26 +199,16 @@ export default function RepertoirePage() {
 
   const updateConfidence = (song_id: string, next: string) => {
     if (!userId) return;
-
     const prev = items.find((x) => x.song_id === song_id)?.confidence ?? null;
-
-    // optimistic UI
-    setItems((cur) =>
-      cur.map((it) => (it.song_id === song_id ? { ...it, confidence: next } : it))
-    );
-
+    setItems((cur) => cur.map((it) => (it.song_id === song_id ? { ...it, confidence: next } : it)));
     startTransition(async () => {
       const { error } = await supabase
         .from("user_songs")
         .update({ confidence: next })
         .eq("user_id", userId)
         .eq("song_id", song_id);
-
       if (error) {
-        // rollback
-        setItems((cur) =>
-          cur.map((it) => (it.song_id === song_id ? { ...it, confidence: prev } : it))
-        );
+        setItems((cur) => cur.map((it) => (it.song_id === song_id ? { ...it, confidence: prev } : it)));
         alert(error.message);
       }
     });
@@ -205,22 +216,30 @@ export default function RepertoirePage() {
 
   const removeFromRepertoire = (song_id: string) => {
     if (!userId) return;
-
     startTransition(async () => {
       const { error } = await supabase
         .from("user_songs")
         .delete()
         .eq("user_id", userId)
         .eq("song_id", song_id);
-
-      if (error) {
-        alert(error.message);
-        return;
-      }
-
+      if (error) { alert(error.message); return; }
       setItems((prev) => prev.filter((x) => x.song_id !== song_id));
     });
   };
+
+  function toggleGenre(g: string) {
+    setSelectedGenres((prev) => { const next = new Set(prev); next.has(g) ? next.delete(g) : next.add(g); return next; });
+  }
+  function toggleLanguage(l: string) {
+    setSelectedLanguages((prev) => { const next = new Set(prev); next.has(l) ? next.delete(l) : next.add(l); return next; });
+  }
+  function clearFilters() {
+    setSelectedGenres(new Set());
+    setSelectedLanguages(new Set());
+    setSelectedVibe("");
+    setSelectedTonality("");
+    setSelectedMeter("");
+  }
 
   if (loading) {
     return (
@@ -250,9 +269,9 @@ export default function RepertoirePage() {
       {items.length === 0 ? (
         <div className="rounded-md border p-4 text-sm">
           <div className="font-medium">Your repertoire is empty.</div>
-          <div className="mt-1 text-muted-foreground">Add songs from the Songs page.</div>
+          <div className="mt-1 text-muted-foreground">Add songs from the Song Library.</div>
           <Link
-            href="/songs"
+            href="/search"
             className="mt-3 inline-block rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
           >
             Browse Songs
@@ -261,35 +280,155 @@ export default function RepertoirePage() {
       ) : (
         <>
           <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Search</label>
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by title, songwriter, or artist…"
-                className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
-              />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1">Search</label>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by title, songwriter, or artist…"
+                  className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <select
+                value={confidenceFilter}
+                onChange={(e) => setConfidenceFilter(e.target.value)}
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm sm:w-56"
+              >
+                <option value="all">All confidence</option>
+                {CONFIDENCE_LEVELS.map((l) => (
+                  <option key={l.key} value={l.key}>{l.label}</option>
+                ))}
+              </select>
             </div>
+          </div>
 
-            <select
-              value={confidenceFilter}
-              onChange={(e) => setConfidenceFilter(e.target.value)}
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm sm:w-56"
+          {/* Filter bar */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {filtered.length} of {items.length}
+            </div>
+            <button
+              onClick={() => setFiltersOpen((o) => !o)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeFilterCount > 0
+                  ? "border-amber-400 bg-amber-50 text-amber-700"
+                  : "border-zinc-200 text-zinc-500 hover:bg-zinc-50"
+              }`}
             >
-              <option value="all">All confidence</option>
-              {CONFIDENCE_LEVELS.map((l) => (
-                <option key={l.key} value={l.key}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M1.5 3h13a.5.5 0 0 1 0 1H1.5a.5.5 0 0 1 0-1zm2 4h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1 0-1zm3 4h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z" />
+              </svg>
+              Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+            </button>
           </div>
 
-          <div className="text-sm text-muted-foreground">
-            Showing {filtered.length} of {items.length}
-          </div>
+          {/* Filter panel */}
+          {filtersOpen && (
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm space-y-4">
+              {filterOptions.genres.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Genre</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterOptions.genres.map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => toggleGenre(g)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          selectedGenres.has(g)
+                            ? "border-amber-400 bg-amber-50 text-amber-700"
+                            : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filterOptions.languages.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Language</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterOptions.languages.map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => toggleLanguage(l)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          selectedLanguages.has(l)
+                            ? "border-amber-400 bg-amber-50 text-amber-700"
+                            : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                {filterOptions.vibes.length > 0 && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Vibe</label>
+                    <select
+                      value={selectedVibe}
+                      onChange={(e) => setSelectedVibe(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions.vibes.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {filterOptions.tonalities.length > 0 && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Tonality</label>
+                    <select
+                      value={selectedTonality}
+                      onChange={(e) => setSelectedTonality(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions.tonalities.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {filterOptions.meters.length > 0 && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Meter</label>
+                    <select
+                      value={selectedMeter}
+                      onChange={(e) => setSelectedMeter(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions.meters.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearFilters}
+                  className="text-xs text-zinc-400 hover:text-zinc-600 underline"
+                >
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="divide-y rounded-md border">
             {filtered.length === 0 ? (
@@ -321,7 +460,16 @@ export default function RepertoirePage() {
                       <span className="rounded-full border px-2 py-0.5">
                         {confidenceLabel(it.confidence)}
                       </span>
-
+                      {it.genres.map((g) => (
+                        <span key={g} className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-zinc-500">
+                          {g}
+                        </span>
+                      ))}
+                      {it.languages.map((l) => (
+                        <span key={l} className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-blue-600">
+                          {l}
+                        </span>
+                      ))}
                     </div>
                   </div>
 

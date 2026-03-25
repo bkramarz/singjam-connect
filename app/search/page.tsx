@@ -13,14 +13,17 @@ export default async function SongsPage() {
     supabase
       .from("songs")
       .select(`
-        id, title, slug, display_artist, year_written,
+        id, title, slug, display_artist, year_written, vibe, tonality, meter,
         song_composers(people(name)),
         song_lyricists(people(name)),
         song_recording_artists(year),
         song_productions(productions(name)),
+        song_genres(genres(name)),
+        song_languages(languages(name)),
+        song_cultures(cultures(name)),
         user_songs(count)
       `)
-      .limit(500),
+      .limit(2000),
     user
       ? supabase.from("user_songs").select("song_id").eq("user_id", user.id)
       : Promise.resolve({ data: [] }),
@@ -38,11 +41,17 @@ export default async function SongsPage() {
       title: s.title as string,
       slug: (s.slug ?? null) as string | null,
       display_artist: (s.display_artist ?? null) as string | null,
+      vibe: (s.vibe ?? null) as string | null,
+      tonality: (s.tonality ?? null) as string | null,
+      meter: (s.meter ?? null) as string | null,
       productions: ((s.song_productions ?? []) as any[]).map((p: any) => p.productions?.name as string).filter(Boolean) as string[],
       composers: Array.from(new Set([
         ...((s.song_composers ?? []) as any[]).map((c: any) => c.people?.name as string),
         ...((s.song_lyricists ?? []) as any[]).map((c: any) => c.people?.name as string),
       ])).filter(Boolean).sort() as string[],
+      genres: ((s.song_genres ?? []) as any[]).map((g: any) => g.genres?.name as string).filter(Boolean) as string[],
+      languages: ((s.song_languages ?? []) as any[]).map((l: any) => l.languages?.name as string).filter(Boolean) as string[],
+      cultures: ((s.song_cultures ?? []) as any[]).map((c: any) => c.cultures?.name as string).filter(Boolean) as string[],
       year: (() => {
         const firstRecording = ((s.song_recording_artists ?? []) as any[])
           .map((r: any) => r.year as number)
@@ -55,8 +64,7 @@ export default async function SongsPage() {
       popularity: ((s.user_songs as any[])[0]?.count ?? 0) as number,
     }))
     .filter((s) => !repertoireSongIds.has(s.song_id))
-    .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title))
-    .slice(0, 30);
+    .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
 
   return (
     <div className="space-y-4">
