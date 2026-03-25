@@ -95,17 +95,37 @@ export default function SongSearch({
     (selectedTonality ? 1 : 0) +
     (selectedMeter ? 1 : 0);
 
-  // Apply filters to popular songs
+  // Lookup map for filter metadata on search results
+  const songMetaMap = useMemo(
+    () => new Map(popularSongs.map((s) => [s.song_id, s])),
+    [popularSongs]
+  );
+
+  function matchesFilters(meta: PopularSong | undefined): boolean {
+    if (!meta) return true; // unknown song — don't exclude
+    if (selectedGenres.size > 0 && !meta.genres.some((g) => selectedGenres.has(g))) return false;
+    if (selectedLanguages.size > 0 && !meta.languages.some((l) => selectedLanguages.has(l))) return false;
+    if (selectedVibe && meta.vibe !== selectedVibe) return false;
+    if (selectedTonality && !meta.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
+    if (selectedMeter && meta.meter !== selectedMeter) return false;
+    return true;
+  }
+
+  // Browse list: exclude repertoire songs and apply filters
   const filteredSongs = useMemo(() => {
     return popularSongs.filter((s) => {
-      if (selectedGenres.size > 0 && !s.genres.some((g) => selectedGenres.has(g))) return false;
-      if (selectedLanguages.size > 0 && !s.languages.some((l) => selectedLanguages.has(l))) return false;
-      if (selectedVibe && s.vibe !== selectedVibe) return false;
-      if (selectedTonality && !s.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
-      if (selectedMeter && s.meter !== selectedMeter) return false;
-      return true;
+      if (repertoire.has(s.song_id)) return false;
+      return matchesFilters(s);
     });
-  }, [popularSongs, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popularSongs, repertoire, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+
+  // Search results: apply active filters using the metadata map
+  const filteredResults = useMemo(() => {
+    if (activeFilterCount === 0) return results;
+    return results.filter((r) => matchesFilters(songMetaMap.get(r.song_id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, songMetaMap, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter, activeFilterCount]);
 
   // Reset visible count when filters change
   useEffect(() => {
@@ -264,49 +284,26 @@ export default function SongSearch({
         </div>
 
         <div className="text-xs text-zinc-500">
-          {loading || debouncing ? "Searching…" : q.trim() ? `${results.length} song(s)` : "Type to search"}
+          {loading || debouncing
+            ? "Searching…"
+            : q.trim()
+              ? `${filteredResults.length} song(s)${activeFilterCount > 0 && filteredResults.length < results.length ? ` (${results.length} before filters)` : ""}`
+              : "Type to search"}
         </div>
 
         {status ? <div className="text-sm text-zinc-700">{status}</div> : null}
       </div>
 
-      {/* Search results */}
-      {searching ? (
-        <div className="grid gap-2">
-          {results.map((r) => (
-            <SongCard
-              key={r.song_id}
-              songId={r.song_id}
-              title={r.title}
-              slug={r.slug}
-              displayArtist={r.display_artist}
-              composers={r.composers}
-              cultures={r.cultures ?? []}
-              productions={r.productions}
-              year={r.year}
-              aka={r.aka}
-              repertoire={repertoire}
-              pendingAddId={pendingAddId}
-              singingVoice={singingVoice}
-              setPendingAddId={setPendingAddId}
-              addSong={addSong}
-            />
-          ))}
-          {!loading && !debouncing && results.length === 0 ? (
-            <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
-              No songs found.
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {/* Filter bar */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
-              {filteredSongs.length === popularSongs.length
+      {/* Filter bar — shown in both search and browse modes */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
+            {searching
+              ? null
+              : filteredSongs.length === popularSongs.length
                 ? `All songs · ${popularSongs.length}`
                 : `Filtered · ${filteredSongs.length} of ${popularSongs.length}`}
-            </p>
+          </p>
             <button
               onClick={() => setFiltersOpen((o) => !o)}
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -428,55 +425,77 @@ export default function SongSearch({
             </div>
           )}
 
-          {/* Songs list */}
-          {popularSongs.length > 0 ? (
-            <div className="grid gap-2">
-              {visibleSongs.map((r) => (
-                <SongCard
-                  key={r.song_id}
-                  songId={r.song_id}
-                  title={r.title}
-                  slug={r.slug}
-                  displayArtist={r.display_artist}
-                  composers={r.composers}
-                  cultures={r.cultures}
-                  productions={r.productions}
-                  year={r.year}
-                  aka={null}
-                  repertoire={repertoire}
-                  pendingAddId={pendingAddId}
-                  singingVoice={singingVoice}
-                  setPendingAddId={setPendingAddId}
-                  addSong={addSong}
-                />
-              ))}
+        {/* Song list: search results or browse list */}
+        {searching ? (
+          <div className="grid gap-2">
+            {filteredResults.map((r) => (
+              <SongCard
+                key={r.song_id}
+                songId={r.song_id}
+                title={r.title}
+                slug={r.slug}
+                displayArtist={r.display_artist}
+                composers={r.composers}
+                cultures={r.cultures ?? []}
+                productions={r.productions}
+                year={r.year}
+                aka={r.aka}
+                repertoire={repertoire}
+                pendingAddId={pendingAddId}
+                singingVoice={singingVoice}
+                setPendingAddId={setPendingAddId}
+                addSong={addSong}
+              />
+            ))}
+            {!loading && !debouncing && filteredResults.length === 0 ? (
+              <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
+                {results.length > 0 ? "No results match the active filters." : "No songs found."}
+              </div>
+            ) : null}
+          </div>
+        ) : popularSongs.length > 0 ? (
+          <div className="grid gap-2">
+            {visibleSongs.map((r) => (
+              <SongCard
+                key={r.song_id}
+                songId={r.song_id}
+                title={r.title}
+                slug={r.slug}
+                displayArtist={r.display_artist}
+                composers={r.composers}
+                cultures={r.cultures}
+                productions={r.productions}
+                year={r.year}
+                aka={null}
+                repertoire={repertoire}
+                pendingAddId={pendingAddId}
+                singingVoice={singingVoice}
+                setPendingAddId={setPendingAddId}
+                addSong={addSong}
+              />
+            ))}
 
-              {/* Sentinel for infinite scroll */}
-              {visibleCount < filteredSongs.length && (
-                <div ref={sentinelRef} className="py-4 text-center text-xs text-zinc-400">
-                  Loading more…
-                </div>
-              )}
+            {/* Sentinel for infinite scroll */}
+            {visibleCount < filteredSongs.length && (
+              <div ref={sentinelRef} className="py-4 text-center text-xs text-zinc-400">
+                Loading more…
+              </div>
+            )}
 
-              {visibleCount >= filteredSongs.length && filteredSongs.length > PAGE_SIZE && (
-                <div className="py-4 text-center text-xs text-zinc-400">
-                  All {filteredSongs.length} songs shown
-                </div>
-              )}
+            {visibleCount >= filteredSongs.length && filteredSongs.length > PAGE_SIZE && (
+              <div className="py-4 text-center text-xs text-zinc-400">
+                All {filteredSongs.length} songs shown
+              </div>
+            )}
 
-              {filteredSongs.length === 0 && (
-                <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
-                  No songs match the selected filters.
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
-              Start typing to search the catalog.
-            </div>
-          )}
-        </div>
-      )}
+            {filteredSongs.length === 0 && (
+              <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
+                No songs match the selected filters.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
