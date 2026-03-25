@@ -298,11 +298,7 @@ export default function SongSearch({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
-            {searching
-              ? null
-              : filteredSongs.length === popularSongs.length
-                ? `All songs · ${popularSongs.length}`
-                : `Filtered · ${filteredSongs.length} of ${popularSongs.length}`}
+            {searching ? null : `${filteredSongs.length} song${filteredSongs.length === 1 ? "" : "s"}`}
           </p>
             <button
               onClick={() => setFiltersOpen((o) => !o)}
