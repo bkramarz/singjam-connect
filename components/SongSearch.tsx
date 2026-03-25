@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { formatComposers } from "@/lib/formatComposers";
 
 type Result = {
   song_id: string;
@@ -25,12 +26,16 @@ type PopularSong = {
   slug: string | null;
   display_artist: string | null;
   composers: string[];
+  cultures: string[];
   productions: string[];
+  genres: string[];
+  languages: string[];
+  vibe: string | null;
+  tonality: string | null;
+  meter: string | null;
   year: number | null;
   popularity: number;
 };
-
-import { formatComposers } from "@/lib/formatComposers";
 
 const LEVELS = [
   { key: "lead", label: "Lead" },
@@ -39,24 +44,111 @@ const LEVELS = [
   { key: "learn", label: "Learn" },
 ] as const;
 
-export default function SongSearch({ initialQuery = "", popularSongs = [], singingVoice = null }: { initialQuery?: string; popularSongs?: PopularSong[]; singingVoice?: string | null }) {
+const PAGE_SIZE = 20;
+
+export default function SongSearch({
+  initialQuery = "",
+  popularSongs = [],
+  singingVoice = null,
+}: {
+  initialQuery?: string;
+  popularSongs?: PopularSong[];
+  singingVoice?: string | null;
+}) {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
   const [q, setQ] = useState(initialQuery);
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
-
   const [status, setStatus] = useState<string | null>(null);
-  // song_id of the card currently showing the level picker, null otherwise
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
-
-  // Map of song_id → confidence for songs already in repertoire
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
-  const [visiblePopular, setVisiblePopular] = useState(popularSongs);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Filter state
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
+  const [selectedLanguages, setSelectedLanguages] = useState<Set<string>>(new Set());
+  const [selectedVibe, setSelectedVibe] = useState("");
+  const [selectedTonality, setSelectedTonality] = useState("");
+  const [selectedMeter, setSelectedMeter] = useState("");
 
   const debounceRef = useRef<number | null>(null);
   const [debouncing, setDebouncing] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Derive filter options from the songs data
+  const filterOptions = useMemo(() => {
+    const genres = Array.from(new Set(popularSongs.flatMap((s) => s.genres))).sort();
+    const languages = Array.from(new Set(popularSongs.flatMap((s) => s.languages))).sort();
+    const vibes = Array.from(new Set(popularSongs.map((s) => s.vibe).filter(Boolean) as string[])).sort();
+    const tonalities = Array.from(new Set(popularSongs.flatMap((s) => s.tonality ? s.tonality.split(/,\s*/) : []))).sort();
+    const meters = Array.from(new Set(popularSongs.map((s) => s.meter).filter(Boolean) as string[])).sort();
+    return { genres, languages, vibes, tonalities, meters };
+  }, [popularSongs]);
+
+  const activeFilterCount =
+    selectedGenres.size +
+    selectedLanguages.size +
+    (selectedVibe ? 1 : 0) +
+    (selectedTonality ? 1 : 0) +
+    (selectedMeter ? 1 : 0);
+
+  // Lookup map for filter metadata on search results
+  const songMetaMap = useMemo(
+    () => new Map(popularSongs.map((s) => [s.song_id, s])),
+    [popularSongs]
+  );
+
+  function matchesFilters(meta: PopularSong | undefined): boolean {
+    if (!meta) return true; // unknown song — don't exclude
+    if (selectedGenres.size > 0 && !meta.genres.some((g) => selectedGenres.has(g))) return false;
+    if (selectedLanguages.size > 0 && !meta.languages.some((l) => selectedLanguages.has(l))) return false;
+    if (selectedVibe && meta.vibe !== selectedVibe) return false;
+    if (selectedTonality && !meta.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
+    if (selectedMeter && meta.meter !== selectedMeter) return false;
+    return true;
+  }
+
+  // Browse list: exclude repertoire songs and apply filters
+  const filteredSongs = useMemo(() => {
+    return popularSongs.filter((s) => {
+      if (repertoire.has(s.song_id)) return false;
+      return matchesFilters(s);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popularSongs, repertoire, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+
+  // Search results: apply active filters using the metadata map
+  const filteredResults = useMemo(() => {
+    if (activeFilterCount === 0) return results;
+    return results.filter((r) => matchesFilters(songMetaMap.get(r.song_id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, songMetaMap, selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter, activeFilterCount]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [selectedGenres, selectedLanguages, selectedVibe, selectedTonality, selectedMeter]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredSongs.length));
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [filteredSongs.length]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -97,30 +189,24 @@ export default function SongSearch({ initialQuery = "", popularSongs = [], singi
       return;
     }
 
-    const songs = (data ?? []) as Result[];
-    if (!songs.length) { setResults([]); return; }
-
-    setResults(songs);
+    setResults((data ?? []) as Result[]);
   }
 
   useEffect(() => {
-    // Run immediately on first render if initialQuery exists
     if (initialQuery.trim()) runSearch(initialQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
-
     debounceRef.current = window.setTimeout(() => {
       setDebouncing(false);
       runSearch(q);
     }, 200);
-
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
   async function addSong(songId: string, level: string) {
@@ -149,13 +235,40 @@ export default function SongSearch({ initialQuery = "", popularSongs = [], singi
       setStatus(error.message);
     } else {
       setRepertoire((prev) => new Map(prev).set(songId, level));
-      setVisiblePopular((prev) => prev.filter((s) => s.song_id !== songId));
       setStatus(null);
     }
   }
 
+  function toggleGenre(g: string) {
+    setSelectedGenres((prev) => {
+      const next = new Set(prev);
+      next.has(g) ? next.delete(g) : next.add(g);
+      return next;
+    });
+  }
+
+  function toggleLanguage(l: string) {
+    setSelectedLanguages((prev) => {
+      const next = new Set(prev);
+      next.has(l) ? next.delete(l) : next.add(l);
+      return next;
+    });
+  }
+
+  function clearFilters() {
+    setSelectedGenres(new Set());
+    setSelectedLanguages(new Set());
+    setSelectedVibe("");
+    setSelectedTonality("");
+    setSelectedMeter("");
+  }
+
+  const visibleSongs = filteredSongs.slice(0, visibleCount);
+  const searching = q.trim().length > 0;
+
   return (
     <div className="space-y-3">
+      {/* Search box */}
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-3">
         <div>
           <label className="block text-sm font-medium">Search</label>
@@ -163,7 +276,7 @@ export default function SongSearch({ initialQuery = "", popularSongs = [], singi
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={q}
             onChange={(e) => { setQ(e.target.value); setDebouncing(!!e.target.value.trim()); }}
-            placeholder='Search by title, first line, recording artist, or composer'
+            placeholder="Search by title, first line, recording artist, or composer"
           />
           <div className="mt-1 text-xs text-zinc-500">
             Tip: searching a person name returns songs connected via composer credits or recordings.
@@ -171,210 +284,341 @@ export default function SongSearch({ initialQuery = "", popularSongs = [], singi
         </div>
 
         <div className="text-xs text-zinc-500">
-          {loading || debouncing ? "Searching…" : q.trim() ? `${results.length} song(s)` : "Type to search"}
+          {loading || debouncing
+            ? "Searching…"
+            : q.trim()
+              ? `${filteredResults.length} song(s)${activeFilterCount > 0 && filteredResults.length < results.length ? ` (${results.length} before filters)` : ""}`
+              : "Type to search"}
         </div>
 
         {status ? <div className="text-sm text-zinc-700">{status}</div> : null}
       </div>
 
-      {/* Results live ON the page */}
-      {q.trim() ? (
-        <div className="grid gap-2">
-          {results.map((r) => {
-            const inRepertoire = repertoire.has(r.song_id);
-            const confidence = repertoire.get(r.song_id);
-            const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
-            const picking = pendingAddId === r.song_id;
-            return (
-              <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
-                <div className="min-w-0">
-                  <div className="font-medium">
-                    <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
-                      {r.title}
-                    </Link>
-                    {r.composers.length > 0 && (
-                      <span className="ml-1 font-normal text-zinc-400">
-                        ({formatComposers(r.composers, r.cultures ?? [])})
-                      </span>
-                    )}
-                    {r.productions && r.productions.length > 0 ? (
-                      <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
-                    ) : r.display_artist ? (
-                      <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
-                    ) : null}
-                    {r.year && (
-                      <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
-                    )}
-                  </div>
-                  {r.aka && r.aka.length ? (
-                    <div className="text-xs text-zinc-500">aka: {r.aka.join(" · ")}</div>
-                  ) : null}
-                  {inRepertoire && (
-                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
-                      ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-                    </div>
-                  )}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {picking ? (
-                    <>
-                      {LEVELS.map((l) => {
-                        const blocked = l.key === "lead" && singingVoice === "none";
-                        return (
-                          <span key={l.key} className="relative group">
-                            <button
-                              disabled={blocked}
-                              className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
-                              onClick={() => !blocked && addSong(r.song_id, l.key)}
-                            >
-                              {l.label}
-                            </button>
-                            {blocked && (
-                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
-                                Only available for singers
-                              </span>
-                            )}
-                          </span>
-                        );
-                      })}
-                      <button
-                        className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                        onClick={() => setPendingAddId(null)}
-                      >
-                        ✕
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link
-                        href={`/songs/${r.slug ?? r.song_id}`}
-                        className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                      >
-                        View
-                      </Link>
-                      <button
-                        className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                        onClick={() => setPendingAddId(r.song_id)}
-                      >
-                        {inRepertoire ? "Update" : "Add"}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* Filter bar — shown in both search and browse modes */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
+            {searching
+              ? null
+              : filteredSongs.length === popularSongs.length
+                ? `All songs · ${popularSongs.length}`
+                : `Filtered · ${filteredSongs.length} of ${popularSongs.length}`}
+          </p>
+            <button
+              onClick={() => setFiltersOpen((o) => !o)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeFilterCount > 0
+                  ? "border-amber-400 bg-amber-50 text-amber-700"
+                  : "border-zinc-200 text-zinc-500 hover:bg-zinc-50"
+              }`}
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M1.5 3h13a.5.5 0 0 1 0 1H1.5a.5.5 0 0 1 0-1zm2 4h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1 0-1zm3 4h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z" />
+              </svg>
+              Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+            </button>
+          </div>
 
-          {!loading && !debouncing && results.length === 0 ? (
-            <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
-              No songs found.
-              <div className="mt-2 text-xs text-zinc-500">
-                Next step: add a “Request a song” button + moderation queue.
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {visiblePopular.length > 0 && (
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
-              Popular songs · Top 10
-            </p>
-          )}
-          {visiblePopular.length > 0 ? (
-            <div className="grid gap-2">
-              {visiblePopular.slice(0, 10).map((r) => {
-                const inRepertoire = repertoire.has(r.song_id);
-                const confidence = repertoire.get(r.song_id);
-                const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
-                const picking = pendingAddId === r.song_id;
-                return (
-                  <div key={r.song_id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
-                    <div className="min-w-0">
-                      <div className="font-medium">
-                        <Link href={`/songs/${r.slug ?? r.song_id}`} className="hover:text-amber-600">
-                          {r.title}
-                        </Link>
-                        {r.composers.length > 0 && (
-                          <span className="ml-1 font-normal text-zinc-400">
-                            ({r.composers.map((name) => {
-                              const parts = name.trim().split(" ");
-                              return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
-                            }).join(", ")})
-                          </span>
-                        )}
-                        {r.productions && r.productions.length > 0 ? (
-                          <span className="text-zinc-500 font-normal"> — <em>{r.productions.join(", ")}</em></span>
-                        ) : r.display_artist ? (
-                          <span className="text-zinc-500 font-normal"> — {r.display_artist}</span>
-                        ) : null}
-                        {r.year && (
-                          <span className="ml-1 font-normal text-zinc-400">({r.year})</span>
-                        )}
-                      </div>
-                      {inRepertoire && (
-                        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
-                          ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {picking ? (
-                        <>
-                          {LEVELS.map((l) => {
-                            const blocked = l.key === "lead" && singingVoice === "none";
-                            return (
-                              <span key={l.key} className="relative group">
-                                <button
-                                  disabled={blocked}
-                                  className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
-                                  onClick={() => !blocked && addSong(r.song_id, l.key)}
-                                >
-                                  {l.label}
-                                </button>
-                                {blocked && (
-                                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
-                                    Only available for singers
-                                  </span>
-                                )}
-                              </span>
-                            );
-                          })}
-                          <button
-                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                            onClick={() => setPendingAddId(null)}
-                          >
-                            ✕
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <Link
-                            href={`/songs/${r.slug ?? r.song_id}`}
-                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                          >
-                            View
-                          </Link>
-                          <button
-                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-                            onClick={() => setPendingAddId(r.song_id)}
-                          >
-                            {inRepertoire ? "Update" : "Add"}
-                          </button>
-                        </>
-                      )}
-                    </div>
+          {/* Filter panel */}
+          {filtersOpen && (
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm space-y-4">
+              {filterOptions.genres.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Genre</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterOptions.genres.map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => toggleGenre(g)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          selectedGenres.has(g)
+                            ? "border-amber-400 bg-amber-50 text-amber-700"
+                            : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
-              Start typing to search the catalog.
+                </div>
+              )}
+
+              {filterOptions.languages.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Language</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterOptions.languages.map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => toggleLanguage(l)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          selectedLanguages.has(l)
+                            ? "border-amber-400 bg-amber-50 text-amber-700"
+                            : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                {filterOptions.vibes.length > 0 && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Vibe</label>
+                    <select
+                      value={selectedVibe}
+                      onChange={(e) => setSelectedVibe(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions.vibes.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {filterOptions.tonalities.length > 0 && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Tonality</label>
+                    <select
+                      value={selectedTonality}
+                      onChange={(e) => setSelectedTonality(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions.tonalities.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {filterOptions.meters.length > 0 && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Meter</label>
+                    <select
+                      value={selectedMeter}
+                      onChange={(e) => setSelectedMeter(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions.meters.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearFilters}
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  ✕ Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
+                </button>
+              )}
             </div>
           )}
+
+        {/* Song list: search results or browse list */}
+        {searching ? (
+          <div className="grid gap-2">
+            {filteredResults.map((r) => (
+              <SongCard
+                key={r.song_id}
+                songId={r.song_id}
+                title={r.title}
+                slug={r.slug}
+                displayArtist={r.display_artist}
+                composers={r.composers}
+                cultures={r.cultures ?? []}
+                productions={r.productions}
+                year={r.year}
+                aka={r.aka}
+                repertoire={repertoire}
+                pendingAddId={pendingAddId}
+                singingVoice={singingVoice}
+                setPendingAddId={setPendingAddId}
+                addSong={addSong}
+              />
+            ))}
+            {!loading && !debouncing && filteredResults.length === 0 ? (
+              <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
+                {results.length > 0 ? "No results match the active filters." : "No songs found."}
+              </div>
+            ) : null}
+          </div>
+        ) : popularSongs.length > 0 ? (
+          <div className="grid gap-2">
+            {visibleSongs.map((r) => (
+              <SongCard
+                key={r.song_id}
+                songId={r.song_id}
+                title={r.title}
+                slug={r.slug}
+                displayArtist={r.display_artist}
+                composers={r.composers}
+                cultures={r.cultures}
+                productions={r.productions}
+                year={r.year}
+                aka={null}
+                repertoire={repertoire}
+                pendingAddId={pendingAddId}
+                singingVoice={singingVoice}
+                setPendingAddId={setPendingAddId}
+                addSong={addSong}
+              />
+            ))}
+
+            {/* Sentinel for infinite scroll */}
+            {visibleCount < filteredSongs.length && (
+              <div ref={sentinelRef} className="py-4 text-center text-xs text-zinc-400">
+                Loading more…
+              </div>
+            )}
+
+            {visibleCount >= filteredSongs.length && filteredSongs.length > PAGE_SIZE && (
+              <div className="py-4 text-center text-xs text-zinc-400">
+                All {filteredSongs.length} songs shown
+              </div>
+            )}
+
+            {filteredSongs.length === 0 && (
+              <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
+                No songs match the selected filters.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared song card ────────────────────────────────────────────────────────
+
+function SongCard({
+  songId,
+  title,
+  slug,
+  displayArtist,
+  composers,
+  cultures,
+  productions,
+  year,
+  aka,
+  repertoire,
+  pendingAddId,
+  singingVoice,
+  setPendingAddId,
+  addSong,
+}: {
+  songId: string;
+  title: string;
+  slug: string | null;
+  displayArtist: string | null;
+  composers: string[];
+  cultures: string[];
+  productions: string[];
+  year: number | null;
+  aka: string[] | null;
+  repertoire: Map<string, string>;
+  pendingAddId: string | null;
+  singingVoice: string | null;
+  setPendingAddId: (id: string | null) => void;
+  addSong: (songId: string, level: string) => void;
+}) {
+  const inRepertoire = repertoire.has(songId);
+  const confidence = repertoire.get(songId);
+  const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
+  const picking = pendingAddId === songId;
+  const href = `/songs/${slug ?? songId}`;
+
+  return (
+    <div className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
+      <div className="min-w-0">
+        <div className="font-medium">
+          <Link href={href} className="hover:text-amber-600">
+            {title}
+          </Link>
+          {composers.length > 0 && (
+            <span className="ml-1 font-normal text-zinc-400">
+              ({formatComposers(composers, cultures ?? [])})
+            </span>
+          )}
+          {productions && productions.length > 0 ? (
+            <span className="text-zinc-500 font-normal"> — <em>{productions.join(", ")}</em></span>
+          ) : displayArtist ? (
+            <span className="text-zinc-500 font-normal"> — {displayArtist}</span>
+          ) : null}
+          {year && (
+            <span className="ml-1 font-normal text-zinc-400">({year})</span>
+          )}
         </div>
-      )}
+        {aka && aka.length ? (
+          <div className="text-xs text-zinc-500">aka: {aka.join(" · ")}</div>
+        ) : null}
+        {inRepertoire && (
+          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+            ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
+          </div>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {picking ? (
+          <>
+            {LEVELS.map((l) => {
+              const blocked = l.key === "lead" && singingVoice === "none";
+              return (
+                <span key={l.key} className="relative group">
+                  <button
+                    disabled={blocked}
+                    className={`rounded-xl border px-3 py-1.5 text-sm ${
+                      blocked
+                        ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                        : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                    onClick={() => !blocked && addSong(songId, l.key)}
+                  >
+                    {l.label}
+                  </button>
+                  {blocked && (
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
+                      Only available for singers
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+            <button
+              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+              onClick={() => setPendingAddId(null)}
+            >
+              ✕
+            </button>
+          </>
+        ) : (
+          <>
+            <Link
+              href={href}
+              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+            >
+              View
+            </Link>
+            <button
+              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+              onClick={() => setPendingAddId(songId)}
+            >
+              {inRepertoire ? "Update" : "Add"}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

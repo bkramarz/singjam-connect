@@ -9,27 +9,32 @@ export default async function SongsPage() {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [songsRes, repertoireRes, profileRes] = await Promise.all([
+  const [songsRes, popularityRes, profileRes] = await Promise.all([
     supabase
       .from("songs")
       .select(`
-        id, title, slug, display_artist, year_written,
+        id, title, slug, display_artist, year_written, vibe, tonality, meter,
         song_composers(people(name)),
         song_lyricists(people(name)),
         song_recording_artists(year),
         song_productions(productions(name)),
-        user_songs(count)
+        song_genres(genres(name)),
+        song_languages(languages(name)),
+        song_cultures(cultures(name))
       `)
-      .limit(500),
-    user
-      ? supabase.from("user_songs").select("song_id").eq("user_id", user.id)
-      : Promise.resolve({ data: [] }),
+      .limit(2000),
+    supabase.rpc("song_popularity_counts"),
     user
       ? supabase.from("profiles").select("singing_voice").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
 
-  const repertoireSongIds = new Set((repertoireRes.data ?? []).map((r: any) => r.song_id));
+  const popularityMap = new Map<string, number>(
+    ((popularityRes.data ?? []) as { song_id: string; user_count: number }[]).map(
+      (r) => [r.song_id, r.user_count]
+    )
+  );
+
   const singingVoice = (profileRes.data as any)?.singing_voice ?? null;
 
   const popularSongs = (songsRes.data ?? [])
@@ -38,11 +43,17 @@ export default async function SongsPage() {
       title: s.title as string,
       slug: (s.slug ?? null) as string | null,
       display_artist: (s.display_artist ?? null) as string | null,
+      vibe: (s.vibe ?? null) as string | null,
+      tonality: (s.tonality ?? null) as string | null,
+      meter: (s.meter ?? null) as string | null,
       productions: ((s.song_productions ?? []) as any[]).map((p: any) => p.productions?.name as string).filter(Boolean) as string[],
       composers: Array.from(new Set([
         ...((s.song_composers ?? []) as any[]).map((c: any) => c.people?.name as string),
         ...((s.song_lyricists ?? []) as any[]).map((c: any) => c.people?.name as string),
       ])).filter(Boolean).sort() as string[],
+      genres: ((s.song_genres ?? []) as any[]).map((g: any) => g.genres?.name as string).filter(Boolean) as string[],
+      languages: ((s.song_languages ?? []) as any[]).map((l: any) => l.languages?.name as string).filter(Boolean) as string[],
+      cultures: ((s.song_cultures ?? []) as any[]).map((c: any) => c.cultures?.name as string).filter(Boolean) as string[],
       year: (() => {
         const firstRecording = ((s.song_recording_artists ?? []) as any[])
           .map((r: any) => r.year as number)
@@ -52,11 +63,9 @@ export default async function SongsPage() {
         if (yearWritten && firstRecording) return Math.min(yearWritten, firstRecording);
         return yearWritten ?? firstRecording ?? null;
       })(),
-      popularity: ((s.user_songs as any[])[0]?.count ?? 0) as number,
+      popularity: popularityMap.get(s.id) ?? 0,
     }))
-    .filter((s) => !repertoireSongIds.has(s.song_id))
-    .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title))
-    .slice(0, 30);
+    .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
 
   return (
     <div className="space-y-4">
