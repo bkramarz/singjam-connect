@@ -29,6 +29,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/songs/enrich" className="text-slate-600 hover:text-slate-900">
             Bulk enrich
           </Link>
+          <Link href="/admin/songs/import" className="text-slate-600 hover:text-slate-900">
+            Import CSV
+          </Link>
         </nav>
       </div>
       {children}

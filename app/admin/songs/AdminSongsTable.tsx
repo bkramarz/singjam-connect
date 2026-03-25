@@ -5,6 +5,8 @@ import { useRef, useState, useCallback, useMemo } from "react";
 import DeleteSongButton from "./DeleteSongButton";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 type Song = {
   id: string;
@@ -62,11 +64,15 @@ function missingFields(s: Song): string[] {
 }
 
 export default function AdminSongsTable({ songs }: { songs: Song[] }) {
+  const supabase = supabaseBrowser();
+  const router = useRouter();
   const equalWidth = 100 / COLUMNS.length;
   const [widths, setWidths] = useState<number[]>(COLUMNS.map(() => equalWidth));
   const [wrap, setWrap] = useState(true);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ col: SortCol; dir: SortDir }>({ col: "missing", dir: "desc" });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const dragging = useRef<{ col: number; startX: number; startW: number } | null>(null);
 
@@ -148,6 +154,36 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
     });
   }, [filtered, sort]);
 
+  const allVisibleIds = sorted.map((s) => s.id);
+  const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(id));
+
+  function toggleAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) allVisibleIds.forEach((id) => next.delete(id));
+      else allVisibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selected.size} song${selected.size === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setDeleting(true);
+    const { error } = await supabase.from("songs").delete().in("id", [...selected]);
+    setDeleting(false);
+    if (error) { alert(error.message); return; }
+    setSelected(new Set());
+    router.refresh();
+  }
+
   const cellClass = wrap ? "px-4 py-2.5 whitespace-normal" : "px-4 py-2.5 truncate";
 
   return (
@@ -203,7 +239,16 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden sm:flex justify-end">
+      <div className="hidden sm:flex items-center justify-between">
+        {selected.size > 0 ? (
+          <button
+            onClick={handleBulkDelete}
+            disabled={deleting}
+            className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-40"
+          >
+            {deleting ? "Deleting…" : `Delete ${selected.size} selected`}
+          </button>
+        ) : <div />}
         <button
           onClick={() => setWrap((w) => !w)}
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
@@ -218,6 +263,9 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
           </colgroup>
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-medium text-slate-500">
+              <th className="w-8 px-3 py-3">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-amber-500" />
+              </th>
               {COLUMNS.map((col, i) => (
                 <th
                   key={col.key}
@@ -253,7 +301,10 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
               const editHref = `/admin/songs/${s.slug ?? s.id}`;
 
               return (
-                <tr key={s.id} className="hover:bg-slate-50">
+                <tr key={s.id} className={`hover:bg-slate-50 ${selected.has(s.id) ? "bg-amber-50" : ""}`}>
+                  <td className="w-8 px-3 py-2.5">
+                    <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleOne(s.id)} className="accent-amber-500" />
+                  </td>
                   <td className={`${cellClass} font-medium`}>
                     <Link href={viewHref} className={`text-slate-900 hover:text-amber-600 hover:underline ${wrap ? "" : "truncate"} block`}>
                       {s.title}
