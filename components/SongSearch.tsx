@@ -83,7 +83,7 @@ export default function SongSearch({
     const genres = Array.from(new Set(popularSongs.flatMap((s) => s.genres))).sort();
     const languages = Array.from(new Set(popularSongs.flatMap((s) => s.languages))).sort();
     const vibes = Array.from(new Set(popularSongs.map((s) => s.vibe).filter(Boolean) as string[])).sort();
-    const tonalities = Array.from(new Set(popularSongs.map((s) => s.tonality).filter(Boolean) as string[])).sort();
+    const tonalities = Array.from(new Set(popularSongs.flatMap((s) => s.tonality ? s.tonality.split(/,\s*/) : []))).sort();
     const meters = Array.from(new Set(popularSongs.map((s) => s.meter).filter(Boolean) as string[])).sort();
     return { genres, languages, vibes, tonalities, meters };
   }, [popularSongs]);
@@ -101,7 +101,7 @@ export default function SongSearch({
       if (selectedGenres.size > 0 && !s.genres.some((g) => selectedGenres.has(g))) return false;
       if (selectedLanguages.size > 0 && !s.languages.some((l) => selectedLanguages.has(l))) return false;
       if (selectedVibe && s.vibe !== selectedVibe) return false;
-      if (selectedTonality && s.tonality !== selectedTonality) return false;
+      if (selectedTonality && !s.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
       if (selectedMeter && s.meter !== selectedMeter) return false;
       return true;
     });

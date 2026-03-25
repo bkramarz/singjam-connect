@@ -167,7 +167,7 @@ export default function RepertoirePage() {
     const genres = Array.from(new Set(items.flatMap((i) => i.genres))).sort();
     const languages = Array.from(new Set(items.flatMap((i) => i.languages))).sort();
     const vibes = Array.from(new Set(items.map((i) => i.vibe).filter(Boolean) as string[])).sort();
-    const tonalities = Array.from(new Set(items.map((i) => i.tonality).filter(Boolean) as string[])).sort();
+    const tonalities = Array.from(new Set(items.flatMap((i) => i.tonality ? i.tonality.split(/,\s*/) : []))).sort();
     const meters = Array.from(new Set(items.map((i) => i.meter).filter(Boolean) as string[])).sort();
     return { genres, languages, vibes, tonalities, meters };
   }, [items]);
@@ -185,7 +185,7 @@ export default function RepertoirePage() {
       if (selectedGenres.size > 0 && !it.genres.some((g) => selectedGenres.has(g))) return false;
       if (selectedLanguages.size > 0 && !it.languages.some((l) => selectedLanguages.has(l))) return false;
       if (selectedVibe && it.vibe !== selectedVibe) return false;
-      if (selectedTonality && it.tonality !== selectedTonality) return false;
+      if (selectedTonality && !it.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
       if (selectedMeter && it.meter !== selectedMeter) return false;
       const hay = [it.title, it.display_artist ?? "", ...it.composers, ...it.productions, it.first_line ?? "", it.hook ?? "", it.notes ?? ""].join(" ");
       return matchesSearch(hay, query);
