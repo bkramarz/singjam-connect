@@ -475,20 +475,10 @@ export async function GET(req: NextRequest) {
   const canonicalTitle = mbResult?.title ?? title;
   const canonicalArtist = mbResult?.display_artist ?? artist;
 
-  // composers mode: only MusicBrainz + SHS + Wikidata (skip Spotify, Last.fm, Genius)
+  // composers mode: MusicBrainz only (SHS returns 403, Wikidata adds ~3s with little gain)
   if (mode === "composers") {
-    const [secondhandsongs, wikidata] = await Promise.allSettled([
-      enrichSecondHandSongs(canonicalTitle, canonicalArtist),
-      enrichWikidata(canonicalTitle, canonicalArtist),
-    ]);
-    const shsVal = secondhandsongs.status === "fulfilled" ? secondhandsongs.value : null;
-    const wdVal = wikidata.status === "fulfilled" ? wikidata.value : null;
-    console.log("─── COMPOSER SOURCES ───────────────────────────────");
     console.log("MusicBrainz composers:", mbResult?.composers ?? "none");
-    console.log("SecondHandSongs composers:", shsVal?.composers ?? "none");
-    console.log("Wikidata composers:", wdVal?.composers ?? "none");
-    console.log("────────────────────────────────────────────────────");
-    return NextResponse.json({ musicbrainz: mbResult, secondhandsongs: shsVal, wikidata: wdVal });
+    return NextResponse.json({ musicbrainz: mbResult, secondhandsongs: null, wikidata: null });
   }
 
   // tags mode: only Spotify + Last.fm (skip SHS, Wikidata, Genius)
