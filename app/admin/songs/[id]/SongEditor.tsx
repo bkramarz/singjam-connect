@@ -316,7 +316,7 @@ export default function SongEditor({
     setError(null);
     try {
       const res = await fetch(
-        `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
+        `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}&mode=composers`
       );
       const data = await res.json();
       const mb = data.musicbrainz as { title?: string; display_artist?: string; composers?: string[]; lyricists?: string[]; topArtists?: { name: string; year: number | null }[] } | null;

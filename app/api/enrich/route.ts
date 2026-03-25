@@ -475,6 +475,27 @@ export async function GET(req: NextRequest) {
   const canonicalTitle = mbResult?.title ?? title;
   const canonicalArtist = mbResult?.display_artist ?? artist;
 
+  // composers mode: MusicBrainz only (SHS returns 403, Wikidata adds ~3s with little gain)
+  if (mode === "composers") {
+    console.log("MusicBrainz composers:", mbResult?.composers ?? "none");
+    return NextResponse.json({ musicbrainz: mbResult, secondhandsongs: null, wikidata: null });
+  }
+
+  // import mode: MusicBrainz + Genius + Spotify + Last.fm (skip SHS, Wikidata)
+  if (mode === "import") {
+    const [genius, spotify, lastfm] = await Promise.allSettled([
+      enrichGenius(canonicalTitle, canonicalArtist),
+      enrichSpotify(canonicalTitle, canonicalArtist),
+      enrichLastFm(canonicalTitle, canonicalArtist),
+    ]);
+    return NextResponse.json({
+      musicbrainz: mbResult,
+      genius: genius.status === "fulfilled" ? genius.value : null,
+      spotify: spotify.status === "fulfilled" ? spotify.value : null,
+      lastfm: lastfm.status === "fulfilled" ? lastfm.value : null,
+    });
+  }
+
   // tags mode: only Spotify + Last.fm (skip SHS, Wikidata, Genius)
   if (mode === "tags") {
     const [spotify, lastfm] = await Promise.allSettled([
