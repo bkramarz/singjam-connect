@@ -42,8 +42,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">{children}</main>
 
         <footer className="mx-auto hidden max-w-4xl px-6 py-10 sm:block">
-          <div className="border-t border-slate-200 pt-8 text-xs text-slate-400">
-            © {new Date().getFullYear()} SingJam · Community-first matching by repertoire
+          <div className="border-t border-slate-200 pt-8 text-xs text-slate-400 flex items-center justify-between gap-4">
+            <span>© {new Date().getFullYear()} SingJam · Community-first matching by repertoire</span>
+            <div className="flex gap-4">
+              <Link href="/privacy" className="hover:text-slate-600">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-slate-600">Terms of Service</Link>
+            </div>
           </div>
         </footer>
         </div>

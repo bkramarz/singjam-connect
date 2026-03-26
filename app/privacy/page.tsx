@@ -20,7 +20,7 @@ export default function PrivacyPage() {
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-zinc-900">3. Who can see your information</h2>
-        <p>Your name, profile photo, and repertoire are visible to other signed-in users of SingJam. Your email address is never shown publicly. Jam listings you post are visible to all visitors.</p>
+        <p>Your name, profile photo, and repertoire are visible to other signed-in users of SingJam. Your email address is never shown publicly. Public jam listings you post are visible to all logged-in users. Private jam listings are only visible to users you invite.</p>
       </section>
 
       <section className="space-y-2">
@@ -40,7 +40,7 @@ export default function PrivacyPage() {
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-zinc-900">7. Contact</h2>
-        <p>Questions about this policy? Email us at <a href="mailto:hello@singjam.org" className="text-amber-600 underline">hello@singjam.org</a>.</p>
+        <p>Questions about this policy? Email us at <a href="mailto:music@singjam.org" className="text-amber-600 underline">music@singjam.org</a>.</p>
       </section>
     </div>
   );
