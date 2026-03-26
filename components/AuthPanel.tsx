@@ -39,7 +39,12 @@ export default function AuthPanel() {
     setBusy(true);
     setStatus(null);
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+    });
 
     setBusy(false);
 
@@ -124,7 +129,7 @@ export default function AuthPanel() {
       <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
         <h2 className="text-xl font-semibold text-slate-900">Check your email</h2>
         <p className="mt-2 text-sm text-slate-500">
-          We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then come back to sign in.
+          If <strong>{email}</strong> isn't already registered, you'll receive a confirmation link shortly. Click it to activate your account. If you don't receive an email, you may already have an account — try signing in instead.
         </p>
         <button
           onClick={() => { setMode("signin"); setSignedUp(false); }}

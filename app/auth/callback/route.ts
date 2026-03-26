@@ -45,12 +45,36 @@ export async function GET(request: Request) {
     // Determine where to send the user
     let destination = next;
     if (!destination && sessionData?.user) {
+      const user = sessionData.user;
       const { data: profile } = await supabase
         .from("profiles")
         .select("username")
-        .eq("id", sessionData.user.id)
+        .eq("id", user.id)
         .single();
-      destination = !profile?.username ? "/account" : "/repertoire";
+
+      if (!profile) {
+        // New email/password user — create profile with a unique auto-generated username
+        const emailLocal = (user.email ?? "")
+          .split("@")[0]
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+          .slice(0, 15) || "singer";
+        let username = "";
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const candidate = `${emailLocal}${Math.floor(1000 + Math.random() * 9000)}`;
+          const { data: taken } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("username", candidate)
+            .maybeSingle();
+          if (!taken) { username = candidate; break; }
+        }
+        if (!username) username = `singer${Date.now()}`;
+        await supabase.from("profiles").insert({ id: user.id, username });
+        destination = "/account";
+      } else {
+        destination = !profile.username ? "/account" : "/repertoire";
+      }
     }
     destination = destination ?? "/account";
 
