@@ -15,7 +15,7 @@ export default function TermsPage() {
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-zinc-900">2. What SingJam is</h2>
-        <p>SingJam is a platform for musicians to discover jam partners based on shared repertoire and to organise informal music sessions. We do not facilitate commercial transactions or ticketed events.</p>
+        <p>SingJam is a platform for musicians to discover jam partners based on shared repertoire and to organize communal music sessions.</p>
       </section>
 
       <section className="space-y-2">
@@ -25,12 +25,12 @@ export default function TermsPage() {
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-zinc-900">4. Acceptable use</h2>
-        <p>You agree not to use SingJam to harass other users, post false or misleading information, or attempt to gain unauthorised access to any part of the Service. Jam listings must represent genuine, good-faith musical gatherings.</p>
+        <p>You agree not to use SingJam to harass other users, post false or misleading information, or attempt to gain unauthorized access to any part of the Service. Jam listings must represent genuine, good-faith musical gatherings.</p>
       </section>
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-zinc-900">5. Content</h2>
-        <p>You retain ownership of any content you post (profile information, jam listings). By posting, you grant SingJam a limited licence to display that content to other users of the Service. We reserve the right to remove content that violates these Terms.</p>
+        <p>You retain ownership of any content you post (profile information, jam listings). By posting, you grant SingJam a limited license to display that content to other users of the Service. We reserve the right to remove content that violates these Terms.</p>
       </section>
 
       <section className="space-y-2">
@@ -50,7 +50,7 @@ export default function TermsPage() {
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-zinc-900">9. Contact</h2>
-        <p>Questions? Email us at <a href="mailto:hello@singjam.org" className="text-amber-600 underline">hello@singjam.org</a>.</p>
+        <p>Questions? Email us at <a href="mailto:music@singjam.org" className="text-amber-600 underline">music@singjam.org</a>.</p>
       </section>
     </div>
   );
