@@ -7,3 +7,6 @@ supabase/.temp/
 
 # Local Netlify folder
 .netlify
+
+# Local account notes — never commit
+ACCOUNTS.md

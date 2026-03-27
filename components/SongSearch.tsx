@@ -470,6 +470,8 @@ export default function SongSearch({
                 productions={r.productions}
                 year={r.year}
                 aka={r.aka}
+                genres={r.genres ?? []}
+                languages={r.languages ?? []}
                 repertoire={repertoire}
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
@@ -497,6 +499,8 @@ export default function SongSearch({
                 productions={r.productions}
                 year={r.year}
                 aka={null}
+                genres={r.genres ?? []}
+                languages={r.languages ?? []}
                 repertoire={repertoire}
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
@@ -542,6 +546,8 @@ function SongCard({
   productions,
   year,
   aka,
+  genres,
+  languages,
   repertoire,
   pendingAddId,
   singingVoice,
@@ -557,6 +563,8 @@ function SongCard({
   productions: string[];
   year: number | null;
   aka: string[] | null;
+  genres: string[];
+  languages: string[];
   repertoire: Map<string, string>;
   pendingAddId: string | null;
   singingVoice: string | null;
@@ -599,6 +607,15 @@ function SongCard({
           </div>
         )}
       </div>
+      {genres.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {genres.map((g) => (
+            <span key={g} className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500">
+              {g}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-1.5">
         {picking ? (
           <>
