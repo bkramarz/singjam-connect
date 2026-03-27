@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { resend, FROM_ADDRESS } from "@/lib/resend";
+import { welcomeEmailHtml } from "@/emails/welcome";
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
@@ -52,6 +54,11 @@ export async function GET(request: Request) {
         .eq("id", user.id)
         .single();
 
+      const isFirstLogin =
+        !!user.created_at &&
+        !!user.last_sign_in_at &&
+        Math.abs(new Date(user.last_sign_in_at).getTime() - new Date(user.created_at).getTime()) < 10_000;
+
       if (!profile) {
         // New email/password user — create profile with a unique auto-generated username
         const emailLocal = (user.email ?? "")
@@ -71,8 +78,27 @@ export async function GET(request: Request) {
         }
         if (!username) username = `singer${Date.now()}`;
         await supabase.from("profiles").insert({ id: user.id, username });
+
+        if (user.email) {
+          resend.emails.send({
+            from: FROM_ADDRESS,
+            to: user.email,
+            subject: "Welcome to SingJam",
+            html: welcomeEmailHtml({ username }),
+          }).catch(() => {});
+        }
+
         destination = "/account";
       } else {
+        if (isFirstLogin && user.email) {
+          resend.emails.send({
+            from: FROM_ADDRESS,
+            to: user.email,
+            subject: "Welcome to SingJam",
+            html: welcomeEmailHtml({ username: profile.username ?? user.email }),
+          }).catch(() => {});
+        }
+
         destination = !profile.username ? "/account" : "/repertoire";
       }
     }
