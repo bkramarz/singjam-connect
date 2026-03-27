@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import ProfileDisplay from "@/components/ProfileDisplay";
+import { fetchProfileSongs } from "@/lib/fetchProfileSongs";
 
 export default async function UserProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
@@ -14,11 +15,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ us
 
   if (!profile) notFound();
 
-  const { data: shared } = await supabase.rpc("shared_songs_with", {
-    other_user_id: profile.id,
-  });
+  const { sharedSongs, additionalSongs } = await fetchProfileSongs(supabase, profile.id);
 
-  const sharedSongs = (shared ?? []) as { song_id: string; title: string; display_artist: string | null }[];
-
-  return <ProfileDisplay profile={profile as any} sharedSongs={sharedSongs} />;
+  return <ProfileDisplay profile={profile as any} sharedSongs={sharedSongs} additionalSongs={additionalSongs} />;
 }

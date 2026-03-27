@@ -25,10 +25,12 @@ export default function ProfileDisplay({
   profile,
   isOwner = false,
   sharedSongs,
+  additionalSongs,
 }: {
   profile: ProfileData;
   isOwner?: boolean;
-  sharedSongs?: { song_id: string; title: string; display_artist: string | null }[];
+  sharedSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
+  additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
 }) {
   const fullName = [profile.display_name, profile.last_name].filter(Boolean).join(" ");
   const singingVoices = profile.singing_voice
@@ -150,12 +152,13 @@ export default function ProfileDisplay({
         }, {});
         return (
           <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-medium uppercase tracking-wide text-zinc-400 mb-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-zinc-400 mb-1">
               Shared repertoire ({sharedSongs.length})
             </div>
+            <p className="text-xs font-semibold text-zinc-900 mb-3">Bold = can lead</p>
             <ul className="space-y-1">
               {sharedSongs.map((s) => (
-                <li key={s.song_id} className="text-sm text-zinc-700">
+                <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
                   {titleCounts[s.title] > 1 && s.display_artist
                     ? `${s.title} (${s.display_artist})`
                     : s.title}
@@ -165,6 +168,23 @@ export default function ProfileDisplay({
           </div>
         );
       })()}
+
+      {/* Additional songs */}
+      {additionalSongs && additionalSongs.length > 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-400 mb-1">
+            Additional songs ({additionalSongs.length})
+          </div>
+          <p className="text-xs font-semibold text-zinc-900 mb-3">Bold = can lead</p>
+          <ul className="space-y-1">
+            {additionalSongs.map((s) => (
+              <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
+                {s.title}{s.display_artist ? ` · ${s.display_artist}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2">
