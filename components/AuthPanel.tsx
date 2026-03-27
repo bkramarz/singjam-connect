@@ -40,7 +40,7 @@ export default function AuthPanel() {
     setStatus(null);
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: `${siteUrl}/auth/callback` },
@@ -50,7 +50,16 @@ export default function AuthPanel() {
 
     if (error) {
       setStatus(error.message);
+    } else if (data.session) {
+      // Email confirmation is disabled — user is signed in immediately
+      fetch("/api/email/welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }).catch(() => {});
+      router.push("/account");
     } else {
+      // Confirmation still required (fallback)
       setSignedUp(true);
     }
   }
