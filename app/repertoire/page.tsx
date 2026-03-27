@@ -10,7 +10,6 @@ import { matchesSearch } from "@/lib/normalizeSearch";
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
   { key: "support", label: "Support" },
-  { key: "follow", label: "Follow" },
   { key: "learn", label: "Learn" },
 ] as const;
 
