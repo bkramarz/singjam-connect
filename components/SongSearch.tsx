@@ -16,6 +16,8 @@ type Result = {
   composers: string[];
   cultures: string[];
   productions: string[];
+  genres?: string[];
+  languages?: string[];
   year: number | null;
   slug: string | null;
 };
