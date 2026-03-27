@@ -10,7 +10,6 @@ import { matchesSearch } from "@/lib/normalizeSearch";
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
   { key: "support", label: "Support" },
-  { key: "follow", label: "Follow" },
   { key: "learn", label: "Learn" },
 ] as const;
 
@@ -488,28 +487,17 @@ export default function RepertoirePage() {
                         : it.display_artist ?? "—"}
                     </div>
 
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span className="rounded-full border px-2 py-0.5">
-                        {confidenceLabel(it.confidence)}
-                      </span>
-                      {it.genres.map((g) => (
-                        <span key={g} className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-zinc-500">
-                          {g}
-                        </span>
-                      ))}
-                      {it.languages.map((l) => (
-                        <span key={l} className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-blue-600">
-                          {l}
-                        </span>
-                      ))}
-                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 sm:shrink-0">
                     <select
                       value={(it.confidence ?? "") as ConfidenceKey}
                       onChange={(e) => updateConfidence(it.song_id, e.target.value)}
-                      className="rounded-md border px-2 py-1.5 text-sm"
+                      className={`rounded-xl border px-2 py-1.5 text-sm ${
+                        it.confidence === "lead"
+                          ? "border-amber-400 bg-amber-100 text-amber-800 font-semibold"
+                          : "border-zinc-200"
+                      }`}
                       aria-label="Confidence"
                     >
                       {CONFIDENCE_LEVELS.map((l) => (
@@ -523,9 +511,16 @@ export default function RepertoirePage() {
                       ))}
                     </select>
 
+                    <Link
+                      href={`/songs/${it.slug ?? it.song_id}`}
+                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                    >
+                      View
+                    </Link>
+
                     <button
                       onClick={() => removeFromRepertoire(it.song_id)}
-                      className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                      className="rounded-xl border border-zinc-200 px-2 py-1 text-xs text-zinc-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition-colors"
                     >
                       Remove
                     </button>
