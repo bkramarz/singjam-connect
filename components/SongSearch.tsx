@@ -622,7 +622,7 @@ function SongCard({
         {picking ? (
           <>
             {LEVELS.map((l) => {
-              const blocked = l.key === "lead" && singingVoice === "none";
+              const blocked = l.key === "lead" && (!singingVoice || singingVoice === "none");
               return (
                 <span key={l.key} className="relative group">
                   <button

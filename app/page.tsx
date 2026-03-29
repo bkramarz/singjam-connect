@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { getSessionServer } from "@/lib/supabase/server";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getSessionServer();
   return (
     <div className="space-y-6">
       {/* Hero */}
@@ -20,18 +22,29 @@ export default function HomePage() {
             Discover new songs and new friends.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/search"
-              className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 transition-colors"
-            >
-              Add songs
-            </Link>
-            <Link
-              href="/jams"
-              className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100 transition-colors"
-            >
-              Join a jam
-            </Link>
+            {session ? (
+              <>
+                <Link
+                  href="/search"
+                  className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 transition-colors"
+                >
+                  Add songs
+                </Link>
+                <Link
+                  href="/jams"
+                  className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100 transition-colors"
+                >
+                  Join a jam
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/auth"
+                className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 transition-colors"
+              >
+                Get started
+              </Link>
+            )}
           </div>
         </div>
       </div>

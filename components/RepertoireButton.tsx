@@ -86,7 +86,7 @@ export default function RepertoireButton({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-slate-500">Add as:</span>
         {LEVELS.map((l) => {
-          const blocked = l.key === "lead" && singingVoice === "none";
+          const blocked = l.key === "lead" && (!singingVoice || singingVoice === "none");
           return (
             <span key={l.key} className="relative group">
               <button

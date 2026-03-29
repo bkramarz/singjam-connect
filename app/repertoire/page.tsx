@@ -504,9 +504,9 @@ export default function RepertoirePage() {
                         <option
                           key={l.key}
                           value={l.key}
-                          disabled={l.key === "lead" && singingVoice === "none"}
+                          disabled={l.key === "lead" && (!singingVoice || singingVoice === "none")}
                         >
-                          {l.key === "lead" && singingVoice === "none" ? "Lead (singers only)" : l.label}
+                          {l.key === "lead" && (!singingVoice || singingVoice === "none") ? "Lead (singers only)" : l.label}
                         </option>
                       ))}
                     </select>
