@@ -362,7 +362,7 @@ export default function AccountPanel() {
       setUsernameStatus("idle");
       window.dispatchEvent(new CustomEvent("profile-updated"));
     }
-    if (!error) router.push("/profile");
+    if (!error) router.push("/repertoire");
     else setStatus(error.message);
   }
 
@@ -502,6 +502,7 @@ export default function AccountPanel() {
               className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="First name"
             />
           </div>
           <div>
@@ -510,6 +511,7 @@ export default function AccountPanel() {
               className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
             />
           </div>
         </div>
@@ -548,6 +550,7 @@ export default function AccountPanel() {
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={neighborhood}
             onChange={(e) => setNeighborhood(e.target.value)}
+            placeholder="City"
           />
           <div className="mt-1 text-xs text-zinc-500">We only show neighborhood-level info until an invite is accepted.</div>
         </div>
