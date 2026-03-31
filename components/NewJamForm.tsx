@@ -1,47 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import LocationAutocomplete from "./LocationAutocomplete";
+import TagCombobox from "./TagCombobox";
 
 type LookupItem = { id: string; name: string };
-
-function MultiSelect({
-  label,
-  items,
-  selected,
-  onChange,
-}: {
-  label: string;
-  items: LookupItem[];
-  selected: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  function toggle(id: string) {
-    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
-  }
-  return (
-    <div>
-      <label className="block text-sm font-medium mb-1.5">{label}</label>
-      <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => toggle(item.id)}
-            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-              selected.includes(item.id)
-                ? "border-amber-500 bg-amber-50 text-amber-700 font-medium"
-                : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
-            }`}
-          >
-            {item.name}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function NewJamForm() {
   const supabase = supabaseBrowser();
@@ -60,8 +25,11 @@ export default function NewJamForm() {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [neighborhood, setNeighborhood] = useState("");
-  const [notes, setNotes] = useState("");
+  const [location, setLocation] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -84,6 +52,16 @@ export default function NewJamForm() {
     load();
   }, [supabase]);
 
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setImageFile(file);
+    if (file) {
+      setImagePreview(URL.createObjectURL(file));
+    } else {
+      setImagePreview(null);
+    }
+  }
+
   function toIso(d: string, t: string) {
     if (!d || !t) return null;
     return new Date(`${d}T${t}`).toISOString();
@@ -97,18 +75,33 @@ export default function NewJamForm() {
     const uid = userData.user?.id;
     if (!uid) { setBusy(false); setStatus("Not signed in."); return; }
 
-    const startsAt = toIso(date, startTime);
-    const endsAt = toIso(date, endTime);
+    // Upload image if provided
+    let imageUrl: string | null = null;
+    if (imageFile) {
+      const ext = imageFile.name.split(".").pop();
+      const path = `${uid}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("jam-images")
+        .upload(path, imageFile, { upsert: false });
+      if (uploadError) {
+        setBusy(false);
+        setStatus(`Image upload failed: ${uploadError.message}`);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("jam-images").getPublicUrl(path);
+      imageUrl = urlData.publicUrl;
+    }
 
     const { data, error } = await supabase.from("jams").insert({
       host_user_id: uid,
-      starts_at: startsAt,
-      ends_at: endsAt,
-      neighborhood: neighborhood || null,
-      notes: notes || null,
+      starts_at: toIso(date, startTime),
+      ends_at: toIso(date, endTime),
+      neighborhood: location || null,
+      notes: description || null,
       visibility,
       name: visibility === "official" && name ? name : null,
       tickets_url: visibility === "official" && ticketsUrl ? ticketsUrl : null,
+      image_url: imageUrl,
       created_at: new Date().toISOString(),
     }).select("id").single();
 
@@ -120,7 +113,6 @@ export default function NewJamForm() {
 
     const jamId = data.id;
 
-    // Insert genres and themes
     await Promise.all([
       selectedGenres.length > 0
         ? supabase.from("jam_genres").insert(selectedGenres.map((genre_id) => ({ jam_id: jamId, genre_id })))
@@ -201,7 +193,7 @@ export default function NewJamForm() {
       )}
 
       {/* Date and time */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         <label className="block text-sm font-medium">Date &amp; time</label>
         <input
           className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
@@ -231,46 +223,79 @@ export default function NewJamForm() {
         </div>
       </div>
 
-      {/* Venue */}
+      {/* Location */}
       <div>
-        <label className="block text-sm font-medium">{isOfficial ? "Venue / address" : "Neighborhood"}</label>
-        <input
-          className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-          value={neighborhood}
-          onChange={(e) => setNeighborhood(e.target.value)}
-          placeholder={isOfficial ? "e.g. 123 Main St, Berkeley" : "e.g. Berkeley, Oakland"}
+        <label className="block text-sm font-medium mb-1">{isOfficial ? "Venue / address" : "Neighborhood or venue"}</label>
+        <LocationAutocomplete
+          value={location}
+          onChange={setLocation}
+          placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Berkeley, Oakland"}
         />
       </div>
 
       {/* Genres */}
-      {genres.length > 0 && (
-        <MultiSelect
-          label="Genres"
-          items={genres}
-          selected={selectedGenres}
-          onChange={setSelectedGenres}
-        />
-      )}
+      <TagCombobox
+        label="Genres"
+        options={genres}
+        selected={selectedGenres}
+        onChange={setSelectedGenres}
+        placeholder="Search genres…"
+      />
 
       {/* Themes */}
-      {themes.length > 0 && (
-        <MultiSelect
-          label="Themes"
-          items={themes}
-          selected={selectedThemes}
-          onChange={setSelectedThemes}
-        />
-      )}
+      <TagCombobox
+        label="Themes"
+        options={themes}
+        selected={selectedThemes}
+        onChange={setSelectedThemes}
+        placeholder="Search themes…"
+      />
 
-      {/* Notes */}
+      {/* Description */}
       <div>
-        <label className="block text-sm font-medium">Notes</label>
+        <label className="block text-sm font-medium">Description</label>
         <textarea
           className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
           rows={3}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           placeholder="Vibe, what to bring, skill level, etc."
+        />
+      </div>
+
+      {/* Image upload */}
+      <div>
+        <label className="block text-sm font-medium mb-1.5">Cover image</label>
+        {imagePreview ? (
+          <div className="relative">
+            <img
+              src={imagePreview}
+              alt="Preview"
+              className="w-full rounded-xl object-cover max-h-48"
+            />
+            <button
+              type="button"
+              onClick={() => { setImageFile(null); setImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+              className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white hover:bg-black/70"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full rounded-xl border-2 border-dashed border-zinc-200 py-6 text-sm text-zinc-400 hover:border-zinc-300 hover:text-zinc-500 transition-colors"
+          >
+            Click to upload a cover image
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageChange}
         />
       </div>
 
@@ -282,7 +307,7 @@ export default function NewJamForm() {
             type="url"
             value={ticketsUrl}
             onChange={(e) => setTicketsUrl(e.target.value)}
-            placeholder="https://humanitix.com/..."
+            placeholder="https://humanitix.com/…"
           />
         </div>
       )}
@@ -292,7 +317,7 @@ export default function NewJamForm() {
         disabled={busy}
         className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
       >
-        {busy ? "Creating..." : "Create jam"}
+        {busy ? "Creating…" : "Create jam"}
       </button>
 
       {status && <p className="text-sm text-red-600">{status}</p>}
