@@ -1,20 +1,44 @@
 import { supabaseServer } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import JamCard from "@/components/JamCard";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const { data: jam } = await supabase.from("jams").select("*").eq("id", id).maybeSingle();
+
+  const { data: jam } = await supabase
+    .from("jams")
+    .select(`
+      id, name, visibility, starts_at, ends_at, neighborhood, notes, tickets_url, image_url,
+      profiles(display_name, username),
+      jam_genres(genres(name)),
+      jam_themes(themes(name))
+    `)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!jam) notFound();
+
+  const host = (jam.profiles as any);
+  const hostLabel = host?.display_name ?? host?.username ?? null;
+  const genres = ((jam.jam_genres ?? []) as any[]).map((g: any) => g.genres?.name).filter(Boolean) as string[];
+  const themes = ((jam.jam_themes ?? []) as any[]).map((t: any) => t.themes?.name).filter(Boolean) as string[];
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Jam</h1>
-      <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-2">
-        <div className="text-sm text-zinc-600">Type: <span className="text-zinc-900">{jam?.jam_type ?? "-"}</span></div>
-        <div className="text-sm text-zinc-600">When: <span className="text-zinc-900">{jam?.starts_at ? new Date(jam.starts_at).toLocaleString() : "TBD"}</span></div>
-        <div className="text-sm text-zinc-600">Neighborhood: <span className="text-zinc-900">{jam?.neighborhood ?? "-"}</span></div>
-        <div className="text-sm text-zinc-600">Notes: <span className="text-zinc-900">{jam?.notes ?? "—"}</span></div>
-      </div>
-      <div className="text-sm text-zinc-600">Next: add invited users, RSVP, and jam song list.</div>
-    </div>
+    <JamCard
+      jam={{
+        name: jam.name,
+        visibility: jam.visibility as any,
+        starts_at: jam.starts_at,
+        ends_at: jam.ends_at,
+        neighborhood: jam.neighborhood,
+        notes: jam.notes,
+        tickets_url: jam.tickets_url,
+        image_url: jam.image_url,
+        genres,
+        themes,
+        host: hostLabel,
+      }}
+    />
   );
 }

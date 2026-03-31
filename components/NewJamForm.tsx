@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import LocationAutocomplete from "./LocationAutocomplete";
 import TagCombobox from "./TagCombobox";
+import JamCard from "./JamCard";
 
 type LookupItem = { id: string; name: string };
 
@@ -13,7 +14,9 @@ export default function NewJamForm() {
   const router = useRouter();
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<"community" | "private" | "official">("community");
+  const [previewing, setPreviewing] = useState(false);
 
   const [genres, setGenres] = useState<LookupItem[]>([]);
   const [themes, setThemes] = useState<LookupItem[]>([]);
@@ -39,8 +42,9 @@ export default function NewJamForm() {
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData.user?.id;
       if (uid) {
-        const { data: p } = await supabase.from("profiles").select("is_admin").eq("id", uid).single();
+        const { data: p } = await supabase.from("profiles").select("is_admin, display_name, username").eq("id", uid).single();
         setIsAdmin(!!(p as any)?.is_admin);
+        setDisplayName((p as any)?.display_name ?? (p as any)?.username ?? null);
       }
       const [{ data: g }, { data: t }] = await Promise.all([
         supabase.from("genres").select("id, name").order("name"),
@@ -55,11 +59,7 @@ export default function NewJamForm() {
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     setImageFile(file);
-    if (file) {
-      setImagePreview(URL.createObjectURL(file));
-    } else {
-      setImagePreview(null);
-    }
+    setImagePreview(file ? URL.createObjectURL(file) : null);
   }
 
   function toIso(d: string, t: string) {
@@ -67,7 +67,7 @@ export default function NewJamForm() {
     return new Date(`${d}T${t}`).toISOString();
   }
 
-  async function createJam() {
+  async function publish() {
     setBusy(true);
     setStatus(null);
 
@@ -75,7 +75,6 @@ export default function NewJamForm() {
     const uid = userData.user?.id;
     if (!uid) { setBusy(false); setStatus("Not signed in."); return; }
 
-    // Upload image if provided
     let imageUrl: string | null = null;
     if (imageFile) {
       const ext = imageFile.name.split(".").pop();
@@ -127,6 +126,52 @@ export default function NewJamForm() {
 
   const isOfficial = visibility === "official";
 
+  const previewGenreNames = selectedGenres.map((id) => genres.find((g) => g.id === id)?.name).filter(Boolean) as string[];
+  const previewThemeNames = selectedThemes.map((id) => themes.find((t) => t.id === id)?.name).filter(Boolean) as string[];
+
+  if (previewing) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          This is a preview — your jam hasn't been published yet.
+        </div>
+        <JamCard
+          jam={{
+            name: isOfficial && name ? name : null,
+            visibility,
+            starts_at: toIso(date, startTime),
+            ends_at: toIso(date, endTime),
+            neighborhood: location || null,
+            notes: description || null,
+            tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
+            image_url: imagePreview,
+            genres: previewGenreNames,
+            themes: previewThemeNames,
+            host: displayName,
+          }}
+          actions={
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setPreviewing(false)}
+                className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+              >
+                ← Edit
+              </button>
+              <button
+                onClick={publish}
+                disabled={busy}
+                className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+              >
+                {busy ? "Publishing…" : "Publish jam"}
+              </button>
+            </div>
+          }
+        />
+        {status && <p className="text-sm text-red-600">{status}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-5">
       {/* Visibility */}
@@ -134,28 +179,14 @@ export default function NewJamForm() {
         <label className="block text-sm font-medium mb-1.5">Who can see this?</label>
         <div className="flex flex-col gap-2">
           <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="visibility"
-              value="community"
-              checked={visibility === "community"}
-              onChange={() => setVisibility("community")}
-              className="mt-0.5"
-            />
+            <input type="radio" name="visibility" value="community" checked={visibility === "community"} onChange={() => setVisibility("community")} className="mt-0.5" />
             <div>
               <span className="text-sm font-medium">Community jam</span>
               <p className="text-xs text-zinc-500">Visible to all SingJam members</p>
             </div>
           </label>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="visibility"
-              value="private"
-              checked={visibility === "private"}
-              onChange={() => setVisibility("private")}
-              className="mt-0.5"
-            />
+            <input type="radio" name="visibility" value="private" checked={visibility === "private"} onChange={() => setVisibility("private")} className="mt-0.5" />
             <div>
               <span className="text-sm font-medium">Private jam</span>
               <p className="text-xs text-zinc-500">Only visible to people you invite</p>
@@ -163,14 +194,7 @@ export default function NewJamForm() {
           </label>
           {isAdmin && (
             <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="radio"
-                name="visibility"
-                value="official"
-                checked={visibility === "official"}
-                onChange={() => setVisibility("official")}
-                className="mt-0.5"
-              />
+              <input type="radio" name="visibility" value="official" checked={visibility === "official"} onChange={() => setVisibility("official")} className="mt-0.5" />
               <div>
                 <span className="text-sm font-medium text-amber-600">Official SingJam event</span>
                 <p className="text-xs text-zinc-500">Public — visible to anyone on the site</p>
@@ -204,21 +228,11 @@ export default function NewJamForm() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-zinc-500 mb-1">Start time</label>
-            <input
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-            />
+            <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs text-zinc-500 mb-1">End time</label>
-            <input
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-            />
+            <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
       </div>
@@ -233,23 +247,8 @@ export default function NewJamForm() {
         />
       </div>
 
-      {/* Genres */}
-      <TagCombobox
-        label="Genres"
-        options={genres}
-        selected={selectedGenres}
-        onChange={setSelectedGenres}
-        placeholder="Search genres…"
-      />
-
-      {/* Themes */}
-      <TagCombobox
-        label="Themes"
-        options={themes}
-        selected={selectedThemes}
-        onChange={setSelectedThemes}
-        placeholder="Search themes…"
-      />
+      <TagCombobox label="Genres" options={genres} selected={selectedGenres} onChange={setSelectedGenres} placeholder="Search genres…" />
+      <TagCombobox label="Themes" options={themes} selected={selectedThemes} onChange={setSelectedThemes} placeholder="Search themes…" />
 
       {/* Description */}
       <div>
@@ -268,11 +267,7 @@ export default function NewJamForm() {
         <label className="block text-sm font-medium mb-1.5">Cover image</label>
         {imagePreview ? (
           <div className="relative">
-            <img
-              src={imagePreview}
-              alt="Preview"
-              className="w-full rounded-xl object-cover max-h-48"
-            />
+            <img src={imagePreview} alt="Preview" className="w-full rounded-xl object-cover max-h-48" />
             <button
               type="button"
               onClick={() => { setImageFile(null); setImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
@@ -290,13 +285,7 @@ export default function NewJamForm() {
             Click to upload a cover image
           </button>
         )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleImageChange}
-        />
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
       </div>
 
       {isOfficial && (
@@ -313,14 +302,11 @@ export default function NewJamForm() {
       )}
 
       <button
-        onClick={createJam}
-        disabled={busy}
-        className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+        onClick={() => setPreviewing(true)}
+        className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
       >
-        {busy ? "Creating…" : "Create jam"}
+        Preview
       </button>
-
-      {status && <p className="text-sm text-red-600">{status}</p>}
     </div>
   );
 }
