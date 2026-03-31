@@ -3,30 +3,15 @@
 import { useState, useRef, useEffect } from "react";
 
 type Suggestion = {
-  place_id: number;
-  display_name: string;
-  name: string;
-  address: {
-    road?: string;
-    house_number?: string;
-    city?: string;
-    town?: string;
-    suburb?: string;
-    state?: string;
+  placePrediction: {
+    placeId: string;
+    text: { text: string };
+    structuredFormat: {
+      mainText: { text: string };
+      secondaryText?: { text: string };
+    };
   };
 };
-
-function formatSuggestion(s: Suggestion): string {
-  const { name, address } = s;
-  const street = address.house_number && address.road
-    ? `${address.house_number} ${address.road}`
-    : address.road ?? null;
-  const city = address.city ?? address.town ?? address.suburb ?? null;
-  const parts = [name, street, city].filter(Boolean);
-  // Avoid "Foo, Foo" when name === street
-  const deduped = parts.filter((p, i) => i === 0 || p !== parts[i - 1]);
-  return deduped.join(", ");
-}
 
 export default function LocationAutocomplete({
   value,
@@ -58,31 +43,41 @@ export default function LocationAutocomplete({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
     debounceRef.current = setTimeout(async () => {
-      // Nominatim (OpenStreetMap) — free, no API key, great POI/venue/park coverage
-      const params = new URLSearchParams({
-        q,
-        format: "json",
-        addressdetails: "1",
-        limit: "6",
-        countrycodes: "us",
-        // viewbox biased to Bay Area but not bounded so broader searches still work
-        viewbox: "-122.6,38.1,-121.7,37.3",
-      });
+      const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
+      if (!key) return;
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-          headers: { "Accept-Language": "en" },
-        });
-        const json: Suggestion[] = await res.json();
-        setSuggestions(json);
+        const res = await fetch(
+          `https://places.googleapis.com/v1/places:autocomplete`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": key,
+            },
+            body: JSON.stringify({
+              input: q,
+              locationBias: {
+                circle: {
+                  center: { latitude: 37.8044, longitude: -122.2712 },
+                  radius: 50000,
+                },
+              },
+            }),
+          }
+        );
+        const json = await res.json();
+        setSuggestions(json.suggestions ?? []);
         setOpen(true);
       } catch {
         // silently ignore
       }
-    }, 400);
+    }, 300);
   }
 
-  function select(suggestion: Suggestion) {
-    onChange(formatSuggestion(suggestion));
+  function select(s: Suggestion) {
+    const { mainText, secondaryText } = s.placePrediction.structuredFormat;
+    const label = secondaryText ? `${mainText.text}, ${secondaryText.text}` : mainText.text;
+    onChange(label);
     setSuggestions([]);
     setOpen(false);
   }
@@ -99,30 +94,24 @@ export default function LocationAutocomplete({
       />
       {open && suggestions.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
-          {suggestions.map((s) => (
-            <li key={s.place_id}>
-              <button
-                type="button"
-                onMouseDown={() => select(s)}
-                className="w-full px-3 py-2.5 text-left text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                <span className="font-medium">{s.name}</span>
-                {s.address.road || s.address.city || s.address.town ? (
-                  <span className="text-zinc-400">
-                    {" — "}
-                    {[
-                      s.address.house_number && s.address.road
-                        ? `${s.address.house_number} ${s.address.road}`
-                        : s.address.road,
-                      s.address.city ?? s.address.town ?? s.address.suburb,
-                    ]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          ))}
+          {suggestions.map((s) => {
+            const { placeId, structuredFormat } = s.placePrediction;
+            const { mainText, secondaryText } = structuredFormat;
+            return (
+              <li key={placeId}>
+                <button
+                  type="button"
+                  onMouseDown={() => select(s)}
+                  className="w-full px-3 py-2.5 text-left text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                >
+                  <span className="font-medium">{mainText.text}</span>
+                  {secondaryText && (
+                    <span className="text-zinc-400"> — {secondaryText.text}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
