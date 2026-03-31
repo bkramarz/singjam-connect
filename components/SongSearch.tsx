@@ -619,6 +619,12 @@ function SongCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-1.5">
+        <Link
+          href={href}
+          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+        >
+          View
+        </Link>
         {picking ? (
           <>
             {LEVELS.map((l) => {
@@ -630,7 +636,7 @@ function SongCard({
                     className={`rounded-xl border px-3 py-1.5 text-sm ${
                       blocked
                         ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed"
-                        : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors delay-150"
                     }`}
                     onClick={() => !blocked && addSong(songId, l.key)}
                   >
@@ -653,12 +659,6 @@ function SongCard({
           </>
         ) : (
           <>
-            <Link
-              href={href}
-              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-            >
-              View
-            </Link>
             <button
               className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
               onClick={() => setPendingAddId(songId)}

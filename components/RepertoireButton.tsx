@@ -92,7 +92,7 @@ export default function RepertoireButton({
               <button
                 disabled={saving || blocked}
                 onClick={() => !blocked && save(l.key)}
-                className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40"}`}
+                className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 transition-colors delay-150"}`}
               >
                 {l.label}
               </button>

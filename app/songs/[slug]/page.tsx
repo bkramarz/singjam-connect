@@ -92,8 +92,8 @@ export default async function SongPage({
     .filter((x) => x.name)
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
   const altTitles = (song.song_alternate_titles as any[]).map((x) => x.title as string).filter(Boolean);
-  const genres = (song.song_genres as any[]).map((x) => x.genres?.name as string).filter(Boolean);
-  const themes = (song.song_themes as any[]).map((x) => x.themes?.name as string).filter(Boolean);
+  const genres = (song.song_genres as any[]).map((x) => x.genres?.name as string).filter(Boolean).sort();
+  const themes = (song.song_themes as any[]).map((x) => x.themes?.name as string).filter(Boolean).sort();
   const cultures = [...new Set((song.song_cultures as any[]).map((x) => x.cultures?.name as string).filter(Boolean))];
   const languages = (song.song_languages as any[]).map((x) => x.languages?.name as string).filter(Boolean);
 
