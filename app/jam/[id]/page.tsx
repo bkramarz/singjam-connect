@@ -11,7 +11,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
   const [jamRes, genresRes, themesRes] = await Promise.all([
     supabase
       .from("jams")
-      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, capacity, profiles(display_name, username)")
+      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, capacity, host_user_id")
       .eq("id", id)
       .maybeSingle(),
     supabase.from("jam_genres").select("genres(name)").eq("jam_id", id),
@@ -21,8 +21,14 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
   const jam = jamRes.data;
   if (!jam) notFound();
 
-  const host = (jam.profiles as any);
-  const hostLabel = host?.display_name ?? host?.username ?? null;
+  // Fetch host profile separately to avoid nested join nulling the whole row
+  const { data: hostProfile } = await supabase
+    .from("profiles")
+    .select("display_name, username")
+    .eq("id", jam.host_user_id)
+    .maybeSingle();
+
+  const hostLabel = (hostProfile as any)?.display_name ?? (hostProfile as any)?.username ?? null;
   const genres = ((genresRes.data ?? []) as any[]).map((g: any) => g.genres?.name).filter(Boolean) as string[];
   const themes = ((themesRes.data ?? []) as any[]).map((t: any) => t.themes?.name).filter(Boolean) as string[];
 
@@ -51,7 +57,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
 
   const isOfficial = jam.visibility === "official";
   const isAttending = rsvpStatus === "attending";
-  const hasFullAccess = isOfficial || isAttending || (jam as any).host_user_id === user?.id;
+  const hasFullAccess = isOfficial || isAttending || jam.host_user_id === user?.id;
 
   const showRsvp = !isOfficial && user;
 
