@@ -39,18 +39,12 @@ export default async function SongPage({
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
 
   const { data: { user } } = await supabase.auth.getUser();
-  const profileData = user
-    ? (await supabase.from("profiles").select("is_admin, singing_voice").eq("id", user.id).single()).data
-    : null;
-  const isAdmin = (profileData as any)?.is_admin ?? false;
-  const singingVoice = (profileData as any)?.singing_voice ?? null;
 
-  // Check if song is in user's repertoire (fetched after we know the song id below)
-  let userSongConfidence: string | null = null;
-
-  const { data: song } = await supabase
-    .from("songs")
-    .select(`
+  const [profileRes, songRes] = await Promise.all([
+    user
+      ? supabase.from("profiles").select("is_admin, singing_voice").eq("id", user.id).single()
+      : Promise.resolve({ data: null }),
+    supabase.from("songs").select(`
       id, title, slug, display_artist, first_line, hook, notes, genius_url, chord_chart_url, youtube_url, year, year_written, tonality, meter, vibe,
       song_composers(people(name)),
       song_lyricists(people(name)),
@@ -61,12 +55,17 @@ export default async function SongPage({
       song_cultures(context, cultures(name)),
       song_languages(languages(name)),
       song_productions(productions(name))
-    `)
-    .eq(isUuid ? "id" : "slug", slug)
-    .single();
+    `).eq(isUuid ? "id" : "slug", slug).single(),
+  ]);
+
+  const profileData = profileRes.data;
+  const song = songRes.data;
+  const isAdmin = (profileData as any)?.is_admin ?? false;
+  const singingVoice = (profileData as any)?.singing_voice ?? null;
 
   if (!song) notFound();
 
+  let userSongConfidence: string | null = null;
   if (user) {
     const { data: us } = await supabase
       .from("user_songs")

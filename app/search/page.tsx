@@ -9,7 +9,7 @@ export default async function SongsPage() {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [songsRes, popularityRes, profileRes] = await Promise.all([
+  const [songsRes, popularityRes, profileRes, repertoireRes] = await Promise.all([
     supabase
       .from("songs")
       .select(`
@@ -28,6 +28,9 @@ export default async function SongsPage() {
     user
       ? supabase.from("profiles").select("singing_voice").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
+    user
+      ? supabase.from("user_songs").select("song_id, confidence").eq("user_id", user.id)
+      : Promise.resolve({ data: null }),
   ]);
 
   const popularityMap = new Map<string, number>(
@@ -37,6 +40,7 @@ export default async function SongsPage() {
   );
 
   const singingVoice = (profileRes.data as any)?.singing_voice ?? null;
+  const initialRepertoire = (repertoireRes.data ?? []) as { song_id: string; confidence: string }[];
 
   const popularSongs = (songsRes.data ?? [])
     .map((s: any) => ({
@@ -75,7 +79,7 @@ export default async function SongsPage() {
       <p className="text-sm text-zinc-600">
         Search by title, recording artist, first line or composer.
       </p>
-      <SongSearch popularSongs={popularSongs} singingVoice={singingVoice} />
+      <SongSearch popularSongs={popularSongs} singingVoice={singingVoice} initialRepertoire={initialRepertoire} />
     </div>
   );
 }

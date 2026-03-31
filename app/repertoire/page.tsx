@@ -79,11 +79,9 @@ export default function RepertoirePage() {
         const uid = data.session.user.id;
         setUserId(uid);
 
-        supabase.from("profiles").select("singing_voice").eq("id", uid).single()
-          .then(({ data: p }) => setSingingVoice((p as any)?.singing_voice ?? null));
-
-        const { data: rows, error } = await supabase
-          .from("user_songs")
+        const [{ data: p }, { data: rows, error }] = await Promise.all([
+          supabase.from("profiles").select("singing_voice").eq("id", uid).single(),
+          supabase.from("user_songs")
           .select(
             `
             song_id,
@@ -110,7 +108,10 @@ export default function RepertoirePage() {
           `
           )
           .eq("user_id", uid)
-          .order("updated_at", { ascending: false });
+          .order("updated_at", { ascending: false }),
+        ]);
+
+        setSingingVoice((p as any)?.singing_voice ?? null);
 
         if (cancelled) return;
 

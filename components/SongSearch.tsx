@@ -52,10 +52,12 @@ export default function SongSearch({
   initialQuery = "",
   popularSongs = [],
   singingVoice = null,
+  initialRepertoire = [],
 }: {
   initialQuery?: string;
   popularSongs?: PopularSong[];
   singingVoice?: string | null;
+  initialRepertoire?: { song_id: string; confidence: string }[];
 }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
@@ -65,7 +67,9 @@ export default function SongSearch({
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
-  const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
+  const [repertoire, setRepertoire] = useState<Map<string, string>>(
+    new Map(initialRepertoire.map((r) => [r.song_id, r.confidence ?? ""]))
+  );
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Filter state
@@ -156,20 +160,6 @@ export default function SongSearch({
     return () => observer.disconnect();
   }, [filteredSongs.length]);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) return;
-      supabase
-        .from("user_songs")
-        .select("song_id, confidence")
-        .eq("user_id", data.session.user.id)
-        .then(({ data: rows }) => {
-          if (!rows) return;
-          setRepertoire(new Map(rows.map((r) => [r.song_id, r.confidence ?? ""])));
-        });
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function runSearch(query: string) {
     const trimmed = query.trim();
