@@ -1,6 +1,17 @@
+import Link from "next/link";
 import HomeButtons from "@/components/HomeButtons";
+import { supabaseServer } from "@/lib/supabase/server";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = await supabaseServer();
+  const { data: publicJams } = await supabase
+    .from("jams")
+    .select("id, name, jam_type, starts_at, neighborhood, tickets_url")
+    .eq("visibility", "public")
+    .gte("starts_at", new Date().toISOString())
+    .order("starts_at", { ascending: true })
+    .limit(3);
+
   return (
     <div className="space-y-6">
       {/* Hero */}
@@ -20,6 +31,50 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {publicJams && publicJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-700">Upcoming events</h2>
+          <div className="grid gap-3">
+            {(publicJams as any[]).map((jam) => {
+              const startsAt = jam.starts_at
+                ? new Date(jam.starts_at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                : null;
+              return (
+                <div
+                  key={jam.id}
+                  className="rounded-2xl border border-amber-200 bg-amber-50 p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="font-semibold text-zinc-900">{jam.name ?? jam.jam_type}</div>
+                    {startsAt && <span className="shrink-0 text-xs text-zinc-400">{startsAt}</span>}
+                  </div>
+                  {jam.neighborhood && (
+                    <p className="mt-1 text-sm text-zinc-500">{jam.neighborhood}</p>
+                  )}
+                  {jam.tickets_url ? (
+                    <a
+                      href={jam.tickets_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-block rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 transition-colors"
+                    >
+                      Get tickets ↗
+                    </a>
+                  ) : (
+                    <Link
+                      href={`/jam/${jam.id}`}
+                      className="mt-3 inline-block text-xs font-medium text-amber-600 hover:text-amber-500"
+                    >
+                      Learn more →
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

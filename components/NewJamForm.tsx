@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
@@ -9,12 +9,26 @@ const JAM_TYPES = ["Casual circle", "Structured rehearsal", "Spiritual circle", 
 export default function NewJamForm() {
   const supabase = supabaseBrowser();
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
+  const [name, setName] = useState<string>("");
+  const [ticketsUrl, setTicketsUrl] = useState<string>("");
   const [jamType, setJamType] = useState<(typeof JAM_TYPES)[number]>("Casual circle");
   const [startsAt, setStartsAt] = useState<string>("");
   const [neighborhood, setNeighborhood] = useState<string>("Berkeley");
   const [notes, setNotes] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id;
+      if (!uid) return;
+      supabase.from("profiles").select("is_admin").eq("id", uid).single().then(({ data: p }) => {
+        setIsAdmin(!!(p as any)?.is_admin);
+      });
+    });
+  }, [supabase]);
 
   async function createJam() {
     setBusy(true);
@@ -30,7 +44,9 @@ export default function NewJamForm() {
       starts_at: startsAt ? new Date(startsAt).toISOString() : null,
       neighborhood,
       notes: notes || null,
-      visibility: "radius",
+      visibility: isPublic ? "public" : "radius",
+      name: isPublic && name ? name : null,
+      tickets_url: isPublic && ticketsUrl ? ticketsUrl : null,
       created_at: new Date().toISOString(),
     }).select("*").single();
 
@@ -41,6 +57,30 @@ export default function NewJamForm() {
 
   return (
     <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-4">
+      {isAdmin && (
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            className="rounded border-zinc-300"
+          />
+          <span className="text-sm font-medium text-amber-600">Public SingJam event</span>
+        </label>
+      )}
+
+      {isPublic && (
+        <div>
+          <label className="block text-sm font-medium">Event name</label>
+          <input
+            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. SingJam Open Circle — April"
+          />
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium">Jam style</label>
         <select className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" value={jamType} onChange={(e) => setJamType(e.target.value as any)}>
@@ -54,14 +94,32 @@ export default function NewJamForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium">Neighborhood</label>
-        <input className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} />
+        <label className="block text-sm font-medium">{isPublic ? "Venue / address" : "Neighborhood"}</label>
+        <input
+          className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+          value={neighborhood}
+          onChange={(e) => setNeighborhood(e.target.value)}
+          placeholder={isPublic ? "e.g. 123 Main St, Berkeley" : "e.g. Berkeley"}
+        />
       </div>
 
       <div>
         <label className="block text-sm font-medium">Notes</label>
         <textarea className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional: vibe, roles needed, bring percussion, etc." />
       </div>
+
+      {isPublic && (
+        <div>
+          <label className="block text-sm font-medium">Tickets URL</label>
+          <input
+            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+            type="url"
+            value={ticketsUrl}
+            onChange={(e) => setTicketsUrl(e.target.value)}
+            placeholder="https://humanitix.com/..."
+          />
+        </div>
+      )}
 
       <button onClick={createJam} disabled={busy}
         className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50">
