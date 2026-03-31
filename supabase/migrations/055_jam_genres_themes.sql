@@ -1,10 +1,12 @@
 -- Migration 055: rework jams — genres/themes, visibility levels, end time
 
+-- Drop constraint first so we can migrate the data values
+alter table public.jams drop constraint if exists jams_visibility_check;
+
 -- Rename visibility values
 update public.jams set visibility = 'official' where visibility = 'public';
 update public.jams set visibility = 'community' where visibility = 'radius';
 
-alter table public.jams drop constraint if exists jams_visibility_check;
 alter table public.jams add constraint jams_visibility_check
   check (visibility in ('private', 'community', 'official'));
 
