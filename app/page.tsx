@@ -7,7 +7,7 @@ export default async function HomePage() {
   const { data: publicJams } = await supabase
     .from("jams")
     .select("id, name, jam_type, starts_at, neighborhood, tickets_url")
-    .eq("visibility", "public")
+    .eq("visibility", "official")
     .gte("starts_at", new Date().toISOString())
     .order("starts_at", { ascending: true })
     .limit(3);
