@@ -4,9 +4,9 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 export default async function HomePage() {
   const supabase = await supabaseServer();
-  const { data: publicJams } = await supabase
+  const { data: upcomingJams } = await supabase
     .from("jams")
-    .select("id, name, jam_type, starts_at, neighborhood, tickets_url")
+    .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url")
     .eq("visibility", "official")
     .gte("starts_at", new Date().toISOString())
     .order("starts_at", { ascending: true })
@@ -32,49 +32,55 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {publicJams && publicJams.length > 0 && (
+      {upcomingJams && upcomingJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-zinc-700">Upcoming events</h2>
           <div className="grid gap-3">
-            {(publicJams as any[]).map((jam) => {
-              const startsAt = jam.starts_at
-                ? new Date(jam.starts_at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-                : null;
-              return (
-                <div
-                  key={jam.id}
-                  className="rounded-2xl border border-amber-200 bg-amber-50 p-5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="font-semibold text-zinc-900">{jam.name ?? jam.jam_type}</div>
-                    {startsAt && <span className="shrink-0 text-xs text-zinc-400">{startsAt}</span>}
-                  </div>
-                  {jam.neighborhood && (
-                    <p className="mt-1 text-sm text-zinc-500">{jam.neighborhood}</p>
-                  )}
-                  {jam.tickets_url ? (
-                    <a
-                      href={jam.tickets_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-block rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 transition-colors"
-                    >
-                      Get tickets ↗
-                    </a>
-                  ) : (
-                    <Link
-                      href={`/jam/${jam.id}`}
-                      className="mt-3 inline-block text-xs font-medium text-amber-600 hover:text-amber-500"
-                    >
-                      Learn more →
-                    </Link>
-                  )}
-                </div>
-              );
-            })}
+            {(upcomingJams as any[]).map((jam) => (
+              <JamEventCard key={jam.id} jam={jam} />
+            ))}
           </div>
         </section>
       )}
     </div>
+  );
+}
+
+function JamEventCard({ jam }: { jam: any }) {
+  const start = jam.starts_at ? new Date(jam.starts_at) : null;
+  const month = start?.toLocaleDateString(undefined, { month: "short" });
+  const day = start?.getDate();
+  const timeStr = start
+    ? start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) +
+      (jam.ends_at ? ` – ${new Date(jam.ends_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "")
+    : null;
+
+  return (
+    <Link
+      href={`/jam/${jam.id}`}
+      className="group flex overflow-hidden rounded-2xl border border-amber-200 bg-white hover:border-amber-300 transition-colors"
+    >
+      {/* Cover image or date block */}
+      {jam.image_url ? (
+        <div className="shrink-0 w-24 sm:w-32 overflow-hidden">
+          <img src={jam.image_url} alt="" className="h-full w-full object-cover" />
+        </div>
+      ) : start ? (
+        <div className="shrink-0 w-20 flex flex-col items-center justify-center bg-amber-50 border-r border-amber-200 px-2 py-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">{month}</span>
+          <span className="text-3xl font-bold text-zinc-900 leading-none">{day}</span>
+        </div>
+      ) : null}
+
+      <div className="flex-1 min-w-0 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-500 mb-0.5">Official SingJam event</p>
+        <p className="font-semibold text-zinc-900 truncate">{jam.name ?? "SingJam event"}</p>
+        {timeStr && <p className="text-xs text-zinc-500 mt-0.5">{timeStr}</p>}
+        {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}
+        <span className="mt-2 inline-block text-xs font-medium text-amber-600 group-hover:text-amber-500">
+          {jam.tickets_url ? "Get tickets ↗" : "Learn more →"}
+        </span>
+      </div>
+    </Link>
   );
 }
