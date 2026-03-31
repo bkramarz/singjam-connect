@@ -10,12 +10,14 @@ export default function TagCombobox({
   options,
   selected,
   onChange,
+  optional,
 }: {
   label: string;
   placeholder?: string;
   options: Item[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  optional?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -55,7 +57,10 @@ export default function TagCombobox({
 
   return (
     <div>
-      <label className="block text-sm font-medium mb-1.5">{label}</label>
+      <label className="block text-sm font-medium mb-1.5">
+        {label}
+        {optional && <span className="ml-1.5 text-xs font-normal text-zinc-400">optional</span>}
+      </label>
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {selectedItems.map((item) => (

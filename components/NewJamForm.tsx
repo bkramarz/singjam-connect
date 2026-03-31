@@ -3,11 +3,21 @@
 import { useState, useEffect, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import LocationAutocomplete from "./LocationAutocomplete";
+import LocationAutocomplete, { type LocationValue } from "./LocationAutocomplete";
 import TagCombobox from "./TagCombobox";
 import JamCard from "./JamCard";
 
 type LookupItem = { id: string; name: string };
+
+function Label({ text, required, optional }: { text: string; required?: boolean; optional?: boolean }) {
+  return (
+    <label className="block text-sm font-medium">
+      {text}
+      {required && <span className="ml-1 text-red-500">*</span>}
+      {optional && <span className="ml-1.5 text-xs font-normal text-zinc-400">optional</span>}
+    </label>
+  );
+}
 
 export default function NewJamForm() {
   const supabase = supabaseBrowser();
@@ -17,6 +27,7 @@ export default function NewJamForm() {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<"community" | "private" | "official">("community");
   const [previewing, setPreviewing] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
 
   const [genres, setGenres] = useState<LookupItem[]>([]);
   const [themes, setThemes] = useState<LookupItem[]>([]);
@@ -28,7 +39,8 @@ export default function NewJamForm() {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState<LocationValue>({ fullAddress: "", neighborhood: "" });
+  const [capacity, setCapacity] = useState("");
   const [description, setDescription] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -67,6 +79,21 @@ export default function NewJamForm() {
     return new Date(`${d}T${t}`).toISOString();
   }
 
+  function validate() {
+    const errs: string[] = [];
+    if (!date) errs.push("Date is required.");
+    if (!startTime) errs.push("Start time is required.");
+    if (!location.fullAddress) errs.push("Location is required.");
+    return errs;
+  }
+
+  function goToPreview() {
+    const errs = validate();
+    if (errs.length > 0) { setErrors(errs); return; }
+    setErrors([]);
+    setPreviewing(true);
+  }
+
   async function publish() {
     setBusy(true);
     setStatus(null);
@@ -91,16 +118,21 @@ export default function NewJamForm() {
       imageUrl = urlData.publicUrl;
     }
 
+    const defaultName = displayName ? `${displayName}'s jam` : "Community jam";
+    const jamName = name.trim() || (visibility === "official" ? null : defaultName);
+
     const { data, error } = await supabase.from("jams").insert({
       host_user_id: uid,
+      name: jamName,
       starts_at: toIso(date, startTime),
       ends_at: toIso(date, endTime),
-      neighborhood: location || null,
+      neighborhood: location.neighborhood || location.fullAddress || null,
+      full_address: location.fullAddress || null,
       notes: description || null,
       visibility,
-      name: visibility === "official" && name ? name : null,
       tickets_url: visibility === "official" && ticketsUrl ? ticketsUrl : null,
       image_url: imageUrl,
+      capacity: capacity ? parseInt(capacity, 10) : null,
       created_at: new Date().toISOString(),
     }).select("id").single();
 
@@ -111,7 +143,6 @@ export default function NewJamForm() {
     }
 
     const jamId = data.id;
-
     await Promise.all([
       selectedGenres.length > 0
         ? supabase.from("jam_genres").insert(selectedGenres.map((genre_id) => ({ jam_id: jamId, genre_id })))
@@ -128,6 +159,8 @@ export default function NewJamForm() {
 
   const previewGenreNames = selectedGenres.map((id) => genres.find((g) => g.id === id)?.name).filter(Boolean) as string[];
   const previewThemeNames = selectedThemes.map((id) => themes.find((t) => t.id === id)?.name).filter(Boolean) as string[];
+  const defaultName = displayName ? `${displayName}'s jam` : "Community jam";
+  const previewName = name.trim() || (isOfficial ? null : defaultName);
 
   if (previewing) {
     return (
@@ -137,20 +170,23 @@ export default function NewJamForm() {
         </div>
         <JamCard
           jam={{
-            name: isOfficial && name ? name : null,
+            name: previewName,
             visibility,
             starts_at: toIso(date, startTime),
             ends_at: toIso(date, endTime),
-            neighborhood: location || null,
+            neighborhood: location.neighborhood || location.fullAddress || null,
+            full_address: location.fullAddress || null,
             notes: description || null,
             tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
             image_url: imagePreview,
             genres: previewGenreNames,
             themes: previewThemeNames,
             host: displayName,
+            capacity: capacity ? parseInt(capacity, 10) : null,
+            hasFullAccess: true, // show full address in preview
           }}
           actions={
-            <div className="flex gap-3 w-full">
+            <div className="flex gap-3">
               <button
                 onClick={() => setPreviewing(false)}
                 className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
@@ -176,8 +212,8 @@ export default function NewJamForm() {
     <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-5">
       {/* Visibility */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">Who can see this?</label>
-        <div className="flex flex-col gap-2">
+        <Label text="Who can see this?" />
+        <div className="mt-1.5 flex flex-col gap-2">
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="radio" name="visibility" value="community" checked={visibility === "community"} onChange={() => setVisibility("community")} className="mt-0.5" />
             <div>
@@ -204,21 +240,20 @@ export default function NewJamForm() {
         </div>
       </div>
 
-      {isOfficial && (
-        <div>
-          <label className="block text-sm font-medium">Event name</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. SingJam Open Circle — April"
-          />
-        </div>
-      )}
+      {/* Name */}
+      <div>
+        <Label text="Event name" optional={!isOfficial} required={isOfficial} />
+        <input
+          className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={isOfficial ? "e.g. SingJam Open Circle — April" : `Defaults to "${defaultName}"`}
+        />
+      </div>
 
       {/* Date and time */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium">Date &amp; time</label>
+        <Label text="Date" required />
         <input
           className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
           type="date"
@@ -227,11 +262,15 @@ export default function NewJamForm() {
         />
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">Start time</label>
+            <label className="block text-xs font-medium mb-1">
+              Start time <span className="text-red-500">*</span>
+            </label>
             <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">End time</label>
+            <label className="block text-xs font-medium mb-1">
+              End time <span className="ml-1 text-xs font-normal text-zinc-400">optional</span>
+            </label>
             <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
@@ -239,20 +278,36 @@ export default function NewJamForm() {
 
       {/* Location */}
       <div>
-        <label className="block text-sm font-medium mb-1">{isOfficial ? "Venue / address" : "Neighborhood or venue"}</label>
+        <Label text={isOfficial ? "Venue / address" : "Location"} required />
+        {!isOfficial && (
+          <p className="text-xs text-zinc-400 mt-0.5 mb-1">Exact address is only shared with people who RSVP</p>
+        )}
         <LocationAutocomplete
-          value={location}
+          value={location.fullAddress}
           onChange={setLocation}
-          placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Berkeley, Oakland"}
+          placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Cedar Rose Park, Berkeley"}
         />
       </div>
 
-      <TagCombobox label="Genres" options={genres} selected={selectedGenres} onChange={setSelectedGenres} placeholder="Search genres…" />
-      <TagCombobox label="Themes" options={themes} selected={selectedThemes} onChange={setSelectedThemes} placeholder="Search themes…" />
+      {/* Capacity */}
+      <div>
+        <Label text="Capacity" optional />
+        <input
+          className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+          type="number"
+          min="1"
+          value={capacity}
+          onChange={(e) => setCapacity(e.target.value)}
+          placeholder="Leave blank for unlimited"
+        />
+      </div>
+
+      <TagCombobox label="Genres" options={genres} selected={selectedGenres} onChange={setSelectedGenres} placeholder="Search genres…" optional />
+      <TagCombobox label="Themes" options={themes} selected={selectedThemes} onChange={setSelectedThemes} placeholder="Search themes…" optional />
 
       {/* Description */}
       <div>
-        <label className="block text-sm font-medium">Description</label>
+        <Label text="Description" optional />
         <textarea
           className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
           rows={3}
@@ -264,33 +319,35 @@ export default function NewJamForm() {
 
       {/* Image upload */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">Cover image</label>
-        {imagePreview ? (
-          <div className="relative">
-            <img src={imagePreview} alt="Preview" className="w-full rounded-xl object-cover max-h-48" />
+        <Label text="Cover image" optional />
+        <div className="mt-1">
+          {imagePreview ? (
+            <div className="relative">
+              <img src={imagePreview} alt="Preview" className="w-full rounded-xl object-cover max-h-48" />
+              <button
+                type="button"
+                onClick={() => { setImageFile(null); setImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white hover:bg-black/70"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
-              onClick={() => { setImageFile(null); setImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-              className="absolute top-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white hover:bg-black/70"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full rounded-xl border-2 border-dashed border-zinc-200 py-6 text-sm text-zinc-400 hover:border-zinc-300 hover:text-zinc-500 transition-colors"
             >
-              Remove
+              Click to upload a cover image
             </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full rounded-xl border-2 border-dashed border-zinc-200 py-6 text-sm text-zinc-400 hover:border-zinc-300 hover:text-zinc-500 transition-colors"
-          >
-            Click to upload a cover image
-          </button>
-        )}
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+          )}
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+        </div>
       </div>
 
       {isOfficial && (
         <div>
-          <label className="block text-sm font-medium">Tickets URL</label>
+          <Label text="Tickets URL" optional />
           <input
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             type="url"
@@ -301,8 +358,14 @@ export default function NewJamForm() {
         </div>
       )}
 
+      {errors.length > 0 && (
+        <ul className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 space-y-1">
+          {errors.map((e) => <li key={e} className="text-sm text-red-600">{e}</li>)}
+        </ul>
+      )}
+
       <button
-        onClick={() => setPreviewing(true)}
+        onClick={goToPreview}
         className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
       >
         Preview

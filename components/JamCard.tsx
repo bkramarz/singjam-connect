@@ -6,12 +6,15 @@ export type JamCardData = {
   starts_at: string | null;
   ends_at: string | null;
   neighborhood: string | null;
+  full_address: string | null;
   notes: string | null;
   tickets_url: string | null;
   image_url: string | null;
   genres: string[];
   themes: string[];
   host?: string | null;
+  capacity?: number | null;
+  hasFullAccess: boolean; // true if official, or user is attending
 };
 
 function formatDateRange(startsAt: string | null, endsAt: string | null): string | null {
@@ -25,10 +28,33 @@ function formatDateRange(startsAt: string | null, endsAt: string | null): string
   return `${dateStr} · ${startTime} – ${endTime}`;
 }
 
+function MapEmbed({ query, zoom }: { query: string; zoom: number }) {
+  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
+  if (!key || !query) return null;
+  const src = `https://www.google.com/maps/embed/v1/place?key=${key}&q=${encodeURIComponent(query)}&zoom=${zoom}`;
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-200" style={{ height: 220 }}>
+      <iframe
+        src={src}
+        width="100%"
+        height="100%"
+        style={{ border: 0 }}
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
+  );
+}
+
 export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: ReactNode }) {
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
   const dateStr = formatDateRange(jam.starts_at, jam.ends_at);
+
+  const showFullAddress = jam.hasFullAccess && jam.full_address;
+  const mapQuery = showFullAddress ? jam.full_address! : jam.neighborhood;
+  const mapZoom = showFullAddress ? 16 : 13;
 
   return (
     <div className="space-y-5 pb-10">
@@ -52,19 +78,36 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
       <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
         {dateStr && (
           <div className="flex items-start gap-3">
-            <span className="text-zinc-400 mt-0.5">📅</span>
+            <span className="text-zinc-400 shrink-0 mt-0.5">📅</span>
             <span className="text-sm text-zinc-700">{dateStr}</span>
           </div>
         )}
-        {jam.neighborhood && (
+        {(jam.neighborhood || jam.full_address) && (
           <div className="flex items-start gap-3">
-            <span className="text-zinc-400 mt-0.5">📍</span>
-            <span className="text-sm text-zinc-700">{jam.neighborhood}</span>
+            <span className="text-zinc-400 shrink-0 mt-0.5">📍</span>
+            <div>
+              {showFullAddress ? (
+                <span className="text-sm text-zinc-700">{jam.full_address}</span>
+              ) : (
+                <div>
+                  <span className="text-sm text-zinc-700">{jam.neighborhood}</span>
+                  {!isOfficial && (
+                    <p className="text-xs text-zinc-400 mt-0.5">Exact address shared after RSVP</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {jam.capacity !== null && jam.capacity !== undefined && (
+          <div className="flex items-start gap-3">
+            <span className="text-zinc-400 shrink-0 mt-0.5">👥</span>
+            <span className="text-sm text-zinc-700">Capacity: {jam.capacity}</span>
           </div>
         )}
         {tags.length > 0 && (
           <div className="flex items-start gap-3">
-            <span className="text-zinc-400 mt-0.5">🎵</span>
+            <span className="text-zinc-400 shrink-0 mt-0.5">🎵</span>
             <div className="flex flex-wrap gap-1.5">
               {tags.map((t) => (
                 <span key={t} className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-600">{t}</span>
@@ -73,6 +116,9 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
           </div>
         )}
       </div>
+
+      {/* Map */}
+      {mapQuery && <MapEmbed query={mapQuery} zoom={mapZoom} />}
 
       {/* Description */}
       {jam.notes && (
@@ -84,7 +130,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
 
       {/* Actions */}
       {(jam.tickets_url || actions) && (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
           {jam.tickets_url && (
             <a
               href={jam.tickets_url}
