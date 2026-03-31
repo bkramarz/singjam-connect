@@ -10,6 +10,7 @@ export type JamCardData = {
   notes: string | null;
   tickets_url: string | null;
   image_url: string | null;
+  image_focal_point?: string | null;
   genres: string[];
   themes: string[];
   host?: string | null;
@@ -56,12 +57,12 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
     <div className="pb-10">
       {/* Hero image */}
       {jam.image_url && (
-        <div className="-mx-4 -mt-4 sm:-mx-6 mb-6 overflow-hidden" style={{ maxHeight: 320 }}>
+        <div className="mb-6 overflow-hidden rounded-2xl" style={{ maxHeight: 320 }}>
           <img
             src={jam.image_url}
             alt={jam.name ?? "Event"}
             className="w-full object-cover"
-            style={{ maxHeight: 320 }}
+            style={{ maxHeight: 320, objectPosition: jam.image_focal_point ?? "50% 50%" }}
           />
         </div>
       )}

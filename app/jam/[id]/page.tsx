@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import JamCard from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
 
@@ -11,7 +12,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
   const [jamRes, genresRes, themesRes] = await Promise.all([
     supabase
       .from("jams")
-      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, capacity, host_user_id")
+      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id")
       .eq("id", id)
       .maybeSingle(),
     supabase.from("jam_genres").select("genres(name)").eq("jam_id", id),
@@ -60,6 +61,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
   const hasFullAccess = isOfficial || isAttending || jam.host_user_id === user?.id;
 
   const showRsvp = !isOfficial && user;
+  const isHost = jam.host_user_id === user?.id;
 
   return (
     <JamCard
@@ -73,6 +75,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
         notes: jam.notes,
         tickets_url: jam.tickets_url,
         image_url: (jam as any).image_url,
+        image_focal_point: (jam as any).image_focal_point,
         genres,
         themes,
         host: hostLabel,
@@ -80,15 +83,25 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
         hasFullAccess,
       }}
       actions={
-        showRsvp ? (
-          <JamRsvpButton
-            jamId={id}
-            initialStatus={rsvpStatus}
-            initialWaitlistPosition={waitlistPosition}
-            attendingCount={attendingCount}
-            capacity={(jam as any).capacity}
-          />
-        ) : undefined
+        <>
+          {showRsvp && (
+            <JamRsvpButton
+              jamId={id}
+              initialStatus={rsvpStatus}
+              initialWaitlistPosition={waitlistPosition}
+              attendingCount={attendingCount}
+              capacity={(jam as any).capacity}
+            />
+          )}
+          {isHost && (
+            <Link
+              href={`/jam/${id}/edit`}
+              className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+            >
+              Edit
+            </Link>
+          )}
+        </>
       }
     />
   );
