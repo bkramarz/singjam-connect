@@ -16,6 +16,7 @@ export default function FocalPointPicker({
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const offsetRef = useRef({ x: 0, y: 0 });
   const [bounds, setBounds] = useState({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
   const [imgStyle, setImgStyle] = useState<React.CSSProperties>({ width: "100%" });
   const isDragging = useRef(false);
@@ -47,10 +48,12 @@ export default function FocalPointPicker({
     const [xStr, yStr] = focalPoint.split(" ");
     const xPct = parseFloat(xStr) / 100;
     const yPct = parseFloat(yStr) / 100;
-    setOffset({
+    const initial = {
       x: Math.max(b.minX, Math.min(b.maxX, -(xPct * overflowX))),
       y: Math.max(b.minY, Math.min(b.maxY, -(yPct * overflowY))),
-    });
+    };
+    offsetRef.current = initial;
+    setOffset(initial);
   }
 
   function emitChange(newOffset: { x: number; y: number }, b: typeof bounds) {
@@ -76,14 +79,13 @@ export default function FocalPointPicker({
   }, [src]);
 
   function applyDelta(dx: number, dy: number) {
-    setOffset((prev) => {
-      const next = {
-        x: Math.max(bounds.minX, Math.min(bounds.maxX, prev.x + dx)),
-        y: Math.max(bounds.minY, Math.min(bounds.maxY, prev.y + dy)),
-      };
-      emitChange(next, bounds);
-      return next;
-    });
+    const next = {
+      x: Math.max(bounds.minX, Math.min(bounds.maxX, offsetRef.current.x + dx)),
+      y: Math.max(bounds.minY, Math.min(bounds.maxY, offsetRef.current.y + dy)),
+    };
+    offsetRef.current = next;
+    setOffset(next);
+    emitChange(next, bounds);
   }
 
   function onMouseDown(e: React.MouseEvent) {
