@@ -35,15 +35,24 @@ export default function InviteToJamButton({ inviteeUserId }: { inviteeUserId: st
     if (!user) return;
 
     const now = new Date().toISOString();
-    const { data } = await supabase
-      .from("jams")
-      .select("id, name, starts_at")
-      .eq("host_user_id", user.id)
-      .neq("visibility", "official")
-      .gte("starts_at", now)
-      .order("starts_at", { ascending: true })
-      .limit(10);
+    const [{ data }, { data: invites }] = await Promise.all([
+      supabase
+        .from("jams")
+        .select("id, name, starts_at")
+        .eq("host_user_id", user.id)
+        .neq("visibility", "official")
+        .gte("starts_at", now)
+        .order("starts_at", { ascending: true })
+        .limit(10),
+      supabase
+        .from("jam_invites")
+        .select("jam_id")
+        .eq("invited_user_id", inviteeUserId)
+        .neq("status", "declined"),
+    ]);
 
+    const alreadyInvited = new Set((invites ?? []).map((i: any) => i.jam_id));
+    setSent(alreadyInvited);
     setJams((data as JamOption[]) ?? []);
   }
 
@@ -80,7 +89,7 @@ export default function InviteToJamButton({ inviteeUserId }: { inviteeUserId: st
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1.5 w-64 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+        <div className="absolute left-0 bottom-0 z-20 w-64 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
           {jams === null ? (
             <p className="px-4 py-3 text-sm text-zinc-400">Loading…</p>
           ) : jams.length === 0 ? (

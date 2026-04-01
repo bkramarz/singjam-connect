@@ -8,6 +8,7 @@ import JamInviteResponse from "@/components/JamInviteResponse";
 import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
 import JamSharedSongs from "@/components/JamSharedSongs";
+import JamAttendeeList from "@/components/JamAttendeeList";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -106,7 +107,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
         }
       }
 
-      inviteList = (rawInvites as any[]).map((inv: any) => ({
+      inviteList = (rawInvites as any[]).filter((inv: any) => inv.status !== "accepted").map((inv: any) => ({
         id: inv.id,
         invited_user_id: inv.invited_user_id,
         invitee_email: inv.invitee_email,
@@ -153,11 +154,25 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
               capacity={(jam as any).capacity}
             />
           )}
+          {!user && !isOfficial && (
+            <Link
+              href={`/auth?next=/jam/${id}`}
+              className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+            >
+              Sign in to RSVP
+            </Link>
+          )}
         </>
       }
     />
     {user && <JamSharedSongs jamId={id} />}
-    {canInvite && <JamInvitePanel jamId={id} />}
+    <JamAttendeeList jamId={id} />
+    {canInvite && (
+      <JamInvitePanel
+        jamId={id}
+        alreadyInvitedIds={inviteList.map((i) => i.invited_user_id).filter(Boolean) as string[]}
+      />
+    )}
     {isHost && <JamInviteList invites={inviteList} />}
     {isHost && <JamHostActions jamId={id} />}
     </div>

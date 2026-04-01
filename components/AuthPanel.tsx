@@ -4,11 +4,19 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
-export default function AuthPanel() {
+export default function AuthPanel({
+  inviteToken,
+  defaultMode = "signin",
+  next,
+}: {
+  inviteToken?: string;
+  defaultMode?: "signin" | "signup";
+  next?: string;
+}) {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">(defaultMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -16,18 +24,30 @@ export default function AuthPanel() {
   const [busy, setBusy] = useState(false);
   const [signedUp, setSignedUp] = useState(false);
 
+  async function resolveDestination(): Promise<string> {
+    if (next) return next;
+    if (inviteToken) {
+      const { data } = await supabase
+        .from("jam_invites")
+        .select("jam_id")
+        .eq("token", inviteToken)
+        .maybeSingle();
+      if ((data as any)?.jam_id) return `/jam/${(data as any).jam_id}`;
+    }
+    return "/repertoire";
+  }
+
   async function signInWithPassword() {
     setBusy(true);
     setStatus(null);
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    setBusy(false);
-
     if (error) {
       setStatus(error.message);
+      setBusy(false);
     } else {
-      router.push("/repertoire");
+      router.push(await resolveDestination());
     }
   }
 
@@ -40,10 +60,14 @@ export default function AuthPanel() {
     setStatus(null);
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const callbackUrl = new URL(`${siteUrl}/auth/callback`);
+    if (inviteToken) callbackUrl.searchParams.set("invite", inviteToken);
+    if (next) callbackUrl.searchParams.set("next", next);
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+      options: { emailRedirectTo: callbackUrl.toString() },
     });
 
     setBusy(false);
@@ -57,7 +81,7 @@ export default function AuthPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       }).catch(() => {});
-      router.push("/account");
+      router.push(await resolveDestination());
     } else {
       // Confirmation still required (fallback)
       setSignedUp(true);
@@ -82,10 +106,14 @@ export default function AuthPanel() {
   async function signInWithGoogle() {
     setBusy(true);
     setStatus(null);
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const callbackUrl = new URL(`${siteUrl}/auth/callback`);
+    if (inviteToken) callbackUrl.searchParams.set("invite", inviteToken);
+    if (next) callbackUrl.searchParams.set("next", next);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl.toString(),
         queryParams: { prompt: "select_account" },
       },
     });

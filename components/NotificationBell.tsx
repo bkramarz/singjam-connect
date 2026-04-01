@@ -29,11 +29,15 @@ export default function NotificationBell() {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") fetchCount();
     };
+    const handleRead = () => fetchCount();
+
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("notifications-read", handleRead);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("notifications-read", handleRead);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

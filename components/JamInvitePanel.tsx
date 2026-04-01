@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 type UserResult = {
@@ -10,12 +11,13 @@ type UserResult = {
   avatar_url: string | null;
 };
 
-export default function JamInvitePanel({ jamId }: { jamId: string }) {
+export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamId: string; alreadyInvitedIds?: string[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [inviting, setInviting] = useState<string | null>(null);
-  const [sent, setSent] = useState<Set<string>>(new Set());
+  const [sent, setSent] = useState<Set<string>>(new Set(alreadyInvitedIds));
   const [emailInput, setEmailInput] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
@@ -50,6 +52,7 @@ export default function JamInvitePanel({ jamId }: { jamId: string }) {
     if (res.ok) {
       setSent((prev) => new Set([...prev, userId]));
       setFeedback({ id: userId, msg: "Invite sent!", ok: true });
+      router.refresh();
     } else {
       setFeedback({ id: userId, msg: body.error ?? "Failed to send invite", ok: false });
     }
@@ -74,6 +77,7 @@ export default function JamInvitePanel({ jamId }: { jamId: string }) {
     } else if (res.ok) {
       setFeedback({ id: "email", msg: `Invite sent to ${email}`, ok: true });
       setEmailInput("");
+      router.refresh();
     } else {
       setFeedback({ id: "email", msg: body.error ?? "Failed to send invite", ok: false });
     }

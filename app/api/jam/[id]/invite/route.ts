@@ -163,7 +163,7 @@ export async function POST(
     }).select("token").single();
     const token = (inserted as any).token;
 
-    const signupUrl = `${baseUrl}/auth?invite=${token}`;
+    const signupUrl = `${baseUrl}/jam/${jamId}?invite=${token}`;
 
     await resend.emails.send({
       from: FROM_ADDRESS,
