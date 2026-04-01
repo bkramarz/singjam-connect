@@ -71,7 +71,7 @@ export default function InviteToJamButton({ inviteeUserId }: { inviteeUserId: st
   }
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative flex-1 sm:flex-none" ref={panelRef}>
       <button
         onClick={toggle}
         className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm hover:bg-zinc-50 sm:flex-none sm:py-1.5 w-full"

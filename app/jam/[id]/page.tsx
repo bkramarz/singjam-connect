@@ -4,6 +4,7 @@ import Link from "next/link";
 import JamCard from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
 import JamInvitePanel from "@/components/JamInvitePanel";
+import JamInviteResponse from "@/components/JamInviteResponse";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -46,15 +47,26 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
     .eq("status", "attending");
   attendingCount = count ?? 0;
 
+  let pendingInvite = false;
+
   if (user) {
-    const { data: rsvp } = await supabase
-      .from("jam_rsvps")
-      .select("status, waitlist_position")
-      .eq("jam_id", id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    rsvpStatus = (rsvp?.status as any) ?? null;
-    waitlistPosition = rsvp?.waitlist_position ?? null;
+    const [rsvpRes, inviteRes] = await Promise.all([
+      supabase
+        .from("jam_rsvps")
+        .select("status, waitlist_position")
+        .eq("jam_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("jam_invites")
+        .select("status")
+        .eq("jam_id", id)
+        .eq("invited_user_id", user.id)
+        .maybeSingle(),
+    ]);
+    rsvpStatus = (rsvpRes.data?.status as any) ?? null;
+    waitlistPosition = rsvpRes.data?.waitlist_position ?? null;
+    pendingInvite = inviteRes.data?.status === "pending";
   }
 
   const isOfficial = jam.visibility === "official";
@@ -63,10 +75,15 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
 
   const showRsvp = !isOfficial && user;
   const isHost = jam.host_user_id === user?.id;
-  const canInvite = user && !isOfficial && (isHost || (isAttending && (jam as any).guests_can_invite));
+  // Community jams: any attendee can invite. Private jams: only if guests_can_invite.
+  const canInvite = user && !isOfficial && (
+    isHost ||
+    (isAttending && (jam.visibility === "community" || (jam as any).guests_can_invite))
+  );
 
   return (
     <div className="space-y-4">
+    {pendingInvite && !isAttending && <JamInviteResponse jamId={id} />}
     <JamCard
       jam={{
         name: jam.name,
