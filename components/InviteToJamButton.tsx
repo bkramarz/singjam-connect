@@ -74,7 +74,7 @@ export default function InviteToJamButton({ inviteeUserId }: { inviteeUserId: st
     <div className="relative flex-1 sm:flex-none" ref={panelRef}>
       <button
         onClick={toggle}
-        className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm hover:bg-zinc-50 sm:flex-none sm:py-1.5 w-full"
+        className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
       >
         Invite to jam
       </button>
