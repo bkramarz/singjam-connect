@@ -78,7 +78,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
 
   // Don't show the RSVP button alongside the invite banner — accepting the
   // invite auto-RSVPs, so showing both would be confusing.
-  const showRsvp = !isOfficial && user && !pendingInvite;
+  const showRsvp = !isOfficial && user && !pendingInvite && !isHost;
 
   // Fetch all invites for the jam so the host can track response status.
   let inviteList: { id: string; invited_user_id: string | null; invitee_email: string | null; status: string; display_name?: string | null; username?: string | null }[] = [];
