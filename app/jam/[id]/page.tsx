@@ -7,6 +7,7 @@ import JamInvitePanel from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
 import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
+import JamSharedSongs from "@/components/JamSharedSongs";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -155,6 +156,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
         </>
       }
     />
+    {user && !isHost && <JamSharedSongs jamId={id} />}
     {canInvite && <JamInvitePanel jamId={id} />}
     {isHost && <JamInviteList invites={inviteList} />}
     {isHost && <JamHostActions jamId={id} />}
