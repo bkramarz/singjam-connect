@@ -156,7 +156,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
         </>
       }
     />
-    {user && !isHost && <JamSharedSongs jamId={id} />}
+    {user && <JamSharedSongs jamId={id} />}
     {canInvite && <JamInvitePanel jamId={id} />}
     {isHost && <JamInviteList invites={inviteList} />}
     {isHost && <JamHostActions jamId={id} />}
