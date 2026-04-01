@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import JamCard from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
+import JamInvitePanel from "@/components/JamInvitePanel";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,7 +13,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
   const [jamRes, genresRes, themesRes] = await Promise.all([
     supabase
       .from("jams")
-      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id")
+      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
       .eq("id", id)
       .maybeSingle(),
     supabase.from("jam_genres").select("genres(name)").eq("jam_id", id),
@@ -62,8 +63,10 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
 
   const showRsvp = !isOfficial && user;
   const isHost = jam.host_user_id === user?.id;
+  const canInvite = user && !isOfficial && (isHost || (isAttending && (jam as any).guests_can_invite));
 
   return (
+    <div className="space-y-4">
     <JamCard
       jam={{
         name: jam.name,
@@ -104,5 +107,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
         </>
       }
     />
+    {canInvite && <JamInvitePanel jamId={id} />}
+    </div>
   );
 }

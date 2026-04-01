@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useProfile } from "@/hooks/useProfile";
+import NotificationBell from "./NotificationBell";
 
 export default function MobileHeaderProfile() {
   const { signedIn, profile } = useProfile();
@@ -11,7 +12,9 @@ export default function MobileHeaderProfile() {
 
   if (signedIn) {
     return (
-      <Link href="/profile" className="sm:hidden">
+      <div className="flex items-center gap-1 sm:hidden">
+        <NotificationBell />
+        <Link href="/profile">
         <span className="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-full bg-slate-600 ring-2 ring-slate-700">
           {profile?.avatar_url ? (
             <Image src={profile.avatar_url} alt="Profile" fill className="object-cover" unoptimized />
@@ -21,7 +24,8 @@ export default function MobileHeaderProfile() {
             </span>
           )}
         </span>
-      </Link>
+        </Link>
+      </div>
     );
   }
 

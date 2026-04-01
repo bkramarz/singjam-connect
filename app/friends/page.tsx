@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import InviteToJamButton from "@/components/InviteToJamButton";
 
 const SINGING_LABEL: Record<string, string> = {
   lead: "Lead vocals",
@@ -143,12 +144,7 @@ export default function MatchesPage() {
                 >
                   View profile
                 </a>
-                <a
-                  className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm no-underline hover:bg-zinc-50 sm:flex-none sm:py-1.5"
-                  href={`/jam/new?invite=${m.user_id}`}
-                >
-                  Invite to jam
-                </a>
+                <InviteToJamButton inviteeUserId={m.user_id} />
               </div>
             </div>
           );

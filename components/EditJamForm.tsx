@@ -23,6 +23,7 @@ type JamData = {
   image_url: string | null;
   image_focal_point: string | null;
   capacity: number | null;
+  guests_can_invite: boolean;
 };
 
 function Label({ text, required, optional }: { text: string; required?: boolean; optional?: boolean }) {
@@ -68,6 +69,7 @@ export default function EditJamForm({
   const [selectedGenres, setSelectedGenres] = useState<string[]>(selectedGenreIds);
   const [selectedThemes, setSelectedThemes] = useState<string[]>(selectedThemeIds);
 
+  const [guestsCanInvite, setGuestsCanInvite] = useState(jam.guests_can_invite ?? false);
   const [name, setName] = useState(jam.name ?? "");
   const [ticketsUrl, setTicketsUrl] = useState(jam.tickets_url ?? "");
   const [date, setDate] = useState(isoToDate(jam.starts_at));
@@ -175,6 +177,7 @@ export default function EditJamForm({
       full_address: location.fullAddress || null,
       notes: description || null,
       visibility,
+      guests_can_invite: visibility === "private" ? guestsCanInvite : false,
       tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
       image_url: imageUrl,
       image_focal_point: newFocalPoint,
@@ -287,6 +290,22 @@ export default function EditJamForm({
           )}
         </div>
       </div>
+
+      {/* Guests can invite — private jams only */}
+      {visibility === "private" && (
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={guestsCanInvite}
+            onChange={(e) => setGuestsCanInvite(e.target.checked)}
+            className="h-4 w-4 rounded"
+          />
+          <div>
+            <span className="text-sm font-medium">Allow attendees to invite others</span>
+            <p className="text-xs text-zinc-500">Guests can invite people directly from the jam page</p>
+          </div>
+        </label>
+      )}
 
       {/* Name */}
       <div>

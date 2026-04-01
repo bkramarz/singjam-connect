@@ -35,6 +35,7 @@ export default function NewJamForm() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
 
+  const [guestsCanInvite, setGuestsCanInvite] = useState(false);
   const [name, setName] = useState("");
   const [ticketsUrl, setTicketsUrl] = useState("");
   const [date, setDate] = useState("");
@@ -133,6 +134,7 @@ export default function NewJamForm() {
       full_address: location.fullAddress || null,
       notes: description || null,
       visibility,
+      guests_can_invite: visibility === "private" ? guestsCanInvite : false,
       tickets_url: visibility === "official" && ticketsUrl ? ticketsUrl : null,
       image_url: imageUrl,
       image_focal_point: imageUrl ? focalPoint : null,
@@ -244,6 +246,22 @@ export default function NewJamForm() {
           )}
         </div>
       </div>
+
+      {/* Guests can invite — private jams only */}
+      {visibility === "private" && (
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={guestsCanInvite}
+            onChange={(e) => setGuestsCanInvite(e.target.checked)}
+            className="h-4 w-4 rounded"
+          />
+          <div>
+            <span className="text-sm font-medium">Allow attendees to invite others</span>
+            <p className="text-xs text-zinc-500">Guests can invite people directly from the jam page</p>
+          </div>
+        </label>
+      )}
 
       {/* Name */}
       <div>

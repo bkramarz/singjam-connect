@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { welcomeEmailHtml } from "@/emails/welcome";
+
+function supabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
   const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestOrigin;
   const code = searchParams.get("code");
+  const inviteToken = searchParams.get("invite");
   const rawNext = searchParams.get("next") ?? "";
   const next = /^\/[^/]/.test(rawNext) ? rawNext : null;
 
@@ -88,6 +98,15 @@ export async function GET(request: Request) {
           }).catch(() => {});
         }
 
+        // Link non-member invite to this new user
+        if (inviteToken) {
+          const admin = supabaseAdmin();
+          await admin.from("jam_invites")
+            .update({ invited_user_id: user.id, invitee_email: null })
+            .eq("token", inviteToken)
+            .is("invited_user_id", null);
+        }
+
         destination = "/account";
       } else {
         if (isFirstLogin && user.email) {
@@ -100,6 +119,19 @@ export async function GET(request: Request) {
         }
 
         destination = !profile.username ? "/account" : "/repertoire";
+      }
+
+      // If an invite token is present, find the jam and redirect there
+      if (inviteToken && !destination?.startsWith("/jam")) {
+        const admin = supabaseAdmin();
+        const { data: invite } = await admin
+          .from("jam_invites")
+          .select("jam_id")
+          .eq("token", inviteToken)
+          .maybeSingle();
+        if (invite?.jam_id) {
+          destination = `/jam/${invite.jam_id}`;
+        }
       }
     }
     destination = destination ?? "/account";
