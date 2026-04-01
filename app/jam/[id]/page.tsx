@@ -5,6 +5,7 @@ import JamCard from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
 import JamInvitePanel from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
+import JamInviteList from "@/components/JamInviteList";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -71,10 +72,47 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
 
   const isOfficial = jam.visibility === "official";
   const isAttending = rsvpStatus === "attending";
-  const hasFullAccess = isOfficial || isAttending || jam.host_user_id === user?.id;
-
-  const showRsvp = !isOfficial && user;
   const isHost = jam.host_user_id === user?.id;
+  const hasFullAccess = isOfficial || isAttending || isHost;
+
+  // Don't show the RSVP button alongside the invite banner — accepting the
+  // invite auto-RSVPs, so showing both would be confusing.
+  const showRsvp = !isOfficial && user && !pendingInvite;
+
+  // Fetch all invites for the jam so the host can track response status.
+  let inviteList: { id: string; invited_user_id: string | null; invitee_email: string | null; status: string; display_name?: string | null; username?: string | null }[] = [];
+  if (isHost) {
+    const { data: rawInvites } = await supabase
+      .from("jam_invites")
+      .select("id, invited_user_id, invitee_email, status")
+      .eq("jam_id", id)
+      .order("created_at", { ascending: true });
+
+    if (rawInvites && rawInvites.length > 0) {
+      const memberIds = (rawInvites as any[])
+        .map((i: any) => i.invited_user_id)
+        .filter(Boolean);
+
+      const profileMap = new Map<string, { display_name: string | null; username: string | null }>();
+      if (memberIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, display_name, username")
+          .in("id", memberIds);
+        for (const p of (profiles ?? []) as any[]) {
+          profileMap.set(p.id, { display_name: p.display_name, username: p.username });
+        }
+      }
+
+      inviteList = (rawInvites as any[]).map((inv: any) => ({
+        id: inv.id,
+        invited_user_id: inv.invited_user_id,
+        invitee_email: inv.invitee_email,
+        status: inv.status,
+        ...(inv.invited_user_id ? profileMap.get(inv.invited_user_id) : {}),
+      }));
+    }
+  }
   // Community jams: any attendee can invite. Private jams: only if guests_can_invite.
   const canInvite = user && !isOfficial && (
     isHost ||
@@ -125,6 +163,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
       }
     />
     {canInvite && <JamInvitePanel jamId={id} />}
+    {isHost && <JamInviteList invites={inviteList} />}
     </div>
   );
 }
