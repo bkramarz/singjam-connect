@@ -6,6 +6,7 @@ import JamRsvpButton from "@/components/JamRsvpButton";
 import JamInvitePanel from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
 import JamInviteList from "@/components/JamInviteList";
+import JamHostActions from "@/components/JamHostActions";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -151,19 +152,12 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
               capacity={(jam as any).capacity}
             />
           )}
-          {isHost && (
-            <Link
-              href={`/jam/${id}/edit`}
-              className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
-            >
-              Edit
-            </Link>
-          )}
         </>
       }
     />
     {canInvite && <JamInvitePanel jamId={id} />}
     {isHost && <JamInviteList invites={inviteList} />}
+    {isHost && <JamHostActions jamId={id} />}
     </div>
   );
 }
