@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { supabaseServer } from "@/lib/supabase/server";
 import SongSearch from "@/components/SongSearch";
+import SubmitSongForm from "@/components/SubmitSongForm";
 
 export const metadata: Metadata = { title: "Song Search" };
 
@@ -80,6 +81,7 @@ export default async function SongsPage() {
         Search by title, recording artist, first line or composer.
       </p>
       <SongSearch popularSongs={popularSongs} singingVoice={singingVoice} initialRepertoire={initialRepertoire} />
+      {user && <SubmitSongForm />}
     </div>
   );
 }

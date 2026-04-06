@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 
 export type JamCardData = {
   name: string | null;
@@ -57,12 +58,16 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
     <div className="pb-10">
       {/* Hero image */}
       {jam.image_url && (
-        <div className="mb-6 overflow-hidden rounded-2xl" style={{ maxHeight: 320 }}>
-          <img
+        <div className="relative mb-6 overflow-hidden rounded-2xl" style={{ height: 320 }}>
+          <Image
             src={jam.image_url}
             alt={jam.name ?? "Event"}
-            className="w-full object-cover"
-            style={{ maxHeight: 320, objectPosition: jam.image_focal_point ?? "50% 50%" }}
+            fill
+            className="object-cover"
+            style={{ objectPosition: jam.image_focal_point ?? "50% 50%" }}
+            sizes="(max-width: 896px) 100vw, 896px"
+            priority
+            unoptimized
           />
         </div>
       )}

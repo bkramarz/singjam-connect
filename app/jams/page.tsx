@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getSessionServer, supabaseServer } from "@/lib/supabase/server";
 import { getFeatureFlag } from "@/lib/featureFlags";
 import Tooltip from "@/components/Tooltip";
@@ -24,8 +25,8 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
     <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {/* Date block or image */}
       {jam.image_url ? (
-        <div className="shrink-0 w-24 sm:w-32 overflow-hidden">
-          <img src={jam.image_url} alt="" className="h-full w-full object-cover" />
+        <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
+          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
         </div>
       ) : start ? (
         <div className={`shrink-0 w-20 flex flex-col items-center justify-center border-r px-2 py-4 ${isOfficial ? "bg-amber-50 border-amber-200" : "bg-zinc-50 border-zinc-100"}`}>

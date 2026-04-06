@@ -76,6 +76,7 @@ export default async function SongPage({
     userSongConfidence = us?.confidence ?? null;
   }
 
+
   const composers = (song.song_composers as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
   const lyricists = (song.song_lyricists as any[]).map((x) => x.people?.name).filter(Boolean) as string[];
   const cultureRows = song.song_cultures as any[];
@@ -267,7 +268,7 @@ export default async function SongPage({
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {user && (
-            <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} />
+            <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
           )}
           {isAdmin && (
             <Link

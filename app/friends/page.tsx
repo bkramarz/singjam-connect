@@ -141,7 +141,7 @@ export default function MatchesPage() {
               {/* Actions */}
               <div className="mt-4 flex gap-2">
                 <a
-                  className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm no-underline hover:bg-zinc-50 sm:flex-none sm:py-1.5"
+                  className="flex flex-1 items-center justify-center rounded-xl border border-zinc-200 px-3 py-2 text-sm no-underline hover:bg-zinc-50 sm:flex-none sm:py-1.5"
                   href={m.username ? `/u/${m.username}` : `/profile/${m.user_id}`}
                 >
                   View profile

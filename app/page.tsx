@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import HomeButtons from "@/components/HomeButtons";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -59,8 +60,8 @@ function JamEventCard({ jam }: { jam: any }) {
     <div className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white">
       {/* Cover image or date block */}
       {jam.image_url ? (
-        <div className="shrink-0 w-24 sm:w-32 overflow-hidden">
-          <img src={jam.image_url} alt="" className="h-full w-full object-cover" />
+        <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
+          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
         </div>
       ) : start ? (
         <div className="shrink-0 w-20 flex flex-col items-center justify-center bg-amber-50 border-r border-amber-200 px-2 py-4">
