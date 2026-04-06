@@ -1,15 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
+import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 import { getSessionServer, supabaseServer } from "@/lib/supabase/server";
 import { getFeatureFlag } from "@/lib/featureFlags";
 import Tooltip from "@/components/Tooltip";
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    weekday: "short", month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit",
-  });
-}
 
 function JamListCard({ jam, tags, hostLabel, isOfficial }: {
   jam: any;
@@ -17,10 +12,6 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
   hostLabel?: string | null;
   isOfficial: boolean;
 }) {
-  const start = jam.starts_at ? new Date(jam.starts_at) : null;
-  const month = start?.toLocaleDateString(undefined, { month: "short" });
-  const day = start?.getDate();
-
   const inner = (
     <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {/* Date block or image */}
@@ -28,10 +19,14 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
           <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
         </div>
-      ) : start ? (
+      ) : jam.starts_at ? (
         <div className={`shrink-0 w-20 flex flex-col items-center justify-center border-r px-2 py-4 ${isOfficial ? "bg-amber-50 border-amber-200" : "bg-zinc-50 border-zinc-100"}`}>
-          <span className={`text-xs font-semibold uppercase tracking-wide ${isOfficial ? "text-amber-500" : "text-zinc-400"}`}>{month}</span>
-          <span className="text-3xl font-bold text-zinc-900 leading-none">{day}</span>
+          <span className={`text-xs font-semibold uppercase tracking-wide ${isOfficial ? "text-amber-500" : "text-zinc-400"}`}>
+            <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
+          </span>
+          <span className="text-3xl font-bold text-zinc-900 leading-none">
+            <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
+          </span>
         </div>
       ) : null}
 
@@ -42,8 +37,8 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
         <p className="font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
         {jam.starts_at && (
           <p className="text-xs text-zinc-500 mt-0.5">
-            {formatTime(jam.starts_at)}
-            {jam.ends_at && ` – ${new Date(jam.ends_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`}
+            <FormattedDate iso={jam.starts_at} options={{ weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
+            {jam.ends_at && <> – <FormattedTime iso={jam.ends_at} /></>}
           </p>
         )}
         {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}

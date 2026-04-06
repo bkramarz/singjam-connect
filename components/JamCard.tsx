@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
+import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 
 export type JamCardData = {
   name: string | null;
@@ -19,15 +20,6 @@ export type JamCardData = {
   hasFullAccess: boolean;
 };
 
-function formatDate(startsAt: string): string {
-  return new Date(startsAt).toLocaleDateString(undefined, {
-    weekday: "long", month: "long", day: "numeric", year: "numeric",
-  });
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
 
 function MapEmbed({ query, zoom }: { query: string; zoom: number }) {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
@@ -94,17 +86,19 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
             <div className="flex items-start gap-4 px-5 py-4">
               <div className="shrink-0 w-10 text-center">
                 <div className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  {new Date(jam.starts_at).toLocaleDateString(undefined, { month: "short" })}
+                  <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
                 </div>
                 <div className="text-2xl font-bold text-zinc-900 leading-none">
                   {new Date(jam.starts_at).getDate()}
                 </div>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-zinc-800">{formatDate(jam.starts_at)}</p>
+                <p className="text-sm font-medium text-zinc-800">
+                  <FormattedDate iso={jam.starts_at} options={{ weekday: "long", month: "long", day: "numeric", year: "numeric" }} />
+                </p>
                 <p className="text-sm text-zinc-500">
-                  {formatTime(jam.starts_at)}
-                  {jam.ends_at && ` – ${formatTime(jam.ends_at)}`}
+                  <FormattedTime iso={jam.starts_at} />
+                  {jam.ends_at && <> – <FormattedTime iso={jam.ends_at} /></>}
                 </p>
               </div>
             </div>
