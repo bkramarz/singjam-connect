@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import HomeButtons from "@/components/HomeButtons";
 import { supabaseServer } from "@/lib/supabase/server";
+import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 
 export default async function HomePage() {
   const supabase = await supabaseServer();
@@ -48,14 +49,6 @@ export default async function HomePage() {
 }
 
 function JamEventCard({ jam }: { jam: any }) {
-  const start = jam.starts_at ? new Date(jam.starts_at) : null;
-  const month = start?.toLocaleDateString(undefined, { month: "short" });
-  const day = start?.getDate();
-  const timeStr = start
-    ? start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) +
-      (jam.ends_at ? ` – ${new Date(jam.ends_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "")
-    : null;
-
   return (
     <div className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white">
       {/* Cover image or date block */}
@@ -63,17 +56,26 @@ function JamEventCard({ jam }: { jam: any }) {
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
           <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
         </div>
-      ) : start ? (
+      ) : jam.starts_at ? (
         <div className="shrink-0 w-20 flex flex-col items-center justify-center bg-amber-50 border-r border-amber-200 px-2 py-4">
-          <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">{month}</span>
-          <span className="text-3xl font-bold text-zinc-900 leading-none">{day}</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">
+            <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
+          </span>
+          <span className="text-3xl font-bold text-zinc-900 leading-none">
+            <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
+          </span>
         </div>
       ) : null}
 
       <div className="flex-1 min-w-0 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-500 mb-0.5">Official SingJam event</p>
         <p className="font-semibold text-zinc-900 truncate">{jam.name ?? "SingJam event"}</p>
-        {timeStr && <p className="text-xs text-zinc-500 mt-0.5">{timeStr}</p>}
+        {jam.starts_at && (
+          <p className="text-xs text-zinc-500 mt-0.5">
+            <FormattedTime iso={jam.starts_at} />
+            {jam.ends_at && <> – <FormattedTime iso={jam.ends_at} /></>}
+          </p>
+        )}
         {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}
         <div className="mt-2 flex flex-wrap gap-3">
           <Link href={`/jam/${jam.id}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-700">
