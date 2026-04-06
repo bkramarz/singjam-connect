@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getSessionServer, supabaseServer } from "@/lib/supabase/server";
+import { getFeatureFlag } from "@/lib/featureFlags";
+import Tooltip from "@/components/Tooltip";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -54,19 +56,24 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
         {!isOfficial && hostLabel && (
           <p className="mt-2 text-xs text-zinc-400">Hosted by {hostLabel}</p>
         )}
-        {isOfficial && jam.tickets_url && (
-          <span className="mt-2 inline-block text-xs font-medium text-amber-600">Get tickets ↗</span>
+        {isOfficial && (
+          <div className="mt-2 flex flex-wrap gap-3">
+            <Link href={`/jam/${jam.id}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-700">
+              View details →
+            </Link>
+            {jam.tickets_url && (
+              <a href={jam.tickets_url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:text-amber-500">
+                Get tickets ↗
+              </a>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 
-  if (isOfficial && jam.tickets_url) {
-    return (
-      <a href={jam.tickets_url} target="_blank" rel="noopener noreferrer" className="block">
-        {inner}
-      </a>
-    );
+  if (isOfficial) {
+    return <div>{inner}</div>;
   }
 
   return (
@@ -79,6 +86,18 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
 export default async function JamsPage() {
   const session = await getSessionServer();
   const supabase = await supabaseServer();
+
+  const invitesEnabled = await getFeatureFlag("jam_invites");
+
+  let isAdmin = false;
+  if (session) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", session.user.id)
+      .single();
+    isAdmin = profile?.is_admin ?? false;
+  }
 
   // Fetch jams without nested joins to avoid RLS nulling the row
   const { data: jams } = await supabase
@@ -136,13 +155,20 @@ export default async function JamsPage() {
           <h1 className="text-xl font-semibold">Jams</h1>
           <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
         </div>
-        {session && (
+        {session && (invitesEnabled || isAdmin) && (
           <Link
             href="/jam/new"
             className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
           >
             Post a jam
           </Link>
+        )}
+        {session && !invitesEnabled && !isAdmin && (
+          <Tooltip message="Jam posting is currently unavailable">
+            <span className="self-start rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-300 cursor-not-allowed sm:self-auto">
+              Post a jam
+            </span>
+          </Tooltip>
         )}
       </div>
 

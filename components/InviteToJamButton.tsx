@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import Tooltip from "@/components/Tooltip";
 
 type JamOption = { id: string; name: string | null; starts_at: string | null };
 
@@ -10,7 +11,7 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export default function InviteToJamButton({ inviteeUserId }: { inviteeUserId: string }) {
+export default function InviteToJamButton({ inviteeUserId, disabled = false }: { inviteeUserId: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [jams, setJams] = useState<JamOption[] | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -79,14 +80,27 @@ export default function InviteToJamButton({ inviteeUserId }: { inviteeUserId: st
     setSending(null);
   }
 
+  const button = (
+    <button
+      onClick={disabled ? undefined : toggle}
+      disabled={disabled}
+      className={`w-full rounded-xl border px-3 py-2.5 text-center text-sm transition-colors ${
+        disabled
+          ? "border-zinc-100 bg-zinc-50 text-zinc-300 cursor-not-allowed"
+          : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+      }`}
+    >
+      Invite to jam
+    </button>
+  );
+
   return (
     <div className="relative flex-1 sm:flex-none" ref={panelRef}>
-      <button
-        onClick={toggle}
-        className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
-      >
-        Invite to jam
-      </button>
+      {disabled ? (
+        <Tooltip message="Invites are currently unavailable">{button}</Tooltip>
+      ) : (
+        button
+      )}
 
       {open && (
         <div className="absolute left-0 bottom-0 z-20 w-64 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">

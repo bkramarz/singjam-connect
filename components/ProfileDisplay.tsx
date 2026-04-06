@@ -26,11 +26,13 @@ export interface ProfileData {
 export default function ProfileDisplay({
   profile,
   isOwner = false,
+  invitesEnabled = true,
   sharedSongs,
   additionalSongs,
 }: {
   profile: ProfileData;
   isOwner?: boolean;
+  invitesEnabled?: boolean;
   sharedSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
   additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
 }) {
@@ -203,7 +205,7 @@ export default function ProfileDisplay({
             </div>
           </>
         ) : (
-          <InviteToJamButton inviteeUserId={profile.id} />
+          <InviteToJamButton inviteeUserId={profile.id} disabled={!invitesEnabled} />
         )}
       </div>
     </div>

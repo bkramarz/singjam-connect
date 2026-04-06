@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import ProfileDisplay from "@/components/ProfileDisplay";
 import { fetchProfileSongs } from "@/lib/fetchProfileSongs";
+import { getFeatureFlag } from "@/lib/featureFlags";
 
 export default async function UserProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
@@ -15,7 +16,10 @@ export default async function UserProfilePage({ params }: { params: Promise<{ us
 
   if (!profile) notFound();
 
-  const { sharedSongs, additionalSongs } = await fetchProfileSongs(supabase, profile.id);
+  const [{ sharedSongs, additionalSongs }, invitesEnabled] = await Promise.all([
+    fetchProfileSongs(supabase, profile.id),
+    getFeatureFlag("jam_invites"),
+  ]);
 
-  return <ProfileDisplay profile={profile as any} sharedSongs={sharedSongs} additionalSongs={additionalSongs} />;
+  return <ProfileDisplay profile={profile as any} invitesEnabled={invitesEnabled} sharedSongs={sharedSongs} additionalSongs={additionalSongs} />;
 }

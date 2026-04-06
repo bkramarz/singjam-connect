@@ -18,6 +18,7 @@ export default function MatchesPage() {
 
   const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState<any[]>([]);
+  const [invitesEnabled, setInvitesEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,16 +31,17 @@ export default function MatchesPage() {
         return;
       }
 
-      const { data: res, error } = await supabase.rpc("match_jammers", {
-        for_user_id: session.user.id,
-        limit_n: 30,
-      });
+      const [{ data: res, error }, { data: flagData }] = await Promise.all([
+        supabase.rpc("match_jammers", { for_user_id: session.user.id, limit_n: 30 }),
+        supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+      ]);
 
       if (error) {
         console.error("Matching error:", error);
         setError("Could not load matches. Please try again.");
       }
       setMatches((res as any[]) ?? []);
+      setInvitesEnabled((flagData as any)?.enabled ?? true);
       setLoading(false);
     }
 
@@ -144,7 +146,7 @@ export default function MatchesPage() {
                 >
                   View profile
                 </a>
-                <InviteToJamButton inviteeUserId={m.user_id} />
+                <InviteToJamButton inviteeUserId={m.user_id} disabled={!invitesEnabled} />
               </div>
             </div>
           );

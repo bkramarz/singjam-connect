@@ -9,6 +9,7 @@ import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
 import JamSharedSongs from "@/components/JamSharedSongs";
 import JamAttendeeList from "@/components/JamAttendeeList";
+import { getFeatureFlag } from "@/lib/featureFlags";
 
 export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -122,6 +123,8 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
     (isAttending && (jam.visibility === "community" || (jam as any).guests_can_invite))
   );
 
+  const invitesEnabled = await getFeatureFlag("jam_invites");
+
   return (
     <div className="space-y-4">
     {pendingInvite && !isAttending && <JamInviteResponse jamId={id} />}
@@ -167,7 +170,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
     />
     {user && <JamSharedSongs jamId={id} />}
     <JamAttendeeList jamId={id} />
-    {canInvite && (
+    {canInvite && invitesEnabled && (
       <JamInvitePanel
         jamId={id}
         alreadyInvitedIds={inviteList.map((i) => i.invited_user_id).filter(Boolean) as string[]}

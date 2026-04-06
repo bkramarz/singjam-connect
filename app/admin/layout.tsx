@@ -26,11 +26,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/songs" className="text-slate-600 hover:text-slate-900">
             Songs
           </Link>
-          <Link href="/admin/songs/enrich" className="text-slate-600 hover:text-slate-900">
-            Bulk enrich
-          </Link>
-          <Link href="/admin/songs/import" className="text-slate-600 hover:text-slate-900">
+<Link href="/admin/songs/import" className="text-slate-600 hover:text-slate-900">
             Import CSV
+          </Link>
+          <Link href="/admin/settings" className="text-slate-600 hover:text-slate-900">
+            Settings
           </Link>
         </nav>
       </div>

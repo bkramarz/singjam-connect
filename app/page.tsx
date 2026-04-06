@@ -56,10 +56,7 @@ function JamEventCard({ jam }: { jam: any }) {
     : null;
 
   return (
-    <Link
-      href={`/jam/${jam.id}`}
-      className="group flex overflow-hidden rounded-2xl border border-amber-200 bg-white hover:border-amber-300 transition-colors"
-    >
+    <div className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white">
       {/* Cover image or date block */}
       {jam.image_url ? (
         <div className="shrink-0 w-24 sm:w-32 overflow-hidden">
@@ -77,10 +74,17 @@ function JamEventCard({ jam }: { jam: any }) {
         <p className="font-semibold text-zinc-900 truncate">{jam.name ?? "SingJam event"}</p>
         {timeStr && <p className="text-xs text-zinc-500 mt-0.5">{timeStr}</p>}
         {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}
-        <span className="mt-2 inline-block text-xs font-medium text-amber-600 group-hover:text-amber-500">
-          {jam.tickets_url ? "Get tickets ↗" : "Learn more →"}
-        </span>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <Link href={`/jam/${jam.id}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-700">
+            View details →
+          </Link>
+          {jam.tickets_url && (
+            <a href={jam.tickets_url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:text-amber-500">
+              Get tickets ↗
+            </a>
+          )}
+        </div>
       </div>
-    </Link>
+    </div>
   );
 }

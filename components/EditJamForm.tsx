@@ -236,25 +236,23 @@ export default function EditJamForm({
             capacity: capacity ? parseInt(capacity, 10) : null,
             hasFullAccess: true,
           }}
-          actions={
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPreviewing(false)}
-                className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                ← Edit
-              </button>
-              <button
-                onClick={save}
-                disabled={busy}
-                className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
-              >
-                {busy ? "Saving…" : "Save changes"}
-              </button>
-            </div>
-          }
         />
         {status && <p className="text-sm text-red-600">{status}</p>}
+        <div className="flex gap-3">
+          <button
+            onClick={() => setPreviewing(false)}
+            className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+          >
+            ← Edit
+          </button>
+          <button
+            onClick={save}
+            disabled={busy}
+            className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+          >
+            {busy ? "Saving…" : "Save changes"}
+          </button>
+        </div>
       </div>
     );
   }
