@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/hooks/useProfile";
 import LogoutButton from "./LogoutButton";
+import NotificationBell from "./NotificationBell";
 
 export default function TopNav() {
   const pathname = usePathname();
@@ -37,6 +38,7 @@ export default function TopNav() {
 
       {signedIn ? (
         <>
+          <NotificationBell />
           <Link
             href="/profile"
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
+import InviteToJamButton from "@/components/InviteToJamButton";
 
 const INSTRUMENT_LEVEL_ORDER = ["Professional", "Advanced", "Intermediate", "Beginner"];
 
@@ -11,6 +12,7 @@ const SINGING_LABEL: Record<string, string> = {
 };
 
 export interface ProfileData {
+  id: string;
   display_name: string | null;
   last_name: string | null;
   username: string | null;
@@ -24,11 +26,13 @@ export interface ProfileData {
 export default function ProfileDisplay({
   profile,
   isOwner = false,
+  invitesEnabled = true,
   sharedSongs,
   additionalSongs,
 }: {
   profile: ProfileData;
   isOwner?: boolean;
+  invitesEnabled?: boolean;
   sharedSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
   additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
 }) {
@@ -201,12 +205,7 @@ export default function ProfileDisplay({
             </div>
           </>
         ) : (
-          <Link
-            href={`/jam/new?invite=${profile.username}`}
-            className="flex-1 rounded-xl border border-zinc-200 px-4 py-2.5 text-center text-sm text-zinc-600 hover:bg-zinc-50 sm:flex-none"
-          >
-            Invite to jam
-          </Link>
+          <InviteToJamButton inviteeUserId={profile.id} disabled={!invitesEnabled} />
         )}
       </div>
     </div>

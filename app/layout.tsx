@@ -45,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="border-t border-slate-200 pt-8 text-xs text-slate-400 flex items-center justify-between gap-4">
             <span>© {new Date().getFullYear()} SingJam · Community-first matching by repertoire</span>
             <div className="flex gap-4">
+              <Link href="/feedback" className="hover:text-slate-600">Report a bug</Link>
               <Link href="/privacy" className="hover:text-slate-600">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-slate-600">Terms of Service</Link>
             </div>

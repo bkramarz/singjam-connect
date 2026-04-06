@@ -16,6 +16,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (!profile?.is_admin) redirect("/");
 
+  const { count: reviewCount } = await supabase
+    .from("songs")
+    .select("id", { count: "exact", head: true })
+    .eq("needs_review", true);
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-4 border-b border-slate-200 pb-4">
@@ -26,11 +31,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/songs" className="text-slate-600 hover:text-slate-900">
             Songs
           </Link>
-          <Link href="/admin/songs/enrich" className="text-slate-600 hover:text-slate-900">
-            Bulk enrich
-          </Link>
           <Link href="/admin/songs/import" className="text-slate-600 hover:text-slate-900">
             Import CSV
+          </Link>
+          <Link href="/admin/songs/review" className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
+            Review
+            {!!reviewCount && reviewCount > 0 && (
+              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-white leading-none">
+                {reviewCount}
+              </span>
+            )}
+          </Link>
+          <Link href="/admin/settings" className="text-slate-600 hover:text-slate-900">
+            Settings
           </Link>
         </nav>
       </div>
