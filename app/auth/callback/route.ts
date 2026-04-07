@@ -55,8 +55,8 @@ export async function GET(request: Request) {
     }
 
     // Determine where to send the user
-    let destination = next;
-    if (!destination && sessionData?.user) {
+    let destination: string | null = null;
+    if (sessionData?.user) {
       const user = sessionData.user;
       const { data: profile } = await supabase
         .from("profiles")
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
         Math.abs(new Date(user.last_sign_in_at).getTime() - new Date(user.created_at).getTime()) < 10_000;
 
       if (!profile) {
-        // New email/password user — create profile with a unique auto-generated username
+        // New user — create profile with a unique auto-generated username
         const emailLocal = (user.email ?? "")
           .split("@")[0]
           .toLowerCase()
@@ -119,7 +119,10 @@ export async function GET(request: Request) {
           inviteJamId = invite?.jam_id ?? null;
         }
 
-        destination = inviteJamId ? `/account?next=/jam/${inviteJamId}` : "/account";
+        // New users always go through account setup first — preserve their intended
+        // destination (invite jam or the next param) for after they save their profile
+        const postSetup = inviteJamId ? `/jam/${inviteJamId}` : next ?? "/repertoire";
+        destination = `/account?next=${encodeURIComponent(postSetup)}`;
       } else {
         if (isFirstLogin && user.email) {
           resend.emails.send({
@@ -131,7 +134,7 @@ export async function GET(request: Request) {
         }
 
         if (!profile.username) {
-          destination = "/account";
+          destination = next ? `/account?next=${encodeURIComponent(next)}` : "/account";
         } else if (inviteToken) {
           const admin = supabaseAdmin();
           const { data: invite } = await admin
@@ -139,9 +142,9 @@ export async function GET(request: Request) {
             .select("jam_id")
             .eq("token", inviteToken)
             .maybeSingle();
-          destination = invite?.jam_id ? `/jam/${invite.jam_id}` : "/repertoire";
+          destination = invite?.jam_id ? `/jam/${invite.jam_id}` : next ?? "/repertoire";
         } else {
-          destination = "/repertoire";
+          destination = next ?? "/repertoire";
         }
       }
     }
