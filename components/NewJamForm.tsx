@@ -134,7 +134,7 @@ export default function NewJamForm() {
       full_address: location.fullAddress || null,
       notes: description || null,
       visibility,
-      guests_can_invite: visibility === "private" ? guestsCanInvite : false,
+      guests_can_invite: (visibility === "private" || visibility === "community") ? guestsCanInvite : false,
       tickets_url: visibility === "official" && ticketsUrl ? ticketsUrl : null,
       image_url: imageUrl,
       image_focal_point: imageUrl ? focalPoint : null,
@@ -253,8 +253,8 @@ export default function NewJamForm() {
         </div>
       </div>
 
-      {/* Guests can invite — private jams only */}
-      {visibility === "private" && (
+      {/* Guests can invite — private and community jams */}
+      {(visibility === "private" || visibility === "community") && (
         <label className="flex items-center gap-3 cursor-pointer">
           <input
             type="checkbox"

@@ -40,7 +40,7 @@ export async function POST(
 
   if (response === "accepted") {
     // Auto-RSVP — reuse RSVP logic: check capacity
-    const { data: jam } = await admin.from("jams").select("capacity, name").eq("id", jamId).single();
+    const { data: jam } = await admin.from("jams").select("capacity, name, host_user_id").eq("id", jamId).single();
     const { count: attendingCount } = await admin
       .from("jam_rsvps")
       .select("id", { count: "exact", head: true })
@@ -74,17 +74,29 @@ export async function POST(
       await admin.from("jam_rsvps").insert({ jam_id: jamId, user_id: user.id, status: rsvpStatus, waitlist_position: waitlistPosition });
     }
 
-    // Notify the person who sent the invite
-    if (invite.invited_by) {
-      const { data: profile } = await admin.from("profiles").select("display_name, username").eq("id", user.id).single();
-      const accepterName = (profile as any)?.display_name ?? (profile as any)?.username ?? "Someone";
-      await createNotification({
-        userId: invite.invited_by,
-        type: "invite_accepted",
-        title: `${accepterName} accepted your invite to ${jam?.name ?? "your jam"}`,
-        link: `/jam/${jamId}`,
-      });
-    }
+    const { data: profile } = await admin.from("profiles").select("display_name, username").eq("id", user.id).single();
+    const accepterName = (profile as any)?.display_name ?? (profile as any)?.username ?? "Someone";
+
+    await Promise.all([
+      // Notify the person who sent the invite (if not the host — host gets their own notification below)
+      invite.invited_by && invite.invited_by !== (jam as any)?.host_user_id
+        ? createNotification({
+            userId: invite.invited_by,
+            type: "invite_accepted",
+            title: `${accepterName} accepted your invite to ${jam?.name ?? "your jam"}`,
+            link: `/jam/${jamId}`,
+          })
+        : Promise.resolve(),
+      // Notify the host
+      (jam as any)?.host_user_id && (jam as any).host_user_id !== user.id
+        ? createNotification({
+            userId: (jam as any).host_user_id,
+            type: "jam_rsvp",
+            title: `${accepterName} is going to ${jam?.name ?? "your jam"}`,
+            link: `/jam/${jamId}`,
+          })
+        : Promise.resolve(),
+    ]);
   }
 
   if (response === "declined" && invite.invited_by) {

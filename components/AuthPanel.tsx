@@ -75,13 +75,23 @@ export default function AuthPanel({
     if (error) {
       setStatus(error.message);
     } else if (data.session) {
-      // Email confirmation is disabled — user is signed in immediately
+      // Email confirmation is disabled — user is signed in immediately.
+      // Create profile + link invite before redirecting to account setup.
+      const setupRes = await fetch("/api/auth/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteToken }),
+      });
+      const { jamId } = await setupRes.json().catch(() => ({}));
+
       fetch("/api/email/welcome", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       }).catch(() => {});
-      router.push(await resolveDestination());
+
+      const dest = jamId ? `/jam/${jamId}` : next ?? "/repertoire";
+      router.push(`/account?next=${encodeURIComponent(dest)}`);
     } else {
       // Confirmation still required (fallback)
       setSignedUp(true);

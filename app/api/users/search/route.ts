@@ -3,7 +3,8 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q")?.trim() ?? "";
+  const raw = searchParams.get("q")?.trim() ?? "";
+  const q = raw.startsWith("@") ? raw.slice(1) : raw;
 
   if (q.length < 2) return NextResponse.json([]);
 
