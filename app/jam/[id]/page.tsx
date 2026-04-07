@@ -169,7 +169,7 @@ export default async function JamPage({ params, searchParams }: { params: Promis
       }
     />
     {user && <JamSharedSongs jamId={id} />}
-    <JamAttendeeList jamId={id} />
+    <JamAttendeeList jamId={id} hostId={jam.host_user_id} />
     {canInvite && invitesEnabled && (
       <JamInvitePanel
         jamId={id}

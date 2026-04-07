@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamWaitlistPromotedHtml } from "@/emails/jam-waitlist-promoted";
+import { createNotification } from "@/lib/notifications";
 
 function supabaseAdmin() {
   return createClient(
@@ -23,8 +24,8 @@ export async function POST(
 
   const admin = supabaseAdmin();
 
-  // Get jam capacity
-  const { data: jam } = await admin.from("jams").select("capacity, name, starts_at, visibility").eq("id", jamId).single();
+  // Get jam details including host
+  const { data: jam } = await admin.from("jams").select("capacity, name, starts_at, visibility, host_user_id").eq("id", jamId).single();
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
   if (jam.visibility === "official") return NextResponse.json({ error: "Official events use external ticketing" }, { status: 400 });
 
@@ -61,6 +62,18 @@ export async function POST(
     await admin.from("jam_rsvps").update({ status: newStatus, waitlist_position: waitlistPosition }).eq("id", existing.id);
   } else {
     await admin.from("jam_rsvps").insert({ jam_id: jamId, user_id: user.id, status: newStatus, waitlist_position: waitlistPosition });
+  }
+
+  // Notify the host (unless they're RSVPing to their own jam)
+  if (jam.host_user_id && jam.host_user_id !== user.id) {
+    const { data: profile } = await admin.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle();
+    const rsvperName = (profile as any)?.display_name ?? (profile as any)?.username ?? "Someone";
+    await createNotification({
+      userId: jam.host_user_id,
+      type: "jam_rsvp",
+      title: `${rsvperName} is ${newStatus === "waitlist" ? "on the waitlist for" : "going to"} ${jam.name ?? "your jam"}`,
+      link: `/jam/${jamId}`,
+    });
   }
 
   return NextResponse.json({ status: newStatus, waitlist_position: waitlistPosition });
