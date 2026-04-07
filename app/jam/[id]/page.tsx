@@ -117,10 +117,9 @@ export default async function JamPage({ params, searchParams }: { params: Promis
       }));
     }
   }
-  // Community jams: any attendee can invite. Private jams: only if guests_can_invite.
   const canInvite = user && !isOfficial && (
     isHost ||
-    (isAttending && (jam.visibility === "community" || (jam as any).guests_can_invite))
+    (isAttending && (jam as any).guests_can_invite)
   );
 
   const invitesEnabled = await getFeatureFlag("jam_invites");
@@ -169,7 +168,7 @@ export default async function JamPage({ params, searchParams }: { params: Promis
       }
     />
     {user && <JamSharedSongs jamId={id} />}
-    <JamAttendeeList jamId={id} hostId={jam.host_user_id} />
+    {!isOfficial && <JamAttendeeList jamId={id} hostId={jam.host_user_id} />}
     {canInvite && invitesEnabled && (
       <JamInvitePanel
         jamId={id}
