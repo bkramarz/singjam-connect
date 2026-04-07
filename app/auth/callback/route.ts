@@ -87,7 +87,7 @@ export async function GET(request: Request) {
           if (!taken) { username = candidate; break; }
         }
         if (!username) username = `singer${Date.now()}`;
-        await supabase.from("profiles").insert({ id: user.id, username });
+        await supabaseAdmin().from("profiles").insert({ id: user.id, username });
 
         if (user.email) {
           resend.emails.send({
