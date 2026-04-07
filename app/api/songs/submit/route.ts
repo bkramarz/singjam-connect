@@ -28,14 +28,19 @@ function admin() {
   );
 }
 
+function normalizeName(name: string): string {
+  return /^\[traditional\]$/i.test(name) ? "Traditional" : name;
+}
+
 async function findOrCreate(
   db: ReturnType<typeof admin>,
   table: "people" | "artists",
   name: string
 ): Promise<string | null> {
-  const { data: found } = await db.from(table).select("id").ilike("name", name).maybeSingle();
+  const canonical = normalizeName(name);
+  const { data: found } = await db.from(table).select("id").ilike("name", canonical).maybeSingle();
   if (found) return found.id;
-  const { data: created } = await db.from(table).insert({ name }).select("id").single();
+  const { data: created } = await db.from(table).insert({ name: canonical }).select("id").single();
   return created?.id ?? null;
 }
 

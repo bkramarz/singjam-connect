@@ -296,13 +296,14 @@ export default function SongEditor({
     allItems: Lookup[]
   ): Promise<string | null> {
     if (!name.trim()) return null;
-    const normalised = name.trim().toLowerCase();
+    const canonical = /^\[traditional\]$/i.test(name.trim()) ? "Traditional" : name.trim();
+    const normalised = canonical.toLowerCase();
     const existing = allItems.find((p) => p.name.toLowerCase() === normalised);
     if (existing) return existing.id;
 
     const { data, error } = await supabase
       .from(table)
-      .upsert({ name: name.trim() }, { onConflict: "name" })
+      .upsert({ name: canonical }, { onConflict: "name" })
       .select("id, name")
       .single();
     if (error) { setError(error.message); return null; }

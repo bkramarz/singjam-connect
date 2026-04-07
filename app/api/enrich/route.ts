@@ -55,8 +55,9 @@ async function fetchMBWorkData(workId: string): Promise<WorkData> {
   const result: WorkData = { composers: [], lyricists: [], languages: [] };
   if (work.language) result.languages.push(work.language);
   for (const rel of (work.relations ?? [])) {
-    const name: string | undefined = rel.artist?.name;
-    if (!name) continue;
+    const raw: string | undefined = rel.artist?.name;
+    if (!raw) continue;
+    const name = /^\[traditional\]$/i.test(raw) ? "Traditional" : raw;
     if (rel.type === "composer") result.composers.push(name);
     if (rel.type === "lyricist") result.lyricists.push(name);
     if (rel.type === "writer") {
