@@ -278,14 +278,14 @@ export default function RepertoirePage() {
       ) : null}
 
       {items.length === 0 ? (
-        <div className="rounded-md border p-4 text-sm">
-          <div className="font-medium">Your repertoire is empty.</div>
-          <div className="mt-1 text-muted-foreground">Add songs from the Song Library.</div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">Your repertoire is empty</p>
+          <p className="mt-1 text-sm text-zinc-500">Add songs you know and SingJam will match you with musicians who share your repertoire.</p>
           <Link
             href="/search"
-            className="mt-3 inline-block rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+            className="mt-4 inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
           >
-            Browse Songs
+            Add your first song →
           </Link>
         </div>
       ) : (

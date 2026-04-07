@@ -156,7 +156,7 @@ function suggestUsername(email: string): string {
   return USERNAME_RE.test(clean) && !RESERVED.has(clean) ? clean : "";
 }
 
-export default function AccountPanel() {
+export default function AccountPanel({ next }: { next?: string }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -362,7 +362,7 @@ export default function AccountPanel() {
       setUsernameStatus("idle");
       window.dispatchEvent(new CustomEvent("profile-updated"));
     }
-    if (!error) router.push("/repertoire");
+    if (!error) router.push(next ?? "/repertoire");
     else setStatus(error.message);
   }
 

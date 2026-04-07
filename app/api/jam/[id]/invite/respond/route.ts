@@ -87,5 +87,19 @@ export async function POST(
     }
   }
 
+  if (response === "declined" && invite.invited_by) {
+    const [{ data: profile }, { data: jam }] = await Promise.all([
+      admin.from("profiles").select("display_name, username").eq("id", user.id).single(),
+      admin.from("jams").select("name").eq("id", jamId).single(),
+    ]);
+    const declinerName = (profile as any)?.display_name ?? (profile as any)?.username ?? "Someone";
+    await createNotification({
+      userId: invite.invited_by,
+      type: "invite_declined",
+      title: `${declinerName} declined your invite to ${(jam as any)?.name ?? "your jam"}`,
+      link: `/jam/${jamId}`,
+    });
+  }
+
   return NextResponse.json({ ok: true, rsvpStatus: response === "accepted" ? "attending" : null });
 }

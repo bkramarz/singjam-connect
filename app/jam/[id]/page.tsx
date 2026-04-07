@@ -11,8 +11,8 @@ import JamSharedSongs from "@/components/JamSharedSongs";
 import JamAttendeeList from "@/components/JamAttendeeList";
 import { getFeatureFlag } from "@/lib/featureFlags";
 
-export default async function JamPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function JamPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ invite?: string }> }) {
+  const [{ id }, { invite: inviteToken }] = await Promise.all([params, searchParams]);
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -159,7 +159,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
           )}
           {!user && !isOfficial && (
             <Link
-              href={`/auth?next=/jam/${id}`}
+              href={`/auth?next=/jam/${id}${inviteToken ? `&invite=${inviteToken}` : ""}`}
               className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
             >
               Sign in to RSVP
@@ -169,7 +169,7 @@ export default async function JamPage({ params }: { params: Promise<{ id: string
       }
     />
     {user && <JamSharedSongs jamId={id} />}
-    <JamAttendeeList jamId={id} />
+    <JamAttendeeList jamId={id} hostId={jam.host_user_id} />
     {canInvite && invitesEnabled && (
       <JamInvitePanel
         jamId={id}

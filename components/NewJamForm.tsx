@@ -158,6 +158,12 @@ export default function NewJamForm() {
         : Promise.resolve(),
     ]);
 
+    fetch("/api/jam/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jamId }),
+    }).catch(() => {});
+
     router.push(`/jam/${jamId}`);
   }
 

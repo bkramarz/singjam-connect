@@ -123,11 +123,9 @@ export default async function SongPage({
           {altTitles.length > 0 && (
             <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
           )}
-          {user && (
-            <div className="mt-3">
-              <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
-            </div>
-          )}
+          <div className="mt-3">
+            <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
+          </div>
         </div>
 
         {(composers.length > 0 || lyricists.length > 0) && (
@@ -267,9 +265,7 @@ export default async function SongPage({
 
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          {user && (
-            <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
-          )}
+          <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
           {isAdmin && (
             <Link
               href={`/admin/songs/${song.slug ?? song.id}`}

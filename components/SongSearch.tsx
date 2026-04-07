@@ -205,6 +205,12 @@ export default function SongSearch({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
+  async function handlePendingAdd(songId: string) {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) { router.push("/auth"); return; }
+    setPendingAddId(songId);
+  }
+
   async function addSong(songId: string, level: string) {
     setStatus(null);
     setPendingAddId(null);
@@ -468,6 +474,7 @@ export default function SongSearch({
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
                 setPendingAddId={setPendingAddId}
+                onAdd={handlePendingAdd}
                 addSong={addSong}
               />
             ))}
@@ -497,6 +504,7 @@ export default function SongSearch({
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
                 setPendingAddId={setPendingAddId}
+                onAdd={handlePendingAdd}
                 addSong={addSong}
               />
             ))}
@@ -544,6 +552,7 @@ function SongCard({
   pendingAddId,
   singingVoice,
   setPendingAddId,
+  onAdd,
   addSong,
 }: {
   songId: string;
@@ -561,6 +570,7 @@ function SongCard({
   pendingAddId: string | null;
   singingVoice: string | null;
   setPendingAddId: (id: string | null) => void;
+  onAdd: (id: string) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
 }) {
   const inRepertoire = repertoire.has(songId);
@@ -651,7 +661,7 @@ function SongCard({
           <>
             <button
               className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-              onClick={() => setPendingAddId(songId)}
+              onClick={() => onAdd(songId)}
             >
               {inRepertoire ? "Update" : "Add"}
             </button>

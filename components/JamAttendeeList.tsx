@@ -5,52 +5,67 @@ const SINGING_LABEL: Record<string, string> = {
   backup: "Backup vocals",
 };
 
-export default async function JamAttendeeList({ jamId }: { jamId: string }) {
+export default async function JamAttendeeList({ jamId, hostId }: { jamId: string; hostId: string }) {
   const supabase = await supabaseServer();
 
-  const { data: rsvps } = await supabase
-    .from("jam_rsvps")
-    .select("user_id, waitlist_position, status")
-    .eq("jam_id", jamId)
-    .in("status", ["attending", "waitlist"])
-    .order("created_at", { ascending: true });
+  const [rsvpsRes, hostRes] = await Promise.all([
+    supabase
+      .from("jam_rsvps")
+      .select("user_id, waitlist_position, status")
+      .eq("jam_id", jamId)
+      .in("status", ["attending", "waitlist"])
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("id, display_name, last_name, username, singing_voice, instrument_levels")
+      .eq("id", hostId)
+      .single(),
+  ]);
 
-  if (!rsvps || rsvps.length === 0) return null;
+  const rsvps = rsvpsRes.data ?? [];
+  const hostProfile = hostRes.data;
 
-  const userIds = (rsvps as any[]).map((r: any) => r.user_id);
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, display_name, last_name, username, singing_voice, instrument_levels")
-    .in("id", userIds);
+  // Fetch attendee profiles (excluding host if they RSVPd separately)
+  const attendeeIds = (rsvps as any[])
+    .map((r: any) => r.user_id)
+    .filter((uid: string) => uid !== hostId);
 
   const profileMap = new Map<string, any>();
-  for (const p of (profiles ?? []) as any[]) {
-    profileMap.set(p.id, p);
+  if (hostProfile) profileMap.set(hostId, hostProfile);
+
+  if (attendeeIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, display_name, last_name, username, singing_voice, instrument_levels")
+      .in("id", attendeeIds);
+    for (const p of (profiles ?? []) as any[]) {
+      profileMap.set(p.id, p);
+    }
   }
 
-  const attending = (rsvps as any[]).filter((r: any) => r.status === "attending");
+  const attending = (rsvps as any[]).filter((r: any) => r.status === "attending" && r.user_id !== hostId);
   const waitlist = (rsvps as any[]).filter((r: any) => r.status === "waitlist");
+
+  // Total going = host + attending RSVPs
+  const totalGoing = 1 + attending.length;
 
   function renderTags(profile: any) {
     const tags: string[] = [];
-
     const voices: string[] = (profile?.singing_voice ?? "")
       .split(",")
       .filter((v: string) => v && v !== "none");
     for (const v of voices) {
       if (SINGING_LABEL[v]) tags.push(SINGING_LABEL[v]);
     }
-
     const instruments: Record<string, string> = profile?.instrument_levels ?? {};
     for (const [name, level] of Object.entries(instruments)) {
       tags.push(`${name} · ${level}`);
     }
-
     return tags;
   }
 
-  function AttendeeRow({ rsvp, badge }: { rsvp: any; badge: React.ReactNode }) {
-    const p = profileMap.get(rsvp.user_id);
+  function AttendeeRow({ userId, badge }: { userId: string; badge: React.ReactNode }) {
+    const p = profileMap.get(userId);
     const fullName = [p?.display_name, p?.last_name].filter(Boolean).join(" ") || p?.username || "Unknown";
     const tags = renderTags(p);
 
@@ -81,13 +96,22 @@ export default async function JamAttendeeList({ jamId }: { jamId: string }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-1">
       <h2 className="text-base font-semibold mb-2">
-        Who's going <span className="text-sm font-normal text-zinc-400">({attending.length})</span>
+        Who's going <span className="text-sm font-normal text-zinc-400">({totalGoing})</span>
       </h2>
       <ul className="divide-y divide-zinc-100">
+        {/* Host always first */}
+        <AttendeeRow
+          userId={hostId}
+          badge={
+            <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+              Host
+            </span>
+          }
+        />
         {attending.map((r: any) => (
           <AttendeeRow
             key={r.user_id}
-            rsvp={r}
+            userId={r.user_id}
             badge={
               <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
                 Going
@@ -98,9 +122,9 @@ export default async function JamAttendeeList({ jamId }: { jamId: string }) {
         {waitlist.map((r: any) => (
           <AttendeeRow
             key={r.user_id}
-            rsvp={r}
+            userId={r.user_id}
             badge={
-              <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+              <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
                 #{r.waitlist_position} waitlist
               </span>
             }

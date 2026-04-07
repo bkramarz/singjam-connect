@@ -107,7 +107,19 @@ export async function GET(request: Request) {
             .is("invited_user_id", null);
         }
 
-        destination = "/account";
+        // Resolve jam from invite token so we can send them there after account setup
+        let inviteJamId: string | null = null;
+        if (inviteToken) {
+          const admin = supabaseAdmin();
+          const { data: invite } = await admin
+            .from("jam_invites")
+            .select("jam_id")
+            .eq("token", inviteToken)
+            .maybeSingle();
+          inviteJamId = invite?.jam_id ?? null;
+        }
+
+        destination = inviteJamId ? `/account?next=/jam/${inviteJamId}` : "/account";
       } else {
         if (isFirstLogin && user.email) {
           resend.emails.send({
@@ -118,19 +130,18 @@ export async function GET(request: Request) {
           }).catch(() => {});
         }
 
-        destination = !profile.username ? "/account" : "/repertoire";
-      }
-
-      // If an invite token is present, find the jam and redirect there
-      if (inviteToken && !destination?.startsWith("/jam")) {
-        const admin = supabaseAdmin();
-        const { data: invite } = await admin
-          .from("jam_invites")
-          .select("jam_id")
-          .eq("token", inviteToken)
-          .maybeSingle();
-        if (invite?.jam_id) {
-          destination = `/jam/${invite.jam_id}`;
+        if (!profile.username) {
+          destination = "/account";
+        } else if (inviteToken) {
+          const admin = supabaseAdmin();
+          const { data: invite } = await admin
+            .from("jam_invites")
+            .select("jam_id")
+            .eq("token", inviteToken)
+            .maybeSingle();
+          destination = invite?.jam_id ? `/jam/${invite.jam_id}` : "/repertoire";
+        } else {
+          destination = "/repertoire";
         }
       }
     }
