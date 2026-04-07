@@ -138,9 +138,15 @@ export default function RepertoireButton({
     );
   }
 
+  async function handleAddClick() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) { router.push("/auth"); return; }
+    setPicking(true);
+  }
+
   return (
     <button
-      onClick={() => setPicking(true)}
+      onClick={handleAddClick}
       className="rounded-xl border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
     >
       + Add to repertoire
