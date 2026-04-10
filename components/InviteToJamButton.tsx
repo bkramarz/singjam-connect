@@ -36,7 +36,7 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
     if (!user) return;
 
     const now = new Date().toISOString();
-    const [{ data }, { data: invites }] = await Promise.all([
+    const [{ data: hosted }, { data: rsvps }, { data: invites }] = await Promise.all([
       supabase
         .from("jams")
         .select("id, name, starts_at")
@@ -46,15 +46,37 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
         .order("starts_at", { ascending: true })
         .limit(10),
       supabase
+        .from("jam_rsvps")
+        .select("jam_id")
+        .eq("user_id", user.id)
+        .eq("status", "attending"),
+      supabase
         .from("jam_invites")
         .select("jam_id")
         .eq("invited_user_id", inviteeUserId)
         .neq("status", "declined"),
     ]);
 
+    // Also include jams the user is attending where guests_can_invite is enabled
+    const hostedIds = new Set((hosted ?? []).map((j: any) => j.id));
+    const attendingIds = (rsvps ?? []).map((r: any) => r.jam_id).filter((id: string) => !hostedIds.has(id));
+
+    let attendingJams: JamOption[] = [];
+    if (attendingIds.length > 0) {
+      const { data } = await supabase
+        .from("jams")
+        .select("id, name, starts_at")
+        .in("id", attendingIds)
+        .eq("guests_can_invite", true)
+        .neq("visibility", "official")
+        .gte("starts_at", now)
+        .order("starts_at", { ascending: true });
+      attendingJams = (data as JamOption[]) ?? [];
+    }
+
     const alreadyInvited = new Set((invites ?? []).map((i: any) => i.jam_id));
     setSent(alreadyInvited);
-    setJams((data as JamOption[]) ?? []);
+    setJams([...(hosted ?? []), ...attendingJams] as JamOption[]);
   }
 
   function toggle() {
