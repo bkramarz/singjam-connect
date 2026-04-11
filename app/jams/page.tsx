@@ -22,10 +22,13 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
       ) : jam.starts_at ? (
         <div className={`shrink-0 w-20 flex flex-col items-center justify-center border-r px-2 py-4 ${isOfficial ? "bg-amber-50 border-amber-200" : "bg-zinc-50 border-zinc-100"}`}>
           <span className={`text-xs font-semibold uppercase tracking-wide ${isOfficial ? "text-amber-500" : "text-zinc-400"}`}>
-            <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
+            <FormattedDate iso={jam.starts_at} options={{ weekday: "short" }} />
           </span>
           <span className="text-3xl font-bold text-zinc-900 leading-none">
             <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
+          </span>
+          <span className={`text-xs font-semibold uppercase tracking-wide ${isOfficial ? "text-amber-500" : "text-zinc-400"}`}>
+            <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
           </span>
         </div>
       ) : null}

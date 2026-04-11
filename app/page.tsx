@@ -59,10 +59,13 @@ function JamEventCard({ jam }: { jam: any }) {
       ) : jam.starts_at ? (
         <div className="shrink-0 w-20 flex flex-col items-center justify-center bg-amber-50 border-r border-amber-200 px-2 py-4">
           <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">
-            <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
+            <FormattedDate iso={jam.starts_at} options={{ weekday: "short" }} />
           </span>
           <span className="text-3xl font-bold text-zinc-900 leading-none">
             <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
+          </span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">
+            <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
           </span>
         </div>
       ) : null}
@@ -72,6 +75,8 @@ function JamEventCard({ jam }: { jam: any }) {
         <p className="font-semibold text-zinc-900 truncate">{jam.name ?? "SingJam event"}</p>
         {jam.starts_at && (
           <p className="text-xs text-zinc-500 mt-0.5">
+            <FormattedDate iso={jam.starts_at} options={{ weekday: "short", month: "short", day: "numeric" }} />
+            {" · "}
             <FormattedTime iso={jam.starts_at} />
             {jam.ends_at && <> – <FormattedTime iso={jam.ends_at} /></>}
           </p>

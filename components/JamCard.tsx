@@ -86,10 +86,13 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
             <div className="flex items-start gap-4 px-5 py-4">
               <div className="shrink-0 w-10 text-center">
                 <div className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
+                  <FormattedDate iso={jam.starts_at} options={{ weekday: "short" }} />
                 </div>
                 <div className="text-2xl font-bold text-zinc-900 leading-none">
                   <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
+                </div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
                 </div>
               </div>
               <div className="min-w-0">
