@@ -2,6 +2,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import Link from "next/link";
 import type { JSX } from "react";
 import ApproveButton from "./ApproveButton";
+import { FormattedDate } from "@/components/FormattedTime";
 
 export default async function ReviewSongsPage() {
   const supabase = await supabaseServer();
@@ -33,7 +34,6 @@ export default async function ReviewSongsPage() {
             ) : (
               <span className="font-medium text-zinc-600">{fullName || "Unknown user"}</span>
             );
-            const date = new Date(song.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
             return (
               <div key={song.id} className="flex items-center gap-4 px-5 py-4">
@@ -50,7 +50,7 @@ export default async function ReviewSongsPage() {
                     <p className="text-xs text-zinc-500 mt-0.5">{song.display_artist}</p>
                   )}
                   <p className="text-xs text-zinc-400 mt-0.5">
-                    Submitted by {submitterNode} · {date}
+                    Submitted by {submitterNode} · <FormattedDate iso={song.created_at} options={{ month: "short", day: "numeric", year: "numeric" }} />
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
