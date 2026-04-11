@@ -89,7 +89,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
                   <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
                 </div>
                 <div className="text-2xl font-bold text-zinc-900 leading-none">
-                  {new Date(jam.starts_at).getDate()}
+                  <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
                 </div>
               </div>
               <div className="min-w-0">
