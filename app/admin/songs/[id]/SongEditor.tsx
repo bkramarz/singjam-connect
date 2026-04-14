@@ -179,6 +179,21 @@ export default function SongEditor({
   const [error, setError] = useState<string | null>(null);
   const [standardizing, setStandardizing] = useState(false);
 
+  // AI enrichment
+  type AISuggestions = {
+    year_written: number | null;
+    first_line: string | null;
+    hook: string | null;
+    composers: string[];
+    lyricists: string[];
+    primary_recording_year: number | null;
+    confidence: "high" | "medium" | "low";
+    notes: string | null;
+  };
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestions | null>(null);
+  const [enrichingWithAI, setEnrichingWithAI] = useState(false);
+  const [acceptedFields, setAcceptedFields] = useState<Set<string>>(new Set());
+
   // Lyric data
   const [openingGenius, setOpeningGenius] = useState(false);
 
@@ -469,6 +484,72 @@ export default function SongEditor({
     } finally {
       setSaving(false);
     }
+  }
+
+  function splitNames(names: string[]) {
+    const existingIds: string[] = [];
+    const pendingNames: string[] = [];
+    for (const n of names) {
+      const match = allPeople.find((p) => p.name.toLowerCase() === n.trim().toLowerCase());
+      if (match) existingIds.push(match.id);
+      else pendingNames.push(n.trim());
+    }
+    return { existingIds, pendingNames };
+  }
+
+  async function handleEnrichWithAI() {
+    if (!song?.id) return;
+    setEnrichingWithAI(true);
+    setError(null);
+    setAiSuggestions(null);
+    try {
+      const res = await fetch(`/api/admin/songs/${song.id}/ai-enrich`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const s = data.suggestions;
+      setAiSuggestions(s);
+      const initial = new Set<string>();
+      if (s.year_written != null) initial.add("year_written");
+      if (s.first_line) initial.add("first_line");
+      if (s.hook) initial.add("hook");
+      if (s.composers?.length) initial.add("composers");
+      if (s.lyricists?.length) initial.add("lyricists");
+      if (s.primary_recording_year != null) initial.add("primary_recording_year");
+      setAcceptedFields(initial);
+    } catch {
+      setError("AI enrichment failed. Check that OPENAI_API_KEY is set in .env.local.");
+    } finally {
+      setEnrichingWithAI(false);
+    }
+  }
+
+  function applyAISuggestions() {
+    if (!aiSuggestions) return;
+    if (acceptedFields.has("year_written") && aiSuggestions.year_written != null) {
+      setYearWritten(aiSuggestions.year_written.toString());
+    }
+    if (acceptedFields.has("first_line") && aiSuggestions.first_line) {
+      setFirstLine(aiSuggestions.first_line);
+    }
+    if (acceptedFields.has("hook") && aiSuggestions.hook) {
+      setHook(aiSuggestions.hook);
+    }
+    if (acceptedFields.has("composers") && aiSuggestions.composers.length) {
+      const { existingIds, pendingNames } = splitNames(aiSuggestions.composers);
+      setComposers(new Set(existingIds));
+      setPendingComposerNames(pendingNames);
+    }
+    if (acceptedFields.has("lyricists") && aiSuggestions.lyricists.length) {
+      const { existingIds, pendingNames } = splitNames(aiSuggestions.lyricists);
+      setLyricists(new Set(existingIds));
+      setPendingLyricistNames(pendingNames);
+    }
+    if (acceptedFields.has("primary_recording_year") && aiSuggestions.primary_recording_year != null) {
+      const yr = aiSuggestions.primary_recording_year;
+      setRecordingArtists((prev) => prev.map((e, i) => i === 0 ? { ...e, year: yr } : e));
+    }
+    setAiSuggestions(null);
+    setAcceptedFields(new Set());
   }
 
   async function handleEnrich() {
@@ -874,6 +955,13 @@ export default function SongEditor({
             {standardizing ? "Finding…" : <><span className="sm:hidden">✦ Find recordings</span><span className="hidden sm:inline">✦ Find additional recordings</span></>}
           </button>
           <button
+            onClick={handleEnrichWithAI}
+            disabled={enrichingWithAI || !song?.id}
+            className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+          >
+            {enrichingWithAI ? "Asking AI…" : "✦ Enrich with AI"}
+          </button>
+          <button
             onClick={handleSave}
             disabled={saving}
             className="rounded-lg bg-amber-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-40"
@@ -888,6 +976,63 @@ export default function SongEditor({
           {error}
         </div>
       )}
+
+      {aiSuggestions && (() => {
+        const currentComposerNames = [...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter(Boolean).join(", ");
+        const currentLyricistNames = [...lyricists].map((id) => allPeople.find((p) => p.id === id)?.name).filter(Boolean).join(", ");
+        const toggleField = (field: string) => (on: boolean) =>
+          setAcceptedFields((prev) => { const s = new Set(prev); on ? s.add(field) : s.delete(field); return s; });
+        return (
+          <div className="rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-violet-900">AI Suggestions</h2>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  aiSuggestions.confidence === "high" ? "bg-green-100 text-green-700" :
+                  aiSuggestions.confidence === "medium" ? "bg-amber-100 text-amber-700" :
+                  "bg-red-100 text-red-700"
+                }`}>
+                  {aiSuggestions.confidence} confidence
+                </span>
+              </div>
+              <button onClick={() => setAiSuggestions(null)} className="text-violet-400 hover:text-violet-600 text-lg leading-none">×</button>
+            </div>
+
+            {aiSuggestions.notes && (
+              <p className="rounded-lg bg-violet-100 px-3 py-2 text-xs text-violet-700">{aiSuggestions.notes}</p>
+            )}
+
+            <div className="space-y-2">
+              {aiSuggestions.year_written != null && (
+                <SuggestionRow label="Year written" current={yearWritten || "—"} suggested={aiSuggestions.year_written.toString()} accepted={acceptedFields.has("year_written")} onChange={toggleField("year_written")} />
+              )}
+              {aiSuggestions.first_line && (
+                <SuggestionRow label="First line" current={firstLine || "—"} suggested={aiSuggestions.first_line} accepted={acceptedFields.has("first_line")} onChange={toggleField("first_line")} />
+              )}
+              {aiSuggestions.hook && (
+                <SuggestionRow label="Hook" current={hook || "—"} suggested={aiSuggestions.hook} accepted={acceptedFields.has("hook")} onChange={toggleField("hook")} />
+              )}
+              {aiSuggestions.composers.length > 0 && (
+                <SuggestionRow label="Composers" current={currentComposerNames || "—"} suggested={aiSuggestions.composers.join(", ")} accepted={acceptedFields.has("composers")} onChange={toggleField("composers")} />
+              )}
+              {aiSuggestions.lyricists.length > 0 && (
+                <SuggestionRow label="Lyricists" current={currentLyricistNames || "—"} suggested={aiSuggestions.lyricists.join(", ")} accepted={acceptedFields.has("lyricists")} onChange={toggleField("lyricists")} />
+              )}
+              {aiSuggestions.primary_recording_year != null && (
+                <SuggestionRow label="Primary recording year" current={recordingArtists[0]?.year?.toString() || "—"} suggested={aiSuggestions.primary_recording_year.toString()} accepted={acceptedFields.has("primary_recording_year")} onChange={toggleField("primary_recording_year")} />
+              )}
+            </div>
+
+            <button
+              onClick={applyAISuggestions}
+              disabled={acceptedFields.size === 0}
+              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-40"
+            >
+              Apply {acceptedFields.size} suggestion{acceptedFields.size !== 1 ? "s" : ""}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Scalar fields */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
@@ -1543,6 +1688,44 @@ function Field({
       <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
       {children}
     </div>
+  );
+}
+
+function SuggestionRow({
+  label,
+  current,
+  suggested,
+  accepted,
+  onChange,
+}: {
+  label: string;
+  current: string;
+  suggested: string;
+  accepted: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const unchanged = current === suggested;
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-violet-100 bg-white px-3 py-2.5">
+      <input
+        type="checkbox"
+        checked={accepted}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600"
+      />
+      <div className="min-w-0 flex-1 text-sm">
+        <span className="font-medium text-slate-700">{label}</span>
+        {unchanged ? (
+          <span className="ml-2 text-slate-400 text-xs">(no change)</span>
+        ) : (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+            <span className="text-slate-400 line-through">{current}</span>
+            <span className="text-slate-400">→</span>
+            <span className="font-medium text-violet-700">{suggested}</span>
+          </div>
+        )}
+      </div>
+    </label>
   );
 }
 
