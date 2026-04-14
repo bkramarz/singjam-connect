@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 
 const SINGING_LABEL: Record<string, string> = {
@@ -72,12 +73,14 @@ export default async function JamAttendeeList({ jamId, hostId }: { jamId: string
     return (
       <li className="py-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-zinc-900">
-            {fullName}
-            {p?.username && (
+          {p?.username ? (
+            <Link href={`/u/${p.username}`} className="text-sm font-medium text-zinc-900 hover:underline">
+              {fullName}
               <span className="ml-1.5 text-xs font-normal text-zinc-400">@{p.username}</span>
-            )}
-          </p>
+            </Link>
+          ) : (
+            <p className="text-sm font-medium text-zinc-900">{fullName}</p>
+          )}
           {badge}
         </div>
         {tags.length > 0 && (

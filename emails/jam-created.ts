@@ -12,7 +12,7 @@ export function jamCreatedHtml({
   const greeting = name ? `Hi ${name},` : "Hi,";
   const eventName = jamName ?? "Your jam";
   const dateStr = startsAt
-    ? new Date(startsAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
+    ? new Date(startsAt).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
 
   return `<!DOCTYPE html>

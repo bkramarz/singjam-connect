@@ -11,7 +11,7 @@ export function jamCancelledHtml({
 }) {
   const greeting = name ? `Hi ${name},` : "Hi,";
   const dateStr = startsAt
-    ? new Date(startsAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
+    ? new Date(startsAt).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
 
   if (isHost) {

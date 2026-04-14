@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 
 export type JamCardData = {
@@ -16,6 +17,7 @@ export type JamCardData = {
   genres: string[];
   themes: string[];
   host?: string | null;
+  hostUsername?: string | null;
   capacity?: number | null;
   hasFullAccess: boolean;
 };
@@ -76,7 +78,17 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
             {jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
           </h1>
           {jam.host && (
-            <p className="mt-1 text-sm text-zinc-500">Hosted by <span className="text-zinc-700 font-medium">{jam.host}</span></p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Hosted by{" "}
+              {jam.hostUsername ? (
+                <Link href={`/u/${jam.hostUsername}`} className="font-medium text-zinc-700 hover:underline">
+                  {jam.host}
+                  <span className="ml-1 font-normal text-zinc-400">@{jam.hostUsername}</span>
+                </Link>
+              ) : (
+                <span className="font-medium text-zinc-700">{jam.host}</span>
+              )}
+            </p>
           )}
         </div>
 
