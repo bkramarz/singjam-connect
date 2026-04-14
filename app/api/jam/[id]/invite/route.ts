@@ -78,7 +78,7 @@ export async function POST(
 
   const jamName = jam.name ?? "a jam";
   const startsAt = jam.starts_at
-    ? new Date(jam.starts_at).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
+    ? new Date(jam.starts_at).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org";

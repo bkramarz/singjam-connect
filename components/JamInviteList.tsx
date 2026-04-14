@@ -1,9 +1,12 @@
+import Link from "next/link";
+
 type Invite = {
   id: string;
   invited_user_id: string | null;
   invitee_email: string | null;
   status: string;
   display_name?: string | null;
+  last_name?: string | null;
   username?: string | null;
 };
 
@@ -27,16 +30,24 @@ export default function JamInviteList({ invites }: { invites: Invite[] }) {
       <h2 className="text-base font-semibold">Invites</h2>
       <ul className="divide-y divide-zinc-100">
         {invites.map((inv) => {
-          const label =
-            inv.display_name ?? inv.username ?? inv.invitee_email ?? "Unknown";
-          const sublabel =
-            inv.invited_user_id && inv.invitee_email ? inv.invitee_email : null;
+          const fullName = [inv.display_name, inv.last_name].filter(Boolean).join(" ")
+            || inv.username
+            || inv.invitee_email
+            || "Unknown";
+          const sublabel = inv.invited_user_id && inv.invitee_email ? inv.invitee_email : null;
           const status = inv.status in STATUS_LABEL ? inv.status : "pending";
 
           return (
             <li key={inv.id} className="flex items-center justify-between gap-3 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm text-zinc-900 truncate">{label}</p>
+                {inv.username ? (
+                  <Link href={`/u/${inv.username}`} className="text-sm text-zinc-900 hover:underline truncate block">
+                    {fullName}
+                    <span className="ml-1.5 text-xs text-zinc-400">@{inv.username}</span>
+                  </Link>
+                ) : (
+                  <p className="text-sm text-zinc-900 truncate">{fullName}</p>
+                )}
                 {sublabel && (
                   <p className="text-xs text-zinc-400 truncate">{sublabel}</p>
                 )}

@@ -6,10 +6,11 @@ import { getFeatureFlag } from "@/lib/featureFlags";
 import Tooltip from "@/components/Tooltip";
 
 
-function JamListCard({ jam, tags, hostLabel, isOfficial }: {
+function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial }: {
   jam: any;
   tags: string[];
   hostLabel?: string | null;
+  hostUsername?: string | null;
   isOfficial: boolean;
 }) {
   const inner = (
@@ -53,7 +54,17 @@ function JamListCard({ jam, tags, hostLabel, isOfficial }: {
           </div>
         )}
         {!isOfficial && hostLabel && (
-          <p className="mt-2 text-xs text-zinc-400">Hosted by {hostLabel}</p>
+          <p className="mt-2 text-xs text-zinc-400">
+            Hosted by{" "}
+            {hostUsername ? (
+              <Link href={`/u/${hostUsername}`} className="font-medium text-zinc-500 hover:underline">
+                {hostLabel}
+                <span className="ml-1 font-normal text-zinc-400">@{hostUsername}</span>
+              </Link>
+            ) : (
+              hostLabel
+            )}
+          </p>
         )}
         {isOfficial && (
           <div className="mt-2 flex flex-wrap gap-3">
@@ -127,7 +138,7 @@ export default async function JamsPage() {
   // Build lookup maps
   const genresByJam = new Map<string, string[]>();
   const themesByJam = new Map<string, string[]>();
-  const profileById = new Map<string, string>();
+  const profileById = new Map<string, { label: string; username: string | null }>();
 
   for (const row of (genresRes.data ?? []) as any[]) {
     const name = row.genres?.name;
@@ -144,7 +155,7 @@ export default async function JamsPage() {
     themesByJam.set(row.jam_id, arr);
   }
   for (const p of (profilesRes.data ?? []) as any[]) {
-    profileById.set(p.id, p.display_name ?? p.username ?? null);
+    profileById.set(p.id, { label: p.display_name ?? p.username ?? null, username: p.username ?? null });
   }
 
   return (
@@ -196,7 +207,8 @@ export default async function JamsPage() {
                 key={jam.id}
                 jam={jam}
                 tags={[...(genresByJam.get(jam.id) ?? []), ...(themesByJam.get(jam.id) ?? [])]}
-                hostLabel={profileById.get(jam.host_user_id) ?? null}
+                hostLabel={profileById.get(jam.host_user_id)?.label ?? null}
+                hostUsername={profileById.get(jam.host_user_id)?.username ?? null}
                 isOfficial={false}
               />
             ))}

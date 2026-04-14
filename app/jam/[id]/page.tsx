@@ -37,6 +37,7 @@ export default async function JamPage({ params, searchParams }: { params: Promis
     .maybeSingle();
 
   const hostLabel = (hostProfile as any)?.display_name ?? (hostProfile as any)?.username ?? null;
+  const hostUsername = (hostProfile as any)?.username ?? null;
   const genres = ((genresRes.data ?? []) as any[]).map((g: any) => g.genres?.name).filter(Boolean) as string[];
   const themes = ((themesRes.data ?? []) as any[]).map((t: any) => t.themes?.name).filter(Boolean) as string[];
 
@@ -97,14 +98,14 @@ export default async function JamPage({ params, searchParams }: { params: Promis
         .map((i: any) => i.invited_user_id)
         .filter(Boolean);
 
-      const profileMap = new Map<string, { display_name: string | null; username: string | null }>();
+      const profileMap = new Map<string, { display_name: string | null; last_name: string | null; username: string | null }>();
       if (memberIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, display_name, username")
+          .select("id, display_name, last_name, username")
           .in("id", memberIds);
         for (const p of (profiles ?? []) as any[]) {
-          profileMap.set(p.id, { display_name: p.display_name, username: p.username });
+          profileMap.set(p.id, { display_name: p.display_name, last_name: p.last_name, username: p.username });
         }
       }
 
@@ -142,6 +143,7 @@ export default async function JamPage({ params, searchParams }: { params: Promis
         genres,
         themes,
         host: hostLabel,
+        hostUsername,
         capacity: (jam as any).capacity,
         hasFullAccess,
       }}
