@@ -2,6 +2,53 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { supabaseServer } from "@/lib/supabase/server";
 
+const VALID_TONALITIES = [
+  "Major", "Minor", "Dorian", "Phrygian", "Lydian", "Mixolydian",
+  "Aeolian", "Locrian", "Harmonic Minor", "Melodic Minor",
+  "Pentatonic", "Blues", "Whole Tone", "Chromatic", "Modal",
+];
+
+const VALID_METERS = ["4", "3", "5", "7", "9", "11", "Free", "Irregular"];
+
+const VALID_GENRES = [
+  "Acoustic", "Afrobeats", "Afropop", "Alternative", "Ambient", "Americana", "Art Rock",
+  "Bluegrass", "Blues", "Bossa Nova", "Cabaret", "Cajun", "Celtic", "Chanson", "Children's",
+  "Christian", "Classical", "Contemporary Christian", "Country", "Country Rock", "Dance",
+  "Disco", "Doo-Wop", "Dream Pop", "Drum and Bass", "Electronic", "Emo", "Experimental",
+  "Flamenco", "Folk", "Folk Rock", "Funk", "Gospel", "Glam Rock", "Grunge", "Hard Rock",
+  "Heavy Metal", "Hip-Hop/Rap", "Holiday", "House", "Hymns", "Indie", "Jazz", "Klezmer",
+  "Latin", "Metal", "Motown", "Musical Theatre", "New Age", "New Wave", "Opera",
+  "Outlaw Country", "Pop", "Post-Punk", "Post-Rock", "Progressive Rock", "Psychedelic Rock",
+  "Punk", "R&B", "Reggae", "Rockabilly", "Rock", "Roots Rock", "Salsa", "Shanties",
+  "Shoegaze", "Singer-Songwriter", "Ska", "Soul", "Spiritual", "Surf Rock", "Synthpop",
+  "Tango", "Techno", "Traditional", "Trance", "Trap", "Western Swing", "Work Songs",
+  "World", "Worship", "Zydeco",
+];
+
+const VALID_THEMES = [
+  "Addiction", "Aging", "Betrayal", "Celebration", "Childhood", "City Life", "Coming of Age",
+  "Courage", "Dancing", "Death", "Drinking", "Dreams", "Exile", "Faith", "Family", "Fantasy",
+  "Forgiveness", "Freedom", "Friendship", "History", "Home", "Hope", "Humor", "Identity",
+  "Immigration", "Joy", "Justice", "Labor", "Longing", "Loss", "Love", "Memory", "Music",
+  "Mythology", "Nature", "Nostalgia", "Parenthood", "Peace", "Politics", "Poverty", "Pride",
+  "Race", "Rebellion", "Religion", "Romance", "Rural Life", "Satire", "Sea", "Seasons",
+  "Shame", "Spirituality", "Storytelling", "Struggle", "Time", "Travel", "Unity", "Wandering",
+  "War", "Wealth", "Work", "Youth",
+];
+
+const VALID_CULTURES = [
+  "Aboriginal Australian", "African American", "Appalachian", "Arab", "Argentine", "Australian",
+  "Bangladeshi", "Belgian", "Brazilian", "British", "Cajun", "Cambodian", "Chilean", "Chinese",
+  "Colombian", "Creole", "Cuban", "Czech", "Danish", "Dutch", "East African", "Egyptian",
+  "Ethiopian", "Filipino", "Finnish", "First Nations", "French", "German", "Ghanaian", "Greek",
+  "Haitian", "Hawaiian", "Hungarian", "Indian", "Indonesian", "Irish", "Israeli", "Italian",
+  "Jamaican", "Japanese", "Jewish", "Kenyan", "Korean", "Latin American", "Māori", "Mexican",
+  "Native American", "Nepali", "Nigerian", "Norwegian", "Pakistani", "Peruvian", "Polish",
+  "Portuguese", "Puerto Rican", "Romanian", "Romani", "Russian", "Scandinavian", "Scottish",
+  "South African", "Spanish", "Sri Lankan", "Swedish", "Swiss", "Tex-Mex", "Thai", "Trinidadian",
+  "Turkish", "Ukrainian", "Venezuelan", "Vietnamese", "Welsh", "West African", "Yoruba", "Zulu",
+];
+
 const SYSTEM_PROMPT = `You are a music research assistant helping to enrich a song database for SingJam, a platform for musicians.
 
 Given the current data for a song, research and suggest corrections or additions for these fields:
@@ -11,6 +58,13 @@ Given the current data for a song, research and suggest corrections or additions
 - composers: Full list of people who wrote the music
 - lyricists: Full list of people who wrote the words (often identical to composers)
 - primary_recording_year: Year of the most well-known or original recording
+- tonality: The key mode of the song. Must be one of: ${VALID_TONALITIES.join(", ")}
+- meter: The time signature numerator. Must be one of: ${VALID_METERS.join(", ")}
+- vibe: Overall energy feel — must be "Banger", "Ballad", or null
+- genres: Up to 3 genres. Must each be from: ${VALID_GENRES.join(", ")}
+- themes: Up to 3 lyrical/emotional themes. Must each be from: ${VALID_THEMES.join(", ")}
+- cultures: Cultural origins or associations (if any). Must each be from: ${VALID_CULTURES.join(", ")}
+- languages: Languages the song is sung in, as plain English names (e.g. "English", "French")
 
 Rules:
 - Only suggest values you are confident about. If unsure, return null for scalar fields or an empty array for lists.
@@ -18,6 +72,7 @@ Rules:
 - Use full canonical names for composers and lyricists (e.g. "Bob Dylan", not "Robert Zimmerman").
 - For traditional or folk songs, use ["Traditional"] for both composers and lyricists.
 - Return the full suggested list even if some names are already correct.
+- Only use values from the provided lists for tonality, meter, vibe, genres, themes, and cultures. Do not invent new values.
 - Set confidence to "high" only when you are certain. Use "medium" or "low" otherwise.
 - Use the notes field to flag anything important: disputed credits, alternate versions, etc.
 
@@ -29,6 +84,13 @@ Respond with valid JSON only, matching this exact schema:
   "composers": string[],
   "lyricists": string[],
   "primary_recording_year": number | null,
+  "tonality": string | null,
+  "meter": string | null,
+  "vibe": "Banger" | "Ballad" | null,
+  "genres": string[],
+  "themes": string[],
+  "cultures": string[],
+  "languages": string[],
   "confidence": "high" | "medium" | "low",
   "notes": string | null
 }`;

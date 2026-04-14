@@ -187,6 +187,13 @@ export default function SongEditor({
     composers: string[];
     lyricists: string[];
     primary_recording_year: number | null;
+    tonality: string | null;
+    meter: string | null;
+    vibe: "Banger" | "Ballad" | null;
+    genres: string[];
+    themes: string[];
+    cultures: string[];
+    languages: string[];
     confidence: "high" | "medium" | "low";
     notes: string | null;
   };
@@ -515,6 +522,13 @@ export default function SongEditor({
       if (s.composers?.length) initial.add("composers");
       if (s.lyricists?.length) initial.add("lyricists");
       if (s.primary_recording_year != null) initial.add("primary_recording_year");
+      if (s.tonality) initial.add("tonality");
+      if (s.meter) initial.add("meter");
+      if (s.vibe) initial.add("vibe");
+      if (s.genres?.length) initial.add("genres");
+      if (s.themes?.length) initial.add("themes");
+      if (s.cultures?.length) initial.add("cultures");
+      if (s.languages?.length) initial.add("languages");
       setAcceptedFields(initial);
     } catch {
       setError("AI enrichment failed. Check that OPENAI_API_KEY is set in .env.local.");
@@ -547,6 +561,27 @@ export default function SongEditor({
     if (acceptedFields.has("primary_recording_year") && aiSuggestions.primary_recording_year != null) {
       const yr = aiSuggestions.primary_recording_year;
       setRecordingArtists((prev) => prev.map((e, i) => i === 0 ? { ...e, year: yr } : e));
+    }
+    if (acceptedFields.has("tonality") && aiSuggestions.tonality) {
+      setTonalities([aiSuggestions.tonality]);
+    }
+    if (acceptedFields.has("meter") && aiSuggestions.meter) {
+      setMeters([aiSuggestions.meter]);
+    }
+    if (acceptedFields.has("vibe") && aiSuggestions.vibe) {
+      setVibe(aiSuggestions.vibe);
+    }
+    if (acceptedFields.has("genres") && aiSuggestions.genres.length) {
+      setGenres(aiSuggestions.genres.slice(0, 3));
+    }
+    if (acceptedFields.has("themes") && aiSuggestions.themes.length) {
+      setThemes(aiSuggestions.themes.slice(0, 3));
+    }
+    if (acceptedFields.has("cultures") && aiSuggestions.cultures.length) {
+      setCultures(aiSuggestions.cultures);
+    }
+    if (acceptedFields.has("languages") && aiSuggestions.languages.length) {
+      setLanguages(aiSuggestions.languages);
     }
     setAiSuggestions(null);
     setAcceptedFields(new Set());
@@ -684,6 +719,16 @@ export default function SongEditor({
       ]);
       const originalComposers = song?.song_composers.map((x) => x.person_id) ?? [];
       const originalLyricists = song?.song_lyricists.map((x) => x.person_id) ?? [];
+
+      const resolvedPendingComposerIds = await Promise.all(
+        pendingComposerNames.map((name) => resolvePersonName(name, "people", allPeople))
+      );
+      const resolvedPendingLyricistIds = await Promise.all(
+        pendingLyricistNames.map((name) => resolvePersonName(name, "people", allPeople))
+      );
+      const allComposerIds = new Set([...composers, ...resolvedPendingComposerIds.filter((id): id is string => !!id)]);
+      const allLyricistIds = new Set([...lyricists, ...resolvedPendingLyricistIds.filter((id): id is string => !!id)]);
+
       const newRecordingArtistIds = recordingArtists.map((e) => e.id);
       const toDeleteArtists = originalRecordingArtistIds.filter((id) => !newRecordingArtistIds.includes(id));
 
@@ -704,8 +749,8 @@ export default function SongEditor({
         syncJoinTable(songId!, "song_genres", "genre_id", genreIds, originalGenres),
         syncJoinTable(songId!, "song_themes", "theme_id", themeIds, originalThemes),
         syncJoinTable(songId!, "song_languages", "language_id", languageIds, originalLanguages),
-        syncJoinTable(songId!, "song_composers", "person_id", composers, originalComposers),
-        syncJoinTable(songId!, "song_lyricists", "person_id", lyricists, originalLyricists),
+        syncJoinTable(songId!, "song_composers", "person_id", allComposerIds, originalComposers),
+        syncJoinTable(songId!, "song_lyricists", "person_id", allLyricistIds, originalLyricists),
         toDeleteArtists.length
           ? supabase.from("song_recording_artists").delete().eq("song_id", songId!).in("artist_id", toDeleteArtists)
           : Promise.resolve(),
@@ -1020,6 +1065,27 @@ export default function SongEditor({
               )}
               {aiSuggestions.primary_recording_year != null && (
                 <SuggestionRow label="Primary recording year" current={recordingArtists[0]?.year?.toString() || "—"} suggested={aiSuggestions.primary_recording_year.toString()} accepted={acceptedFields.has("primary_recording_year")} onChange={toggleField("primary_recording_year")} />
+              )}
+              {aiSuggestions.tonality && (
+                <SuggestionRow label="Tonality" current={tonalities.join(", ") || "—"} suggested={aiSuggestions.tonality} accepted={acceptedFields.has("tonality")} onChange={toggleField("tonality")} />
+              )}
+              {aiSuggestions.meter && (
+                <SuggestionRow label="Meter" current={meters.join(", ") || "—"} suggested={aiSuggestions.meter} accepted={acceptedFields.has("meter")} onChange={toggleField("meter")} />
+              )}
+              {aiSuggestions.vibe && (
+                <SuggestionRow label="Vibe" current={vibe || "—"} suggested={aiSuggestions.vibe} accepted={acceptedFields.has("vibe")} onChange={toggleField("vibe")} />
+              )}
+              {aiSuggestions.genres.length > 0 && (
+                <SuggestionRow label="Genres" current={genres.join(", ") || "—"} suggested={aiSuggestions.genres.join(", ")} accepted={acceptedFields.has("genres")} onChange={toggleField("genres")} />
+              )}
+              {aiSuggestions.themes.length > 0 && (
+                <SuggestionRow label="Themes" current={themes.join(", ") || "—"} suggested={aiSuggestions.themes.join(", ")} accepted={acceptedFields.has("themes")} onChange={toggleField("themes")} />
+              )}
+              {aiSuggestions.cultures.length > 0 && (
+                <SuggestionRow label="Cultures" current={cultures.join(", ") || "—"} suggested={aiSuggestions.cultures.join(", ")} accepted={acceptedFields.has("cultures")} onChange={toggleField("cultures")} />
+              )}
+              {aiSuggestions.languages.length > 0 && (
+                <SuggestionRow label="Languages" current={languages.join(", ") || "—"} suggested={aiSuggestions.languages.join(", ")} accepted={acceptedFields.has("languages")} onChange={toggleField("languages")} />
               )}
             </div>
 
