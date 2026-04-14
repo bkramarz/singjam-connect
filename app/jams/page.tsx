@@ -5,17 +5,34 @@ import { getSessionServer, supabaseServer } from "@/lib/supabase/server";
 import { getFeatureFlag } from "@/lib/featureFlags";
 import Tooltip from "@/components/Tooltip";
 
+type RsvpStatus = "attending" | "waitlist" | "cancelled";
 
-function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial }: {
+function RsvpBadge({ status, waitlistPosition }: { status: RsvpStatus; waitlistPosition?: number | null }) {
+  if (status === "attending") {
+    return <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Attending</span>;
+  }
+  if (status === "waitlist") {
+    return (
+      <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+        Waitlisted{waitlistPosition != null ? ` #${waitlistPosition}` : ""}
+      </span>
+    );
+  }
+  return null;
+}
+
+function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isInvited, isHosting }: {
   jam: any;
   tags: string[];
   hostLabel?: string | null;
   hostUsername?: string | null;
   isOfficial: boolean;
+  rsvp?: { status: RsvpStatus; waitlist_position?: number | null } | null;
+  isInvited?: boolean;
+  isHosting?: boolean;
 }) {
   const inner = (
     <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
-      {/* Date block or image */}
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
           <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
@@ -38,7 +55,16 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial }: {
         {isOfficial && (
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-500 mb-0.5">Official SingJam event</p>
         )}
-        <p className="font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
+        <div className="flex items-center gap-2">
+          <p className="flex-1 font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
+          {isInvited && !rsvp && (
+            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">Invited</span>
+          )}
+          {rsvp && <RsvpBadge status={rsvp.status} waitlistPosition={rsvp.waitlist_position} />}
+          {isHosting && (
+            <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">Hosting</span>
+          )}
+        </div>
         {jam.starts_at && (
           <p className="text-xs text-zinc-500 mt-0.5">
             <FormattedDate iso={jam.starts_at} options={{ weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
@@ -53,17 +79,10 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial }: {
             ))}
           </div>
         )}
-        {!isOfficial && hostLabel && (
+        {!isOfficial && !isHosting && hostLabel && (
           <p className="mt-2 text-xs text-zinc-400">
-            Hosted by{" "}
-            {hostUsername ? (
-              <Link href={`/u/${hostUsername}`} className="font-medium text-zinc-500 hover:underline">
-                {hostLabel}
-                <span className="ml-1 font-normal text-zinc-400">@{hostUsername}</span>
-              </Link>
-            ) : (
-              hostLabel
-            )}
+            Hosted by <span className="font-medium text-zinc-500">{hostLabel}</span>
+            {hostUsername && <span className="ml-1">@{hostUsername}</span>}
           </p>
         )}
         {isOfficial && (
@@ -82,9 +101,7 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial }: {
     </div>
   );
 
-  if (isOfficial) {
-    return <div>{inner}</div>;
-  }
+  if (isOfficial) return <div>{inner}</div>;
 
   return (
     <Link href={`/jam/${jam.id}`} className="block">
@@ -109,19 +126,59 @@ export default async function JamsPage() {
     isAdmin = profile?.is_admin ?? false;
   }
 
-  // Fetch jams without nested joins to avoid RLS nulling the row
   const { data: jams } = await supabase
     .from("jams")
-    .select("id, name, starts_at, ends_at, neighborhood, notes, tickets_url, image_url, visibility, host_user_id")
+    .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
     .order("starts_at", { ascending: true, nullsFirst: false })
-    .limit(50);
+    .limit(100);
 
-  const officialJams = (jams ?? []).filter((j: any) => j.visibility === "official");
-  const communityJams = (jams ?? []).filter((j: any) => j.visibility === "community");
+  const [myRsvpsRes, myInvitesRes] = await Promise.all([
+    session
+      ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", session.user.id)
+      : Promise.resolve({ data: [] }),
+    session
+      ? supabase.from("jam_invites").select("jam_id, status").eq("invited_user_id", session.user.id)
+      : Promise.resolve({ data: [] }),
+  ]);
 
-  // Fetch tags and host profiles for all jams in parallel
-  const jamIds = (jams ?? []).map((j: any) => j.id);
-  const hostIds = [...new Set((jams ?? []).map((j: any) => j.host_user_id).filter(Boolean))];
+  const rsvpByJam = new Map<string, { status: RsvpStatus; waitlist_position: number | null }>(
+    ((myRsvpsRes.data ?? []) as any[]).map((r) => [r.jam_id, r])
+  );
+  const inviteByJam = new Map<string, { status: string }>(
+    ((myInvitesRes.data ?? []) as any[]).map((i) => [i.jam_id, i])
+  );
+
+  const allJams = (jams ?? []) as any[];
+  const userId = session?.user.id;
+
+  const officialJams = allJams.filter(j => j.visibility === "official");
+
+  const pendingInviteJams = session
+    ? allJams.filter(j => j.host_user_id !== userId && inviteByJam.get(j.id)?.status === "pending")
+    : [];
+
+  const hostingJams = session
+    ? allJams.filter(j => j.visibility !== "official" && j.host_user_id === userId)
+    : [];
+
+  const communityJams = session
+    ? allJams.filter(j =>
+        j.visibility === "community" &&
+        j.host_user_id !== userId &&
+        inviteByJam.get(j.id)?.status !== "pending"
+      )
+    : [];
+
+  const privateJams = session
+    ? allJams.filter(j => {
+        if (j.visibility !== "private" || j.host_user_id === userId) return false;
+        const inviteStatus = inviteByJam.get(j.id)?.status;
+        return inviteStatus === "accepted" || inviteStatus === "declined";
+      })
+    : [];
+
+  const jamIds = allJams.map(j => j.id);
+  const hostIds = [...new Set(allJams.map(j => j.host_user_id).filter(Boolean))];
 
   const [genresRes, themesRes, profilesRes] = await Promise.all([
     jamIds.length > 0
@@ -135,7 +192,6 @@ export default async function JamsPage() {
       : Promise.resolve({ data: [] }),
   ]);
 
-  // Build lookup maps
   const genresByJam = new Map<string, string[]>();
   const themesByJam = new Map<string, string[]>();
   const profileById = new Map<string, { label: string; username: string | null }>();
@@ -158,8 +214,28 @@ export default async function JamsPage() {
     profileById.set(p.id, { label: p.display_name ?? p.username ?? null, username: p.username ?? null });
   }
 
+  function cardProps(jam: any, opts: { isOfficial?: boolean; isHosting?: boolean } = {}) {
+    return {
+      jam,
+      tags: [...(genresByJam.get(jam.id) ?? []), ...(themesByJam.get(jam.id) ?? [])],
+      hostLabel: profileById.get(jam.host_user_id)?.label ?? null,
+      hostUsername: profileById.get(jam.host_user_id)?.username ?? null,
+      isOfficial: opts.isOfficial ?? false,
+      isHosting: opts.isHosting ?? false,
+      rsvp: (rsvpByJam.get(jam.id) as any) ?? null,
+      isInvited: inviteByJam.get(jam.id)?.status === "pending",
+    };
+  }
+
+  const isEmpty =
+    officialJams.length === 0 &&
+    pendingInviteJams.length === 0 &&
+    hostingJams.length === 0 &&
+    communityJams.length === 0 &&
+    privateJams.length === 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Jams</h1>
@@ -186,13 +262,30 @@ export default async function JamsPage() {
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Upcoming SingJam events</h2>
           <div className="grid gap-3">
-            {(officialJams as any[]).map((jam) => (
-              <JamListCard
-                key={jam.id}
-                jam={jam}
-                tags={[...(genresByJam.get(jam.id) ?? []), ...(themesByJam.get(jam.id) ?? [])]}
-                isOfficial
-              />
+            {officialJams.map(jam => (
+              <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {session && pendingInviteJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Invitations</h2>
+          <div className="grid gap-3">
+            {pendingInviteJams.map(jam => (
+              <JamListCard key={jam.id} {...cardProps(jam)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {session && hostingJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
+          <div className="grid gap-3">
+            {hostingJams.map(jam => (
+              <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />
             ))}
           </div>
         </section>
@@ -202,23 +295,29 @@ export default async function JamsPage() {
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Community jams</h2>
           <div className="grid gap-3">
-            {(communityJams as any[]).map((jam) => (
-              <JamListCard
-                key={jam.id}
-                jam={jam}
-                tags={[...(genresByJam.get(jam.id) ?? []), ...(themesByJam.get(jam.id) ?? [])]}
-                hostLabel={profileById.get(jam.host_user_id)?.label ?? null}
-                hostUsername={profileById.get(jam.host_user_id)?.username ?? null}
-                isOfficial={false}
-              />
+            {communityJams.map(jam => (
+              <JamListCard key={jam.id} {...cardProps(jam)} />
             ))}
           </div>
         </section>
       )}
 
-      {!session && officialJams.length === 0 && (
+      {session && privateJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Private jams</h2>
+          <div className="grid gap-3">
+            {privateJams.map(jam => (
+              <JamListCard key={jam.id} {...cardProps(jam)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isEmpty && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-          <p className="text-sm text-zinc-500">No upcoming events.</p>
+          <p className="text-sm text-zinc-500">
+            {session ? "No jams yet. Be the first to post one!" : "No upcoming events."}
+          </p>
         </div>
       )}
     </div>
