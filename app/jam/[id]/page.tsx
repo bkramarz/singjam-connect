@@ -1,5 +1,5 @@
 import { supabaseServer } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import JamCard from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
@@ -27,7 +27,12 @@ export default async function JamPage({ params, searchParams }: { params: Promis
   ]);
 
   const jam = jamRes.data;
-  if (!jam) notFound();
+  if (!jam) {
+    if (!user && inviteToken) {
+      redirect(`/auth?next=/jam/${id}&invite=${inviteToken}`);
+    }
+    notFound();
+  }
 
   // Fetch host profile separately to avoid nested join nulling the whole row
   const { data: hostProfile } = await supabase

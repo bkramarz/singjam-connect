@@ -120,7 +120,7 @@ export async function POST(
     const { data: inviteeProfile } = await admin.from("profiles").select("display_name, username").eq("id", inviteeUserId).single();
     const inviteeName = (inviteeProfile as any)?.display_name ?? (inviteeProfile as any)?.username ?? null;
 
-    const jamUrl = `${baseUrl}/jam/${jamId}`;
+    const jamUrl = `${baseUrl}/jam/${jamId}?invite=${token}`;
 
     if (email) {
       await resend.emails.send({
