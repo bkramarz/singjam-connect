@@ -139,6 +139,7 @@ export default function NewJamForm() {
       image_url: imageUrl,
       image_focal_point: imageUrl ? focalPoint : null,
       capacity: capacity ? parseInt(capacity, 10) : null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       created_at: new Date().toISOString(),
     }).select("id").single();
 

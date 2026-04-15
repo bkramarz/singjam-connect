@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { createNotification } from "@/lib/notifications";
 import { memberInviteHtml, nonMemberInviteHtml } from "@/emails/jam-invite";
+import { formatJamTime } from "@/lib/formatJamTime";
 
 function supabaseAdmin() {
   return createClient(
@@ -32,7 +33,7 @@ export async function POST(
   // Load jam
   const { data: jam } = await admin
     .from("jams")
-    .select("id, name, starts_at, visibility, host_user_id, guests_can_invite")
+    .select("id, name, starts_at, timezone, visibility, host_user_id, guests_can_invite")
     .eq("id", jamId)
     .single();
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
@@ -77,9 +78,7 @@ export async function POST(
   const inviterName = (inviterProfile as any)?.display_name ?? (inviterProfile as any)?.username ?? "Someone";
 
   const jamName = jam.name ?? "a jam";
-  const startsAt = jam.starts_at
-    ? new Date(jam.starts_at).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
-    : null;
+  const startsAt = formatJamTime(jam.starts_at, (jam as any).timezone);
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org";
 

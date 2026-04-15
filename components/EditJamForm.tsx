@@ -182,6 +182,7 @@ export default function EditJamForm({
       image_url: imageUrl,
       image_focal_point: newFocalPoint,
       capacity: capacity ? parseInt(capacity, 10) : null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }).eq("id", jam.id);
 
     if (error) {

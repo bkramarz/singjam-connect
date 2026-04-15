@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
+import { formatJamTime } from "@/lib/formatJamTime";
 
 function supabaseAdmin() {
   return createClient(
@@ -23,7 +24,7 @@ export async function POST(
 
   const { data: jam } = await admin
     .from("jams")
-    .select("id, name, starts_at, visibility, host_user_id, guests_can_invite")
+    .select("id, name, starts_at, timezone, visibility, host_user_id, guests_can_invite")
     .eq("id", jamId)
     .single();
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
@@ -61,15 +62,7 @@ export async function POST(
   const url = `${baseUrl}/jam/${jamId}?invite=${token}`;
 
   const jamName = jam.name ?? "a jam";
-  const startsAt = jam.starts_at
-    ? new Date(jam.starts_at).toLocaleString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : null;
+  const startsAt = formatJamTime(jam.starts_at, (jam as any).timezone);
 
   const message = startsAt
     ? `Come jam with me! ${jamName} — ${startsAt}: ${url}`
