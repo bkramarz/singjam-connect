@@ -114,7 +114,7 @@ export default async function JamPage({ params, searchParams }: { params: Promis
         }
       }
 
-      inviteList = (rawInvites as any[]).filter((inv: any) => inv.status !== "accepted").map((inv: any) => ({
+      inviteList = (rawInvites as any[]).filter((inv: any) => inv.status !== "accepted" && (inv.invited_user_id || inv.invitee_email)).map((inv: any) => ({
         id: inv.id,
         invited_user_id: inv.invited_user_id,
         invitee_email: inv.invitee_email,

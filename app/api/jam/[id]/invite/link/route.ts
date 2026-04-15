@@ -53,10 +53,10 @@ export async function POST(
   const { data: inserted } = await admin
     .from("jam_invites")
     .insert({ jam_id: jamId, invited_by: user.id, status: "pending" })
-    .select("token")
+    .select("id, token")
     .single();
 
-  const token = (inserted as any).token;
+  const { id: inviteId, token } = inserted as any;
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org";
   const url = `${baseUrl}/jam/${jamId}?invite=${token}`;
 
@@ -75,5 +75,31 @@ export async function POST(
     ? `Come jam with me! ${jamName} — ${startsAt}: ${url}`
     : `Come jam with me! ${jamName}: ${url}`;
 
-  return NextResponse.json({ url, message });
+  return NextResponse.json({ inviteId, url, message });
+}
+
+// Called when the user cancels the share sheet — removes the dangling invite record
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  await params;
+  const supabase = await supabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { inviteId } = await req.json();
+  if (!inviteId) return NextResponse.json({ error: "Missing inviteId" }, { status: 400 });
+
+  const admin = supabaseAdmin();
+  // Only delete if it's a link-only invite (no recipient) created by this user
+  await admin
+    .from("jam_invites")
+    .delete()
+    .eq("id", inviteId)
+    .eq("invited_by", user.id)
+    .is("invited_user_id", null)
+    .is("invitee_email", null);
+
+  return NextResponse.json({ ok: true });
 }

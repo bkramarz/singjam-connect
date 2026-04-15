@@ -79,7 +79,14 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
       try {
         await navigator.share({ text: body.message });
       } catch (e: any) {
-        if (e?.name !== "AbortError") {
+        if (e?.name === "AbortError") {
+          // User cancelled — remove the invite record we just created
+          fetch(`/api/jam/${jamId}/invite/link`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ inviteId: body.inviteId }),
+          }).catch(() => {});
+        } else {
           setFeedback({ id: "link", msg: "Couldn't open share sheet", ok: false });
         }
       }

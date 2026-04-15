@@ -319,15 +319,15 @@ export default function EditJamForm({
       {/* Date and time */}
       <div className="space-y-2">
         <Label text="Date" required />
-        <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input className="w-full appearance-none rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium mb-1">Start time <span className="text-red-500">*</span></label>
-            <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <input className="w-full appearance-none rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">End time <span className="ml-1 text-xs font-normal text-zinc-400">optional</span></label>
-            <input className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <input className="w-full appearance-none rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
       </div>
