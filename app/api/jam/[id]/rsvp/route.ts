@@ -119,7 +119,7 @@ export async function DELETE(
       const [{ data: profile }, { data: authData }, { data: jam }] = await Promise.all([
         admin.from("profiles").select("display_name, username").eq("id", next.user_id).single(),
         admin.auth.admin.getUserById(next.user_id),
-        admin.from("jams").select("name, starts_at").eq("id", jamId).single(),
+        admin.from("jams").select("name, starts_at, timezone").eq("id", jamId).single(),
       ]);
 
       const email = authData.user?.email;
@@ -133,6 +133,7 @@ export async function DELETE(
             jamName: jam?.name,
             jamUrl: `https://singjam.org/jam/${jamId}`,
             startsAt: jam?.starts_at,
+            timezone: (jam as any)?.timezone,
           }),
         });
       }

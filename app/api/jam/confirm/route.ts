@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
 
   const [{ data: jam }, { data: profile }, { data: authData }] = await Promise.all([
-    admin.from("jams").select("name, starts_at, host_user_id").eq("id", jamId).single(),
+    admin.from("jams").select("name, starts_at, timezone, host_user_id").eq("id", jamId).single(),
     admin.from("profiles").select("display_name, username").eq("id", user.id).single(),
     admin.auth.admin.getUserById(user.id),
   ]);
@@ -44,6 +44,7 @@ export async function POST(req: Request) {
         jamName: jam.name,
         jamUrl: `${siteUrl}/jam/${jamId}`,
         startsAt: jam.starts_at,
+        timezone: (jam as any).timezone,
       }),
     });
   }

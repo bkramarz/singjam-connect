@@ -23,7 +23,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const { data: jam } = await admin
     .from("jams")
-    .select("host_user_id, name, starts_at")
+    .select("host_user_id, name, starts_at, timezone")
     .eq("id", id)
     .maybeSingle();
 
@@ -68,7 +68,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
         from: FROM_ADDRESS,
         to: email,
         subject: `${jam.name ?? "A jam"} has been cancelled`,
-        html: jamCancelledHtml({ name, jamName: jam.name, startsAt: jam.starts_at, isHost }),
+        html: jamCancelledHtml({ name, jamName: jam.name, startsAt: jam.starts_at, timezone: (jam as any).timezone, isHost }),
       }) : Promise.resolve(),
     ]);
   }));

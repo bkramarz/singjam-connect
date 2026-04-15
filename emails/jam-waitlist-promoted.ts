@@ -1,19 +1,21 @@
+import { formatJamTime } from "@/lib/formatJamTime";
+
 export function jamWaitlistPromotedHtml({
   name,
   jamName,
   jamUrl,
   startsAt,
+  timezone,
 }: {
   name?: string | null;
   jamName?: string | null;
   jamUrl: string;
   startsAt?: string | null;
+  timezone?: string | null;
 }) {
   const greeting = name ? `Hi ${name},` : "Good news!";
   const eventName = jamName ?? "the jam";
-  const dateStr = startsAt
-    ? new Date(startsAt).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
-    : null;
+  const dateStr = formatJamTime(startsAt, timezone);
 
   return `<!DOCTYPE html>
 <html>

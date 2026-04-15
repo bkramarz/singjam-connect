@@ -1,19 +1,21 @@
+import { formatJamTime } from "@/lib/formatJamTime";
+
 export function jamCreatedHtml({
   name,
   jamName,
   jamUrl,
   startsAt,
+  timezone,
 }: {
   name?: string | null;
   jamName?: string | null;
   jamUrl: string;
   startsAt?: string | null;
+  timezone?: string | null;
 }) {
   const greeting = name ? `Hi ${name},` : "Hi,";
   const eventName = jamName ?? "Your jam";
-  const dateStr = startsAt
-    ? new Date(startsAt).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
-    : null;
+  const dateStr = formatJamTime(startsAt, timezone);
 
   return `<!DOCTYPE html>
 <html>

@@ -1,18 +1,20 @@
+import { formatJamTime } from "@/lib/formatJamTime";
+
 export function jamCancelledHtml({
   name,
   jamName,
   startsAt,
+  timezone,
   isHost = false,
 }: {
   name?: string | null;
   jamName?: string | null;
   startsAt?: string | null;
+  timezone?: string | null;
   isHost?: boolean;
 }) {
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const dateStr = startsAt
-    ? new Date(startsAt).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
-    : null;
+  const dateStr = formatJamTime(startsAt, timezone);
 
   if (isHost) {
     return `<!DOCTYPE html>
