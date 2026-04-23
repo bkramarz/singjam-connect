@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 import { getSessionServer, supabaseServer } from "@/lib/supabase/server";
-import { getFeatureFlag } from "@/lib/featureFlags";
 import Tooltip from "@/components/Tooltip";
 
 type RsvpStatus = "attending" | "waitlist" | "cancelled";
@@ -114,23 +113,21 @@ export default async function JamsPage() {
   const session = await getSessionServer();
   const supabase = await supabaseServer();
 
-  const invitesEnabled = await getFeatureFlag("jam_invites");
+  const [flagRes, adminRes, jamsRes] = await Promise.all([
+    supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+    session
+      ? supabase.from("profiles").select("is_admin").eq("id", session.user.id).single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("jams")
+      .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
+      .order("starts_at", { ascending: true, nullsFirst: false })
+      .limit(100),
+  ]);
 
-  let isAdmin = false;
-  if (session) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", session.user.id)
-      .single();
-    isAdmin = profile?.is_admin ?? false;
-  }
-
-  const { data: jams } = await supabase
-    .from("jams")
-    .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
-    .order("starts_at", { ascending: true, nullsFirst: false })
-    .limit(100);
+  const invitesEnabled = flagRes.data?.enabled ?? true;
+  const isAdmin = (adminRes.data as any)?.is_admin ?? false;
+  const { data: jams } = jamsRes;
 
   const [myRsvpsRes, myInvitesRes] = await Promise.all([
     session
