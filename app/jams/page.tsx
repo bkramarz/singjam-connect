@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
@@ -113,28 +114,62 @@ export default async function JamsPage() {
   const session = await getSessionServer();
   const supabase = await supabaseServer();
 
-  const [flagRes, adminRes, jamsRes] = await Promise.all([
+  const [flagRes, adminRes] = await Promise.all([
     supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
     session
       ? supabase.from("profiles").select("is_admin").eq("id", session.user.id).single()
       : Promise.resolve({ data: null }),
-    supabase
-      .from("jams")
-      .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
-      .order("starts_at", { ascending: true, nullsFirst: false })
-      .limit(100),
   ]);
 
   const invitesEnabled = flagRes.data?.enabled ?? true;
   const isAdmin = (adminRes.data as any)?.is_admin ?? false;
-  const { data: jams } = jamsRes;
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Jams</h1>
+          <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
+        </div>
+        {session && (invitesEnabled || isAdmin) && (
+          <Link
+            href="/jam/new"
+            className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
+          >
+            Post a jam
+          </Link>
+        )}
+        {session && !invitesEnabled && !isAdmin && (
+          <Tooltip message="Jam posting is currently unavailable">
+            <span className="self-start rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-300 cursor-not-allowed sm:self-auto">
+              Post a jam
+            </span>
+          </Tooltip>
+        )}
+      </div>
+
+      <Suspense>
+        <JamsList userId={session?.user.id ?? null} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function JamsList({ userId }: { userId: string | null }) {
+  const supabase = await supabaseServer();
+
+  const { data: jams } = await supabase
+    .from("jams")
+    .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
+    .order("starts_at", { ascending: true, nullsFirst: false })
+    .limit(100);
 
   const [myRsvpsRes, myInvitesRes] = await Promise.all([
-    session
-      ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", session.user.id)
+    userId
+      ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", userId)
       : Promise.resolve({ data: [] }),
-    session
-      ? supabase.from("jam_invites").select("jam_id, status").eq("invited_user_id", session.user.id)
+    userId
+      ? supabase.from("jam_invites").select("jam_id, status").eq("invited_user_id", userId)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -146,19 +181,18 @@ export default async function JamsPage() {
   );
 
   const allJams = (jams ?? []) as any[];
-  const userId = session?.user.id;
 
   const officialJams = allJams.filter(j => j.visibility === "official");
 
-  const pendingInviteJams = session
+  const pendingInviteJams = userId
     ? allJams.filter(j => j.host_user_id !== userId && inviteByJam.get(j.id)?.status === "pending")
     : [];
 
-  const hostingJams = session
+  const hostingJams = userId
     ? allJams.filter(j => j.visibility !== "official" && j.host_user_id === userId)
     : [];
 
-  const communityJams = session
+  const communityJams = userId
     ? allJams.filter(j =>
         j.visibility === "community" &&
         j.host_user_id !== userId &&
@@ -166,7 +200,7 @@ export default async function JamsPage() {
       )
     : [];
 
-  const privateJams = session
+  const privateJams = userId
     ? allJams.filter(j => {
         if (j.visibility !== "private" || j.host_user_id === userId) return false;
         const inviteStatus = inviteByJam.get(j.id)?.status;
@@ -232,29 +266,7 @@ export default async function JamsPage() {
     privateJams.length === 0;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Jams</h1>
-          <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
-        </div>
-        {session && (invitesEnabled || isAdmin) && (
-          <Link
-            href="/jam/new"
-            className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
-          >
-            Post a jam
-          </Link>
-        )}
-        {session && !invitesEnabled && !isAdmin && (
-          <Tooltip message="Jam posting is currently unavailable">
-            <span className="self-start rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-300 cursor-not-allowed sm:self-auto">
-              Post a jam
-            </span>
-          </Tooltip>
-        )}
-      </div>
-
+    <>
       {officialJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Upcoming SingJam events</h2>
@@ -266,7 +278,7 @@ export default async function JamsPage() {
         </section>
       )}
 
-      {session && pendingInviteJams.length > 0 && (
+      {userId && pendingInviteJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Invitations</h2>
           <div className="grid gap-3">
@@ -277,7 +289,7 @@ export default async function JamsPage() {
         </section>
       )}
 
-      {session && hostingJams.length > 0 && (
+      {userId && hostingJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
           <div className="grid gap-3">
@@ -288,7 +300,7 @@ export default async function JamsPage() {
         </section>
       )}
 
-      {session && communityJams.length > 0 && (
+      {userId && communityJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Community jams</h2>
           <div className="grid gap-3">
@@ -299,7 +311,7 @@ export default async function JamsPage() {
         </section>
       )}
 
-      {session && privateJams.length > 0 && (
+      {userId && privateJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Private jams</h2>
           <div className="grid gap-3">
@@ -313,10 +325,10 @@ export default async function JamsPage() {
       {isEmpty && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
           <p className="text-sm text-zinc-500">
-            {session ? "No jams yet. Be the first to post one!" : "No upcoming events."}
+            {userId ? "No jams yet. Be the first to post one!" : "No upcoming events."}
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 }
