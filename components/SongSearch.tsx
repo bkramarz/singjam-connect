@@ -50,17 +50,18 @@ const PAGE_SIZE = 20;
 
 export default function SongSearch({
   initialQuery = "",
-  popularSongs = [],
   singingVoice = null,
   initialRepertoire = [],
 }: {
   initialQuery?: string;
-  popularSongs?: PopularSong[];
   singingVoice?: string | null;
   initialRepertoire?: { song_id: string; confidence: string }[];
 }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
+
+  const [popularSongs, setPopularSongs] = useState<PopularSong[]>([]);
+  const [songsLoading, setSongsLoading] = useState(true);
 
   const [q, setQ] = useState(initialQuery);
   const [results, setResults] = useState<Result[]>([]);
@@ -80,6 +81,65 @@ export default function SongSearch({
   const [selectedVibe, setSelectedVibe] = useState("");
   const [selectedTonality, setSelectedTonality] = useState("");
   const [selectedMeter, setSelectedMeter] = useState("");
+
+  useEffect(() => {
+    Promise.all([
+      supabase
+        .from("songs")
+        .select(`
+          id, title, slug, display_artist, year_written, vibe, tonality, meter,
+          song_composers(people(name)),
+          song_lyricists(people(name)),
+          song_recording_artists(year),
+          song_productions(productions(name)),
+          song_genres(genres(name)),
+          song_languages(languages(name)),
+          song_cultures(cultures(name)),
+          song_themes(themes(name))
+        `)
+        .limit(2000),
+      supabase.rpc("song_popularity_counts"),
+    ]).then(([songsRes, popularityRes]) => {
+      const popularityMap = new Map<string, number>(
+        ((popularityRes.data ?? []) as { song_id: string; user_count: number }[]).map(
+          (r) => [r.song_id, r.user_count]
+        )
+      );
+      const songs = (songsRes.data ?? [])
+        .map((s: any) => ({
+          song_id: s.id as string,
+          title: s.title as string,
+          slug: (s.slug ?? null) as string | null,
+          display_artist: (s.display_artist ?? null) as string | null,
+          vibe: (s.vibe ?? null) as string | null,
+          tonality: (s.tonality ?? null) as string | null,
+          meter: (s.meter ?? null) as string | null,
+          productions: ((s.song_productions ?? []) as any[]).map((p: any) => p.productions?.name as string).filter(Boolean) as string[],
+          composers: Array.from(new Set([
+            ...((s.song_composers ?? []) as any[]).map((c: any) => c.people?.name as string),
+            ...((s.song_lyricists ?? []) as any[]).map((c: any) => c.people?.name as string),
+          ])).filter(Boolean).sort() as string[],
+          genres: ((s.song_genres ?? []) as any[]).map((g: any) => g.genres?.name as string).filter(Boolean) as string[],
+          languages: ((s.song_languages ?? []) as any[]).map((l: any) => l.languages?.name as string).filter(Boolean) as string[],
+          cultures: ((s.song_cultures ?? []) as any[]).map((c: any) => c.cultures?.name as string).filter(Boolean) as string[],
+          themes: ((s.song_themes ?? []) as any[]).map((t: any) => t.themes?.name as string).filter(Boolean) as string[],
+          year: (() => {
+            const firstRecording = ((s.song_recording_artists ?? []) as any[])
+              .map((r: any) => r.year as number)
+              .filter((y): y is number => typeof y === "number")
+              .sort((a, b) => a - b)[0] ?? null;
+            const yearWritten = (s as any).year_written as number | null;
+            if (yearWritten && firstRecording) return Math.min(yearWritten, firstRecording);
+            return yearWritten ?? firstRecording ?? null;
+          })(),
+          popularity: popularityMap.get(s.id) ?? 0,
+        }))
+        .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
+      setPopularSongs(songs);
+      setSongsLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const debounceRef = useRef<number | null>(null);
   const [debouncing, setDebouncing] = useState(false);
@@ -309,7 +369,7 @@ export default function SongSearch({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
-            {searching ? null : `${filteredSongs.length} song${filteredSongs.length === 1 ? "" : "s"}`}
+            {searching ? null : songsLoading ? null : `${filteredSongs.length} song${filteredSongs.length === 1 ? "" : "s"}`}
           </p>
             <button
               onClick={() => setFiltersOpen((o) => !o)}
@@ -484,6 +544,8 @@ export default function SongSearch({
               </div>
             ) : null}
           </div>
+        ) : songsLoading ? (
+          <div className="py-6 text-center text-sm text-zinc-400">Loading songs…</div>
         ) : popularSongs.length > 0 ? (
           <div className="grid gap-2">
             {visibleSongs.map((r) => (
