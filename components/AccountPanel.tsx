@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 const SEEDED_INSTRUMENTS = [
@@ -156,9 +156,12 @@ function suggestUsername(email: string): string {
   return USERNAME_RE.test(clean) && !RESERVED.has(clean) ? clean : "";
 }
 
-export default function AccountPanel({ next }: { next?: string }) {
+export default function AccountPanel() {
   const supabase = supabaseBrowser();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawNext = searchParams.get("next");
+  const next = rawNext && /^\/[^/]/.test(rawNext) ? rawNext : undefined;
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
