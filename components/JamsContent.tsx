@@ -219,7 +219,10 @@ export default function JamsContent() {
     };
   }
 
-  const officialJams = allJams.filter((j) => j.visibility === "official");
+  const now = new Date().toISOString();
+  const officialJams = allJams.filter(
+    (j) => j.visibility === "official" && (j.ends_at ?? j.starts_at) >= now
+  );
   const pendingInviteJams = userId
     ? allJams.filter((j) => j.host_user_id !== userId && (inviteByJam.get(j.id) as any)?.status === "pending")
     : [];
