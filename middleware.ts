@@ -29,8 +29,10 @@ export async function middleware(request: NextRequest) {
   // Do not add logic between createServerClient and getUser.
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Protect /admin routes: must be signed in (is_admin checked in admin layout)
-  if (request.nextUrl.pathname.startsWith("/admin") && !user) {
+  const { pathname } = request.nextUrl;
+
+  const authRequired = ["/admin", "/notifications", "/profile"];
+  if (!user && authRequired.some((p) => pathname.startsWith(p))) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth";
     return NextResponse.redirect(url);
