@@ -220,8 +220,11 @@ export default function JamsContent() {
   }
 
   const now = new Date().toISOString();
-  const officialJams = allJams.filter(
+  const upcomingOfficialJams = allJams.filter(
     (j) => j.visibility === "official" && (j.ends_at ?? j.starts_at) >= now
+  );
+  const pastOfficialJams = allJams.filter(
+    (j) => j.visibility === "official" && (j.ends_at ?? j.starts_at) < now
   );
   const pendingInviteJams = userId
     ? allJams.filter((j) => j.host_user_id !== userId && (inviteByJam.get(j.id) as any)?.status === "pending")
@@ -245,7 +248,8 @@ export default function JamsContent() {
     : [];
 
   const isEmpty =
-    officialJams.length === 0 &&
+    upcomingOfficialJams.length === 0 &&
+    pastOfficialJams.length === 0 &&
     pendingInviteJams.length === 0 &&
     hostingJams.length === 0 &&
     communityJams.length === 0 &&
@@ -268,11 +272,20 @@ export default function JamsContent() {
         )}
       </div>
 
-      {officialJams.length > 0 && (
+      {upcomingOfficialJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Upcoming SingJam events</h2>
           <div className="grid gap-3">
-            {officialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
+            {upcomingOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
+          </div>
+        </section>
+      )}
+
+      {pastOfficialJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
+          <div className="grid gap-3">
+            {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
           </div>
         </section>
       )}
