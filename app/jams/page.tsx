@@ -112,42 +112,13 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
 
 export default async function JamsPage() {
   const session = await getSessionServer();
-  const supabase = await supabaseServer();
-
-  const [flagRes, adminRes] = await Promise.all([
-    supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
-    session
-      ? supabase.from("profiles").select("is_admin").eq("id", session.user.id).single()
-      : Promise.resolve({ data: null }),
-  ]);
-
-  const invitesEnabled = flagRes.data?.enabled ?? true;
-  const isAdmin = (adminRes.data as any)?.is_admin ?? false;
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Jams</h1>
-          <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
-        </div>
-        {session && (invitesEnabled || isAdmin) && (
-          <Link
-            href="/jam/new"
-            className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
-          >
-            Post a jam
-          </Link>
-        )}
-        {session && !invitesEnabled && !isAdmin && (
-          <Tooltip message="Jam posting is currently unavailable">
-            <span className="self-start rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-300 cursor-not-allowed sm:self-auto">
-              Post a jam
-            </span>
-          </Tooltip>
-        )}
+      <div>
+        <h1 className="text-xl font-semibold">Jams</h1>
+        <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
       </div>
-
       <Suspense>
         <JamsList userId={session?.user.id ?? null} />
       </Suspense>
@@ -158,13 +129,16 @@ export default async function JamsPage() {
 async function JamsList({ userId }: { userId: string | null }) {
   const supabase = await supabaseServer();
 
-  const { data: jams } = await supabase
-    .from("jams")
-    .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
-    .order("starts_at", { ascending: true, nullsFirst: false })
-    .limit(100);
-
-  const [myRsvpsRes, myInvitesRes] = await Promise.all([
+  const [flagRes, adminRes, jamsRes, myRsvpsRes, myInvitesRes] = await Promise.all([
+    supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+    userId
+      ? supabase.from("profiles").select("is_admin").eq("id", userId).single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("jams")
+      .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
+      .order("starts_at", { ascending: true, nullsFirst: false })
+      .limit(100),
     userId
       ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", userId)
       : Promise.resolve({ data: [] }),
@@ -172,6 +146,10 @@ async function JamsList({ userId }: { userId: string | null }) {
       ? supabase.from("jam_invites").select("jam_id, status").eq("invited_user_id", userId)
       : Promise.resolve({ data: [] }),
   ]);
+
+  const invitesEnabled = flagRes.data?.enabled ?? true;
+  const isAdmin = (adminRes.data as any)?.is_admin ?? false;
+  const { data: jams } = jamsRes;
 
   const rsvpByJam = new Map<string, { status: RsvpStatus; waitlist_position: number | null }>(
     ((myRsvpsRes.data ?? []) as any[]).map((r) => [r.jam_id, r])
@@ -267,6 +245,24 @@ async function JamsList({ userId }: { userId: string | null }) {
 
   return (
     <>
+      <div className="flex justify-end -mt-8 sm:-mt-14">
+        {userId && (invitesEnabled || isAdmin) && (
+          <Link
+            href="/jam/new"
+            className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
+          >
+            Post a jam
+          </Link>
+        )}
+        {userId && !invitesEnabled && !isAdmin && (
+          <Tooltip message="Jam posting is currently unavailable">
+            <span className="self-start rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-300 cursor-not-allowed sm:self-auto">
+              Post a jam
+            </span>
+          </Tooltip>
+        )}
+      </div>
+
       {officialJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Upcoming SingJam events</h2>

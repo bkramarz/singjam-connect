@@ -55,27 +55,27 @@ export default async function NotificationsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
-  await supabase
-    .from("notifications")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("read", true)
-    .lt("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-
-  const { data: unreadData } = await supabase
-    .from("notifications")
-    .select("id, type, title, body, link, read, created_at")
-    .eq("user_id", user.id)
-    .eq("read", false)
-    .order("created_at", { ascending: false });
-
-  const { data: readData } = await supabase
-    .from("notifications")
-    .select("id, type, title, body, link, read, created_at")
-    .eq("user_id", user.id)
-    .eq("read", true)
-    .order("created_at", { ascending: false })
-    .limit(10);
+  const [, { data: unreadData }, { data: readData }] = await Promise.all([
+    supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("read", true)
+      .lt("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    supabase
+      .from("notifications")
+      .select("id, type, title, body, link, read, created_at")
+      .eq("user_id", user.id)
+      .eq("read", false)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("notifications")
+      .select("id, type, title, body, link, read, created_at")
+      .eq("user_id", user.id)
+      .eq("read", true)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
 
   const unread = unreadData ?? [];
   const read = readData ?? [];
