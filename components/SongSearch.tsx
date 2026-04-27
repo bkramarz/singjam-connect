@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
+import SubmitSongForm from "@/components/SubmitSongForm";
 
 type Result = {
   song_id: string;
@@ -48,29 +49,21 @@ const LEVELS = [
 
 const PAGE_SIZE = 20;
 
-export default function SongSearch({
-  initialQuery = "",
-  singingVoice = null,
-  initialRepertoire = [],
-}: {
-  initialQuery?: string;
-  singingVoice?: string | null;
-  initialRepertoire?: { song_id: string; confidence: string }[];
-}) {
+export default function SongSearch({ initialQuery = "" }: { initialQuery?: string }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
   const [popularSongs, setPopularSongs] = useState<PopularSong[]>([]);
   const [songsLoading, setSongsLoading] = useState(true);
+  const [singingVoice, setSingingVoice] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [q, setQ] = useState(initialQuery);
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
-  const [repertoire, setRepertoire] = useState<Map<string, string>>(
-    new Map(initialRepertoire.map((r) => [r.song_id, r.confidence ?? ""]))
-  );
+  const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Filter state
@@ -83,6 +76,20 @@ export default function SongSearch({
   const [selectedMeter, setSelectedMeter] = useState("");
 
   useEffect(() => {
+    // User data — session reads from localStorage (fast), then fetches profile + repertoire
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      setCurrentUser(session.user);
+      Promise.all([
+        supabase.from("profiles").select("singing_voice").eq("id", session.user.id).single(),
+        supabase.from("user_songs").select("song_id, confidence").eq("user_id", session.user.id),
+      ]).then(([profileRes, repertoireRes]) => {
+        setSingingVoice((profileRes.data as any)?.singing_voice ?? null);
+        setRepertoire(new Map(((repertoireRes.data ?? []) as any[]).map((r) => [r.song_id, r.confidence ?? ""])));
+      });
+    });
+
+    // Songs catalog — fires in parallel with the user fetch above
     Promise.all([
       supabase
         .from("songs")
@@ -592,6 +599,8 @@ export default function SongSearch({
           </div>
         ) : null}
       </div>
+
+      {currentUser && <SubmitSongForm />}
     </div>
   );
 }
