@@ -136,6 +136,7 @@ export default function JamsContent() {
         supabase
           .from("jams")
           .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
+          .gte("starts_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
           .order("starts_at", { ascending: true, nullsFirst: false })
           .limit(100),
         userId
