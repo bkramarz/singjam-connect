@@ -37,13 +37,12 @@ const VALID_THEMES = [
 ];
 
 const VALID_CULTURES = [
-  "Aboriginal Australian", "African American", "Appalachian", "Arab", "Argentine", "Australian",
-  "Bangladeshi", "Belgian", "Brazilian", "British", "Cajun", "Cambodian", "Chilean", "Chinese",
-  "Colombian", "Creole", "Cuban", "Czech", "Danish", "Dutch", "East African", "Egyptian",
-  "Ethiopian", "Filipino", "Finnish", "First Nations", "French", "German", "Ghanaian", "Greek",
+  "Appalachian", "Arab", "Argentine", "Australian", "Belgian", "Brazilian", "Cajun", "Cambodian", "Chilean", "Chinese",
+  "Colombian", "Creole", "Cuban", "Czech", "Danish", "Dutch", "East African", "Egyptian", "English",
+  "Ethiopian", "Filipino", "Finnish", "First Nations/Native American", "French", "German", "Ghanaian", "Greek",
   "Haitian", "Hawaiian", "Hungarian", "Indian", "Indonesian", "Irish", "Israeli", "Italian",
   "Jamaican", "Japanese", "Jewish", "Kenyan", "Korean", "Latin American", "Māori", "Mexican",
-  "Native American", "Nepali", "Nigerian", "Norwegian", "Pakistani", "Peruvian", "Polish",
+  "Nepali", "Nigerian", "Norwegian", "Pakistani", "Peruvian", "Polish",
   "Portuguese", "Puerto Rican", "Romanian", "Romani", "Russian", "Scandinavian", "Scottish",
   "South African", "Spanish", "Sri Lankan", "Swedish", "Swiss", "Tex-Mex", "Thai", "Trinidadian",
   "Turkish", "Ukrainian", "Venezuelan", "Vietnamese", "Welsh", "West African", "Yoruba", "Zulu",
