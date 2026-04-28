@@ -41,7 +41,7 @@ export default async function AdminSongPage({
               song_languages(language_id),
               song_composers(person_id),
               song_lyricists(person_id),
-              song_recording_artists(artist_id, year, position),
+              song_recording_artists(artist_id, year, position, youtube_url),
               song_alternate_titles(id, title),
               song_productions(production_id)
             `)
