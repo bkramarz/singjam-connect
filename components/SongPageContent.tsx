@@ -140,8 +140,14 @@ export default function SongPageContent() {
           {altTitles.length > 0 && (
             <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
           )}
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
+            {isAdmin && (
+              <Link href={`/admin/songs/${song.slug ?? song.id}`}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Edit
+              </Link>
+            )}
           </div>
         </div>
 
