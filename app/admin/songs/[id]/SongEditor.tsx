@@ -73,7 +73,7 @@ type Song = {
   song_languages: { language_id: string }[];
   song_composers: { person_id: string }[];
   song_lyricists: { person_id: string }[];
-  song_recording_artists: { artist_id: string; year: number | null; position: number | null }[];
+  song_recording_artists: { artist_id: string; year: number | null; position: number | null; youtube_url: string | null }[];
   song_alternate_titles: AltTitle[];
   song_productions: { production_id: string }[];
 };
@@ -117,9 +117,6 @@ export default function SongEditor({
   const [notes, setNotes] = useState(song?.notes ?? "");
   const [geniusUrl, setGeniusUrl] = useState(song?.genius_url ?? "");
   const [chordChartUrl, setChordChartUrl] = useState(song?.chord_chart_url ?? "");
-  const [youtubeUrl, setYoutubeUrl] = useState(song?.youtube_url ?? "");
-  const [youtubeResults, setYoutubeResults] = useState<{ videoId: string; title: string; channel: string; url: string }[]>([]);
-  const [findingYoutube, setFindingYoutube] = useState(false);
   const [year, setYear] = useState(song?.year?.toString() ?? "");
   const [yearWritten, setYearWritten] = useState(song?.year_written?.toString() ?? "");
   const [tonalities, setTonalities] = useState<string[]>(() =>
@@ -136,14 +133,14 @@ export default function SongEditor({
   const [lyricists, setLyricists] = useState<Set<string>>(
     toSet(initialLyricistIds.length ? initialLyricistIds : initialComposerIds)
   );
-  type RecordingArtistEntry = { id: string; year: number | null };
+  type RecordingArtistEntry = { id: string; year: number | null; youtube_url: string | null };
   const initialRecordingArtistEntries: RecordingArtistEntry[] = (song?.song_recording_artists ?? [])
     .slice()
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
-    .map((x) => ({ id: x.artist_id, year: x.year }));
+    .map((x) => ({ id: x.artist_id, year: x.year, youtube_url: x.youtube_url }));
   const seededRecordingArtistEntries: RecordingArtistEntry[] = initialRecordingArtistEntries.length
     ? initialRecordingArtistEntries
-    : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null }));
+    : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null, youtube_url: null }));
   const [recordingArtists, setRecordingArtists] = useState<RecordingArtistEntry[]>(seededRecordingArtistEntries);
 
   // Production
@@ -177,7 +174,6 @@ export default function SongEditor({
   // UI state
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [standardizing, setStandardizing] = useState(false);
 
   // AI enrichment
   type AISuggestions = {
@@ -193,9 +189,13 @@ export default function SongEditor({
     genres: string[];
     themes: string[];
     cultures: string[];
+    music_culture: string | null;
+    lyric_culture: string | null;
     languages: string[];
-    confidence: "high" | "medium" | "low";
     notes: string | null;
+    alternate_titles: string[];
+    additional_recordings: { artist: string; year: number | null }[];
+    confidence: "high" | "medium" | "low";
   };
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestions | null>(null);
   const [enrichingWithAI, setEnrichingWithAI] = useState(false);
@@ -217,22 +217,6 @@ export default function SongEditor({
       // leave field blank if it fails
     } finally {
       setOpeningGenius(false);
-    }
-  }
-
-  async function handleFindYoutube() {
-    if (!title.trim()) return;
-    setFindingYoutube(true);
-    setYoutubeResults([]);
-    try {
-      const artist = recordingArtists[0] ? allArtists.find((a) => a.id === recordingArtists[0].id)?.name ?? "" : displayArtist.trim();
-      const res = await fetch(`/api/youtube?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
-      const data = await res.json();
-      setYoutubeResults(data.items ?? []);
-    } catch {
-      // leave results empty
-    } finally {
-      setFindingYoutube(false);
     }
   }
 
@@ -528,7 +512,12 @@ export default function SongEditor({
       if (s.genres?.length) initial.add("genres");
       if (s.themes?.length) initial.add("themes");
       if (s.cultures?.length) initial.add("cultures");
+      if (s.music_culture) initial.add("music_culture");
+      if (s.lyric_culture) initial.add("lyric_culture");
       if (s.languages?.length) initial.add("languages");
+      if (s.notes) initial.add("notes");
+      if (s.alternate_titles?.length) initial.add("alternate_titles");
+      if (s.additional_recordings?.length) initial.add("additional_recordings");
       setAcceptedFields(initial);
     } catch {
       setError("AI enrichment failed. Check that OPENAI_API_KEY is set in .env.local.");
@@ -537,7 +526,7 @@ export default function SongEditor({
     }
   }
 
-  function applyAISuggestions() {
+  async function applyAISuggestions() {
     if (!aiSuggestions) return;
     if (acceptedFields.has("year_written") && aiSuggestions.year_written != null) {
       setYearWritten(aiSuggestions.year_written.toString());
@@ -580,45 +569,48 @@ export default function SongEditor({
     if (acceptedFields.has("cultures") && aiSuggestions.cultures.length) {
       setCultures(aiSuggestions.cultures);
     }
+    if (acceptedFields.has("music_culture") && aiSuggestions.music_culture) {
+      setComposerTraditionalCulture(aiSuggestions.music_culture);
+    }
+    if (acceptedFields.has("lyric_culture") && aiSuggestions.lyric_culture) {
+      setLyricistTraditionalCulture(aiSuggestions.lyric_culture);
+    }
     if (acceptedFields.has("languages") && aiSuggestions.languages.length) {
       setLanguages(aiSuggestions.languages);
     }
-    setAiSuggestions(null);
-    setAcceptedFields(new Set());
-  }
-
-  async function handleEnrich() {
-    if (!title.trim()) return;
-    setStandardizing(true);
-    setError(null);
-
-    try {
-      const res = await fetch(
-        `/api/enrich?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(displayArtist)}`
-      );
-      const data = await res.json();
-      const mb = data.musicbrainz as { year?: number; topArtists?: { name: string; year: number | null }[] } | null;
-
-      if (mb?.year) setYear(mb.year.toString());
-
-      if (mb?.topArtists?.length) {
-        for (const artist of mb.topArtists) {
-          const artistId = await resolvePersonName(artist.name, "artists", allArtists);
-          if (artistId) {
-            setRecordingArtists((prev) => {
-              if (prev.find((e) => e.id === artistId)) {
-                return prev.map((e) => e.id === artistId ? { ...e, year: artist.year } : e);
-              }
-              return [...prev, { id: artistId, year: artist.year }];
-            });
-          }
+    if (acceptedFields.has("notes") && aiSuggestions.notes) {
+      setNotes(aiSuggestions.notes);
+    }
+    if (acceptedFields.has("additional_recordings") && aiSuggestions.additional_recordings.length) {
+      const toAdd: { id: string; year: number | null }[] = [];
+      for (const rec of aiSuggestions.additional_recordings) {
+        const artistId = await resolvePersonName(rec.artist, "artists", allArtists);
+        if (artistId && !recordingArtists.find((e) => e.id === artistId) && !toAdd.find((e) => e.id === artistId)) {
+          toAdd.push({ id: artistId, year: rec.year });
         }
       }
-    } catch {
-      setError("Enrich failed. Check your API keys in .env.local.");
-    } finally {
-      setStandardizing(false);
+      if (toAdd.length) {
+        setRecordingArtists((prev) => [
+          ...prev,
+          ...toAdd.filter((a) => !prev.find((e) => e.id === a.id)).map((a) => ({ ...a, youtube_url: null })),
+        ]);
+      }
     }
+    if (acceptedFields.has("alternate_titles") && aiSuggestions.alternate_titles.length && song?.id) {
+      const existingTitles = new Set(altTitles.map((t) => t.title.toLowerCase()));
+      for (const title of aiSuggestions.alternate_titles) {
+        if (!existingTitles.has(title.toLowerCase())) {
+          const { data, error } = await supabase
+            .from("song_alternate_titles")
+            .insert({ song_id: song.id, title })
+            .select("id, title")
+            .single();
+          if (!error && data) setAltTitles((prev) => [...prev, data]);
+        }
+      }
+    }
+    setAiSuggestions(null);
+    setAcceptedFields(new Set());
   }
 
   async function syncJoinTable(
@@ -671,7 +663,6 @@ export default function SongEditor({
         notes: notes.trim() || null,
         genius_url: geniusUrl.trim() || null,
         chord_chart_url: chordChartUrl.trim() || null,
-        youtube_url: youtubeUrl.trim() || null,
         year: year ? parseInt(year) : null,
         year_written: yearWritten ? parseInt(yearWritten) : null,
         tonality: tonalities.join(", ") || null,
@@ -756,7 +747,7 @@ export default function SongEditor({
           : Promise.resolve(),
         recordingArtists.length
           ? supabase.from("song_recording_artists").upsert(
-              recordingArtists.map((e, i) => ({ song_id: songId!, artist_id: e.id, year: e.year, position: i })),
+              recordingArtists.map((e, i) => ({ song_id: songId!, artist_id: e.id, year: e.year, position: i, youtube_url: e.youtube_url ?? null })),
               { onConflict: "song_id,artist_id" }
             )
           : Promise.resolve(),
@@ -993,13 +984,6 @@ export default function SongEditor({
             </a>
           )}
           <button
-            onClick={handleEnrich}
-            disabled={standardizing || !title.trim()}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-          >
-            {standardizing ? "Finding…" : <><span className="sm:hidden">✦ Find recordings</span><span className="hidden sm:inline">✦ Find additional recordings</span></>}
-          </button>
-          <button
             onClick={handleEnrichWithAI}
             disabled={enrichingWithAI || !song?.id}
             className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-40"
@@ -1084,8 +1068,23 @@ export default function SongEditor({
               {aiSuggestions.cultures.length > 0 && (
                 <SuggestionRow label="Cultures" current={cultures.join(", ") || "—"} suggested={aiSuggestions.cultures.join(", ")} accepted={acceptedFields.has("cultures")} onChange={toggleField("cultures")} />
               )}
+              {aiSuggestions.music_culture && (
+                <SuggestionRow label="Music culture" current={composerTraditionalCulture || "—"} suggested={aiSuggestions.music_culture} accepted={acceptedFields.has("music_culture")} onChange={toggleField("music_culture")} />
+              )}
+              {aiSuggestions.lyric_culture && (
+                <SuggestionRow label="Lyric culture" current={lyricistTraditionalCulture || "—"} suggested={aiSuggestions.lyric_culture} accepted={acceptedFields.has("lyric_culture")} onChange={toggleField("lyric_culture")} />
+              )}
               {aiSuggestions.languages.length > 0 && (
                 <SuggestionRow label="Languages" current={languages.join(", ") || "—"} suggested={aiSuggestions.languages.join(", ")} accepted={acceptedFields.has("languages")} onChange={toggleField("languages")} />
+              )}
+              {aiSuggestions.additional_recordings?.length > 0 && (
+                <SuggestionRow label="Additional recordings" current={recordingArtists.map((e) => allArtists.find((a) => a.id === e.id)?.name).filter(Boolean).join(", ") || "—"} suggested={aiSuggestions.additional_recordings.map((r) => r.year ? `${r.artist} (${r.year})` : r.artist).join(", ")} accepted={acceptedFields.has("additional_recordings")} onChange={toggleField("additional_recordings")} />
+              )}
+              {aiSuggestions.notes && (
+                <SuggestionRow label="Notes" current={notes || "—"} suggested={aiSuggestions.notes} accepted={acceptedFields.has("notes")} onChange={toggleField("notes")} />
+              )}
+              {aiSuggestions.alternate_titles.length > 0 && (
+                <SuggestionRow label="Alternate titles" current={altTitles.map((t) => t.title).join(", ") || "—"} suggested={aiSuggestions.alternate_titles.join(", ")} accepted={acceptedFields.has("alternate_titles")} onChange={toggleField("alternate_titles")} />
               )}
             </div>
 
@@ -1172,10 +1171,12 @@ export default function SongEditor({
           items={recordingArtists}
           allArtists={allArtists}
           query={newRecordingArtistName}
+          songTitle={title}
           onQueryChange={setNewRecordingArtistName}
-          onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null }]); setNewRecordingArtistName(""); }}
+          onAdd={(a) => { setRecordingArtists((prev) => [...prev, { id: a.id, year: null, youtube_url: null }]); setNewRecordingArtistName(""); }}
           onRemove={(id) => setRecordingArtists((prev) => prev.filter((e) => e.id !== id))}
           onYearChange={(id, year) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year } : e))}
+          onYoutubeUrlChange={(id, url) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, youtube_url: url } : e))}
           onReorder={setRecordingArtists}
         />
 
@@ -1296,47 +1297,6 @@ export default function SongEditor({
             )}
           </div>
         </Field>
-        <Field label="YouTube URL">
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)}
-                className="input flex-1" placeholder="https://www.youtube.com/watch?v=…" />
-              {youtubeUrl && (
-                <a href={youtubeUrl} target="_blank" rel="noopener noreferrer"
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 shrink-0">
-                  ↗
-                </a>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={handleFindYoutube}
-              disabled={findingYoutube || !title.trim()}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
-            >
-              {findingYoutube ? "Searching…" : "▶ Find on YouTube"}
-            </button>
-            {youtubeResults.length > 0 && (
-              <div className="space-y-1 rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
-                {youtubeResults.map((r) => (
-                  <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2">
-                    <div className="min-w-0">
-                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
-                      <div className="text-xs text-slate-400 truncate">{r.channel}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setYoutubeUrl(r.url); setYoutubeResults([]); }}
-                      className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
-                    >
-                      Select
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Field>
         <Field label="First line">
           <input value={firstLine} onChange={(e) => setFirstLine(e.target.value)}
             className="input" placeholder="First sung line of the song" />
@@ -1445,19 +1405,26 @@ export default function SongEditor({
   );
 }
 
+type YtResult = { videoId: string; title: string; channel: string; url: string };
+
 function RecordingArtistField({
-  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange, onReorder,
+  items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange, onYoutubeUrlChange, onReorder, songTitle,
 }: {
-  items: { id: string; year: number | null }[];
+  items: { id: string; year: number | null; youtube_url: string | null }[];
   allArtists: Lookup[];
   query: string;
   onQueryChange: (v: string) => void;
   onAdd: (a: Lookup) => void;
   onRemove: (id: string) => void;
   onYearChange: (id: string, year: number | null) => void;
-  onReorder: (items: { id: string; year: number | null }[]) => void;
+  onYoutubeUrlChange: (id: string, url: string | null) => void;
+  onReorder: (items: { id: string; year: number | null; youtube_url: string | null }[]) => void;
+  songTitle: string;
 }) {
   const dragIndex = useRef<number | null>(null);
+  const [searchingId, setSearchingId] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<YtResult[]>([]);
+  const [openResultsId, setOpenResultsId] = useState<string | null>(null);
 
   function handleDragStart(i: number) { dragIndex.current = i; }
   function handleDrop(i: number) {
@@ -1469,39 +1436,91 @@ function RecordingArtistField({
     dragIndex.current = null;
   }
 
+  async function handleYoutubeSearch(id: string, artistName: string) {
+    setSearchingId(id);
+    setOpenResultsId(null);
+    setSearchResults([]);
+    try {
+      const res = await fetch(`/api/youtube?title=${encodeURIComponent(songTitle)}&artist=${encodeURIComponent(artistName)}`);
+      const data = await res.json();
+      setSearchResults(data.items ?? []);
+      setOpenResultsId(id);
+    } finally {
+      setSearchingId(null);
+    }
+  }
+
   const showSuggestions = query.trim().length > 0;
   const suggestions = allArtists.filter(
     (a) => !items.find((e) => e.id === a.id) && a.name.toLowerCase().includes(query.toLowerCase().trim())
   );
+
   return (
     <div className="space-y-2">
       <label className="block text-xs font-medium text-slate-600">Recording artists <span className="font-normal text-slate-400">(drag to reorder)</span></label>
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-1">
         {items.map((e, i) => {
           const artist = allArtists.find((a) => a.id === e.id);
+          const isSearching = searchingId === e.id;
+          const resultsOpen = openResultsId === e.id;
           return (
-            <span
-              key={e.id}
-              draggable
-              onDragStart={() => handleDragStart(i)}
-              onDragOver={(ev) => ev.preventDefault()}
-              onDrop={() => handleDrop(i)}
-              className="flex items-center gap-1.5 rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-sm text-white cursor-grab active:cursor-grabbing"
-            >
-              <span className="opacity-50 text-xs">⠿</span>
-              {artist?.name}
-              <input
-                type="number"
-                value={e.year ?? ""}
-                onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
-                placeholder="year"
-                className="w-14 bg-transparent border-b border-white/60 text-white placeholder-white/60 text-xs focus:outline-none"
-              />
-              <button onClick={() => onRemove(e.id)} className="opacity-70 hover:opacity-100">×</button>
-            </span>
+            <div key={e.id} className="space-y-1">
+              <div
+                draggable
+                onDragStart={() => handleDragStart(i)}
+                onDragOver={(ev) => ev.preventDefault()}
+                onDrop={() => handleDrop(i)}
+                className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 cursor-grab active:cursor-grabbing"
+              >
+                <span className="text-slate-400 text-xs">⠿</span>
+                <span className="text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{artist?.name}</span>
+                <input
+                  type="number"
+                  value={e.year ?? ""}
+                  onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
+                  placeholder="year"
+                  className="w-16 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs focus:border-amber-400 focus:outline-none"
+                />
+                {e.youtube_url && (
+                  <a href={e.youtube_url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-green-600 hover:text-green-700 shrink-0">▶ linked</a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (resultsOpen) { setOpenResultsId(null); setSearchResults([]); return; }
+                    handleYoutubeSearch(e.id, artist?.name ?? "");
+                  }}
+                  disabled={isSearching || !songTitle.trim()}
+                  className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
+                >
+                  {isSearching ? "…" : "▶ YouTube"}
+                </button>
+                <button onClick={() => onRemove(e.id)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
+              </div>
+              {resultsOpen && searchResults.length > 0 && (
+                <div className="ml-6 space-y-0 rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                  {searchResults.map((r) => (
+                    <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
+                      <div className="min-w-0">
+                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
+                        <div className="text-xs text-slate-400 truncate">{r.channel}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { onYoutubeUrlChange(e.id, r.url); setOpenResultsId(null); setSearchResults([]); }}
+                        className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
-        {!items.length && <span className="text-sm text-slate-400">None found.</span>}
+        {!items.length && <span className="text-sm text-slate-400">None added.</span>}
       </div>
       <div className="relative">
         <input

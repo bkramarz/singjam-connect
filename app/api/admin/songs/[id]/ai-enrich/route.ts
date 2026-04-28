@@ -37,7 +37,7 @@ const VALID_THEMES = [
 ];
 
 const VALID_CULTURES = [
-  "Appalachian", "Arab", "Argentine", "Australian", "Belgian", "Brazilian", "Cajun", "Cambodian", "Chilean", "Chinese",
+  "American", "Appalachian", "Arab", "Argentine", "Australian", "Belgian", "Brazilian", "Cajun", "Cambodian", "Chilean", "Chinese",
   "Colombian", "Creole", "Cuban", "Czech", "Danish", "Dutch", "East African", "Egyptian", "English",
   "Ethiopian", "Filipino", "Finnish", "First Nations/Native American", "French", "German", "Ghanaian", "Greek",
   "Haitian", "Hawaiian", "Hungarian", "Indian", "Indonesian", "Irish", "Israeli", "Italian",
@@ -46,6 +46,9 @@ const VALID_CULTURES = [
   "Portuguese", "Puerto Rican", "Romanian", "Romani", "Russian", "Scandinavian", "Scottish",
   "South African", "Spanish", "Sri Lankan", "Swedish", "Swiss", "Tex-Mex", "Thai", "Trinidadian",
   "Turkish", "Ukrainian", "Venezuelan", "Vietnamese", "Welsh", "West African", "Yoruba", "Zulu",
+  "Bahá'í", "Buddhist", "Catholic", "Christian", "Confucian", "Eastern Orthodox", "Hindu",
+  "Islamic", "Jewish", "Mormon/LDS", "Pagan", "Protestant", "Rastafarian", "Shinto",
+  "Sikh", "Sufi", "Taoist", "Zoroastrian",
 ];
 
 const SYSTEM_PROMPT = `You are a music research assistant helping to enrich a song database for SingJam, a platform for musicians.
@@ -63,7 +66,12 @@ Given the current data for a song, research and suggest corrections or additions
 - genres: Up to 3 genres. Must each be from: ${VALID_GENRES.join(", ")}
 - themes: Up to 3 lyrical/emotional themes. Must each be from: ${VALID_THEMES.join(", ")}
 - cultures: Cultural origins or associations (if any). Must each be from: ${VALID_CULTURES.join(", ")}
+- music_culture: For traditional songs, the cultural tradition the melody comes from (e.g. "Irish", "Scottish"). Single value or null. Must be from the cultures list.
+- lyric_culture: For traditional songs, the cultural tradition the lyrics come from. Often identical to music_culture but can differ. Single value or null. Must be from the cultures list.
 - languages: Languages the song is sung in, as plain English names (e.g. "English", "French")
+- notes: A concise factual paragraph about the song's history, origin, or cultural significance. Include disputed credits, notable recordings, or anything a musician would find useful. Null if nothing meaningful to add.
+- alternate_titles: Other titles the song is commonly known by (e.g. subtitle variants, translated titles, common misspellings). Do not repeat titles already in the current alternate_titles list.
+- additional_recordings: Up to 2 other significant recordings of this song not already in the recording_artists list. Each entry must have "artist" (canonical artist name) and "year" (recording year — required; only omit if completely unverifiable). Focus on the most historically or culturally notable versions.
 
 Rules:
 - Only suggest values you are confident about. If unsure, return null for scalar fields or an empty array for lists.
@@ -73,7 +81,6 @@ Rules:
 - Return the full suggested list even if some names are already correct.
 - Only use values from the provided lists for tonality, meter, vibe, genres, themes, and cultures. Do not invent new values.
 - Set confidence to "high" only when you are certain. Use "medium" or "low" otherwise.
-- Use the notes field to flag anything important: disputed credits, alternate versions, etc.
 
 Respond with valid JSON only, matching this exact schema:
 {
@@ -89,9 +96,13 @@ Respond with valid JSON only, matching this exact schema:
   "genres": string[],
   "themes": string[],
   "cultures": string[],
+  "music_culture": string | null,
+  "lyric_culture": string | null,
   "languages": string[],
-  "confidence": "high" | "medium" | "low",
-  "notes": string | null
+  "notes": string | null,
+  "alternate_titles": string[],
+  "additional_recordings": { "artist": string, "year": number | null }[],
+  "confidence": "high" | "medium" | "low"
 }`;
 
 export async function POST(
@@ -122,7 +133,9 @@ export async function POST(
       song_recording_artists ( year, position, artists ( name ) ),
       song_genres ( genres ( name ) ),
       song_themes ( themes ( name ) ),
-      song_productions ( productions ( name ) )
+      song_productions ( productions ( name ) ),
+      song_cultures ( context, cultures ( name ) ),
+      song_alternate_titles ( title )
     `)
     .eq("id", songId)
     .single();
@@ -137,6 +150,9 @@ export async function POST(
   const genres = (song.song_genres as any[])?.map((g) => g.genres?.name).filter(Boolean) ?? [];
   const themes = (song.song_themes as any[])?.map((t) => t.themes?.name).filter(Boolean) ?? [];
   const productions = (song.song_productions as any[])?.map((p) => p.productions?.name).filter(Boolean) ?? [];
+  const musicCulture = (song.song_cultures as any[])?.find((x) => x.context === "music")?.cultures?.name ?? null;
+  const lyricCulture = (song.song_cultures as any[])?.find((x) => x.context === "lyrics")?.cultures?.name ?? null;
+  const alternateTitles = (song.song_alternate_titles as any[])?.map((t) => t.title).filter(Boolean) ?? [];
 
   const context = JSON.stringify({
     title: song.title,
@@ -152,6 +168,9 @@ export async function POST(
     genres,
     themes,
     productions,
+    music_culture: musicCulture,
+    lyric_culture: lyricCulture,
+    alternate_titles: alternateTitles,
   }, null, 2);
 
   const completion = await openai.chat.completions.create({

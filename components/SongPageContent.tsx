@@ -60,7 +60,7 @@ export default function SongPageContent() {
           id, title, slug, display_artist, first_line, hook, notes, genius_url, chord_chart_url, youtube_url, year, year_written, tonality, meter, vibe,
           song_composers(people(name)),
           song_lyricists(people(name)),
-          song_recording_artists(year, position, artists(name)),
+          song_recording_artists(year, position, youtube_url, artists(name)),
           song_alternate_titles(title),
           song_genres(genres(name)),
           song_themes(themes(name)),
@@ -109,7 +109,7 @@ export default function SongPageContent() {
   const lyricsCultures = (lyricsSpecificRows.length ? lyricsSpecificRows : noContextRows)
     .map((x: any) => x.cultures?.name).filter(Boolean) as string[];
   const recordingArtists = (song.song_recording_artists as any[])
-    .map((x: any) => ({ name: x.artists?.name as string, year: x.year as number | null, position: x.position as number | null }))
+    .map((x: any) => ({ name: x.artists?.name as string, year: x.year as number | null, position: x.position as number | null, youtube_url: x.youtube_url as string | null }))
     .filter((x: any) => x.name)
     .sort((a: any, b: any) => (a.position ?? 999) - (b.position ?? 999));
   const altTitles = (song.song_alternate_titles as any[]).map((x: any) => x.title as string).filter(Boolean);
@@ -191,21 +191,57 @@ export default function SongPageContent() {
         </section>
       )}
 
-      {song.youtube_url && (() => {
-        let videoId: string | null = null;
-        try { videoId = new URL(song.youtube_url).searchParams.get("v"); } catch { return null; }
-        if (!videoId) return null;
+      {(() => {
+        const embeds = recordingArtists
+          .filter((a) => a.youtube_url)
+          .map((a) => {
+            let videoId: string | null = null;
+            try { videoId = new URL(a.youtube_url!).searchParams.get("v"); } catch { return null; }
+            if (!videoId) return null;
+            return { name: a.name, year: a.year, videoId };
+          })
+          .filter(Boolean) as { name: string; year: number | null; videoId: string }[];
+
+        const fallbackVideoId = (() => {
+          if (embeds.length > 0 || !song.youtube_url) return null;
+          try { return new URL(song.youtube_url).searchParams.get("v"); } catch { return null; }
+        })();
+
+        if (embeds.length === 0 && !fallbackVideoId) return null;
+
         return (
-          <section className="rounded-xl overflow-hidden border border-slate-200">
-            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src={`https://www.youtube.com/embed/${videoId}`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          </section>
+          <div className="space-y-4">
+            {embeds.map((e) => (
+              <section key={e.videoId} className="rounded-xl overflow-hidden border border-slate-200">
+                {embeds.length > 1 && (
+                  <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                    <span className="text-sm font-medium text-slate-700">{e.name}</span>
+                    {e.year && <span className="ml-2 text-sm text-slate-400">{e.year}</span>}
+                  </div>
+                )}
+                <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                  <iframe
+                    className="absolute inset-0 w-full h-full"
+                    src={`https://www.youtube.com/embed/${e.videoId}`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              </section>
+            ))}
+            {fallbackVideoId && (
+              <section className="rounded-xl overflow-hidden border border-slate-200">
+                <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                  <iframe
+                    className="absolute inset-0 w-full h-full"
+                    src={`https://www.youtube.com/embed/${fallbackVideoId}`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              </section>
+            )}
+          </div>
         );
       })()}
 
