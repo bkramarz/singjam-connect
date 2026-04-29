@@ -13,10 +13,10 @@ const VALID_METERS = ["4", "3", "5", "7", "9", "11", "Free", "Irregular"];
 const VALID_GENRES = [
   "Acoustic", "Afrobeats", "Afropop", "Alternative", "Ambient", "Americana", "Art Rock",
   "Bluegrass", "Blues", "Bossa Nova", "Cabaret", "Cajun", "Celtic", "Chanson", "Children's",
-  "Christian", "Classical", "Contemporary Christian", "Country", "Country Rock", "Dance",
+  "Classical", "Contemporary Christian", "Country", "Country Rock", "Dance",
   "Disco", "Doo-Wop", "Dream Pop", "Drum and Bass", "Electronic", "Emo", "Experimental",
   "Flamenco", "Folk", "Folk Rock", "Funk", "Gospel", "Glam Rock", "Grunge", "Hard Rock",
-  "Heavy Metal", "Hip-Hop/Rap", "Holiday", "House", "Hymns", "Indie", "Jazz", "Klezmer",
+  "Hip-Hop/Rap", "Holiday", "House", "Hymns", "Indie", "Jazz", "Klezmer",
   "Latin", "Metal", "Motown", "Musical Theatre", "New Age", "New Wave", "Opera",
   "Outlaw Country", "Pop", "Post-Punk", "Post-Rock", "Progressive Rock", "Psychedelic Rock",
   "Punk", "R&B", "Reggae", "Rockabilly", "Rock", "Roots Rock", "Salsa", "Shanties",
@@ -31,7 +31,7 @@ const VALID_THEMES = [
   "Forgiveness", "Freedom", "Friendship", "History", "Home", "Hope", "Humor", "Identity",
   "Immigration", "Joy", "Justice", "Labor", "Longing", "Loss", "Love", "Memory", "Music",
   "Mythology", "Nature", "Nostalgia", "Parenthood", "Peace", "Politics", "Poverty", "Pride",
-  "Race", "Rebellion", "Religion", "Romance", "Rural Life", "Satire", "Sea", "Seasons",
+  "Race", "Rebellion", "Romance", "Rural Life", "Satire", "Sea", "Seasons",
   "Shame", "Spirituality", "Storytelling", "Struggle", "Time", "Travel", "Unity", "Wandering",
   "War", "Wealth", "Work", "Youth",
 ];
@@ -47,7 +47,7 @@ const VALID_CULTURES = [
   "South African", "Spanish", "Sri Lankan", "Swedish", "Swiss", "Tex-Mex", "Thai", "Trinidadian",
   "Turkish", "Ukrainian", "Venezuelan", "Vietnamese", "Welsh", "West African", "Yoruba", "Zulu",
   "Bahá'í", "Buddhist", "Catholic", "Christian", "Confucian", "Eastern Orthodox", "Hindu",
-  "Islamic", "Jewish", "Mormon/LDS", "Pagan", "Protestant", "Rastafarian", "Shinto",
+  "Islamic", "Mormon/LDS", "Pagan", "Protestant", "Rastafarian", "Shinto",
   "Sikh", "Sufi", "Taoist", "Zoroastrian",
 ];
 
@@ -80,6 +80,7 @@ Rules:
 - For traditional or folk songs, use ["Traditional"] for both composers and lyricists.
 - Return the full suggested list even if some names are already correct.
 - Only use values from the provided lists for tonality, meter, vibe, genres, themes, and cultures. Do not invent new values.
+- Never use "British" for any culture field — use "English", "Scottish", "Welsh", or "Irish" as appropriate.
 - Set confidence to "high" only when you are certain. Use "medium" or "low" otherwise.
 
 Respond with valid JSON only, matching this exact schema:
