@@ -364,6 +364,18 @@ export default function AccountPanel() {
       originalUsername.current = username;
       setUsernameStatus("idle");
       window.dispatchEvent(new CustomEvent("profile-updated"));
+      fetch("/api/account/sync-ac", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: name || undefined,
+          lastName: lastName || undefined,
+          neighborhood: neighborhood || undefined,
+          singingVoice,
+          instrumentLevels,
+          favoriteGenres,
+        }),
+      }).catch(() => {});
     }
     if (!error) router.push(next ?? "/repertoire");
     else setStatus(error.message);
