@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { welcomeEmailHtml } from "@/emails/welcome";
-import { addContactToMailingLists } from "@/lib/activecampaign";
+import { syncContact } from "@/lib/activecampaign";
 
 function supabaseAdmin() {
   return createClient(
@@ -91,7 +91,7 @@ export async function GET(request: Request) {
         await supabaseAdmin().from("profiles").insert({ id: user.id, username });
 
         if (user.email) {
-          addContactToMailingLists(user.email).catch(() => {});
+          syncContact(user.email).catch(() => {});
           resend.emails.send({
             from: FROM_ADDRESS,
             to: user.email,
