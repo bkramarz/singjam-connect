@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
-import { addContactToMailingLists } from "@/lib/activecampaign";
+import { syncContact } from "@/lib/activecampaign";
 
 function supabaseAdmin() {
   return createClient(
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     if (!username) username = `singer${Date.now()}`;
     await admin.from("profiles").insert({ id: user.id, username });
 
-    if (user.email) addContactToMailingLists(user.email).catch(() => {});
+    if (user.email) syncContact(user.email).catch(() => {});
   }
 
   // Link invite and resolve jam ID

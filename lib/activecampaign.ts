@@ -77,36 +77,6 @@ async function acFetch(path: string, options: RequestInit) {
   return res.json();
 }
 
-// Called on new user signup — creates the contact and subscribes to lists.
-export async function addContactToMailingLists(email: string) {
-  if (!AC_API_URL || !AC_API_KEY) return;
-
-  const contactData = await acFetch("/contact/sync", {
-    method: "POST",
-    body: JSON.stringify({ contact: { email } }),
-  });
-
-  const contactId: string | undefined = contactData?.contact?.id;
-  if (!contactId) return;
-
-  await Promise.all([
-    ...LIST_IDS.map((listId) =>
-      acFetch("/contactLists", {
-        method: "POST",
-        body: JSON.stringify({
-          contactList: { contact: contactId, list: listId, status: 1 },
-        }),
-      })
-    ),
-    acFetch("/contactTags", {
-      method: "POST",
-      body: JSON.stringify({
-        contactTag: { contact: contactId, tag: TAG_ID },
-      }),
-    }),
-  ]);
-}
-
 export interface ContactProfile {
   firstName?: string;
   lastName?: string;
@@ -116,8 +86,9 @@ export interface ContactProfile {
   favoriteGenres?: string[];
 }
 
-// Called on profile save — syncs enriched contact data to AC custom fields.
-export async function syncContactProfile(email: string, profile: ContactProfile) {
+// Upserts the contact, subscribes to all lists, applies the SingJam App User tag,
+// and syncs any profile fields provided. Safe to call on every signup and profile save.
+export async function syncContact(email: string, profile: ContactProfile = {}) {
   if (!AC_API_URL || !AC_API_KEY) return;
 
   const fieldValues: { field: string; value: string }[] = [];
@@ -159,15 +130,35 @@ export async function syncContactProfile(email: string, profile: ContactProfile)
     fieldValues.push({ field: "38", value: otherGenres.join(", ") });
   }
 
-  await acFetch("/contact/sync", {
+  const contactData = await acFetch("/contact/sync", {
     method: "POST",
     body: JSON.stringify({
       contact: {
         email,
         ...(profile.firstName ? { firstName: profile.firstName } : {}),
         ...(profile.lastName ? { lastName: profile.lastName } : {}),
-        fieldValues,
+        ...(fieldValues.length ? { fieldValues } : {}),
       },
     }),
   });
+
+  const contactId: string | undefined = contactData?.contact?.id;
+  if (!contactId) return;
+
+  await Promise.all([
+    ...LIST_IDS.map((listId) =>
+      acFetch("/contactLists", {
+        method: "POST",
+        body: JSON.stringify({
+          contactList: { contact: contactId, list: listId, status: 1 },
+        }),
+      })
+    ),
+    acFetch("/contactTags", {
+      method: "POST",
+      body: JSON.stringify({
+        contactTag: { contact: contactId, tag: TAG_ID },
+      }),
+    }),
+  ]);
 }
