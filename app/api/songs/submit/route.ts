@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { revalidateTag } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 
 const LANG_CODE_MAP: Record<string, string> = {
@@ -143,5 +144,6 @@ export async function POST(req: Request) {
   )];
   if (langIds.length) await db.from("song_languages").insert(langIds.map((id) => ({ song_id: song.id, language_id: id })));
 
+  revalidateTag("songs");
   return NextResponse.json({ slug: song.slug });
 }

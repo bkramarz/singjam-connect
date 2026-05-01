@@ -11,6 +11,7 @@ export default function DeleteSongButton({ id }: { id: string }) {
     const supabase = supabaseBrowser();
     const { error } = await supabase.from("songs").delete().eq("id", id);
     if (error) { alert(error.message); return; }
+    await fetch("/api/revalidate/songs", { method: "POST" });
     router.refresh();
   }
 

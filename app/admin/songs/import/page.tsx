@@ -233,6 +233,7 @@ export default function ImportCSVPage() {
       if (i < rows.length - 1) await new Promise((r) => setTimeout(r, 1100));
     }
 
+    await fetch("/api/revalidate/songs", { method: "POST" });
     setRunning(false);
   }
 

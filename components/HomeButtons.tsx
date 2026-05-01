@@ -1,19 +1,6 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/client";
 
-export default function HomeButtons() {
-  const [signedIn, setSignedIn] = useState(false);
-  const supabase = supabaseBrowser();
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(!!data.session);
-    });
-  }, [supabase]);
-
+export default function HomeButtons({ signedIn }: { signedIn: boolean }) {
   if (signedIn) {
     return (
       <>

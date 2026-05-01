@@ -92,6 +92,7 @@ export default function BulkEnrichPage() {
 
     if (!error) {
       setApplied((prev) => new Set(prev).add(key));
+      fetch("/api/revalidate/songs", { method: "POST" });
     }
   }
 

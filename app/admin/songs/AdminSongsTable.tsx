@@ -201,6 +201,7 @@ export default function AdminSongsTable() {
     const { error } = await supabase.from("songs").delete().in("id", [...selected]);
     setDeleting(false);
     if (error) { alert(error.message); return; }
+    await fetch("/api/revalidate/songs", { method: "POST" });
     setSelected(new Set());
     router.refresh();
   }

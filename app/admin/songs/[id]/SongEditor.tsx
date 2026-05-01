@@ -469,6 +469,7 @@ export default function SongEditor({
       }
 
       const newSlug = generateSlug(finalTitle, composerNames, slugCulture);
+      await fetch("/api/revalidate/songs", { method: "POST" });
       router.push(`/admin/songs/${newSlug}`);
       router.refresh();
     } catch (e: any) {
@@ -792,6 +793,7 @@ export default function SongEditor({
       await syncJoinTable(songId!, "song_productions", "production_id", resolvedProductionIds, originalProductionIds);
 
       setSlug(resolvedSlug);
+      await fetch("/api/revalidate/songs", { method: "POST" });
       router.push(`/admin/songs/${resolvedSlug}`);
       router.refresh();
     } catch (e: any) {
@@ -1407,6 +1409,7 @@ export default function SongEditor({
               if (!confirm("Delete this song? This cannot be undone.")) return;
               const { error } = await supabase.from("songs").delete().eq("id", song!.id);
               if (error) { setError(error.message); return; }
+              await fetch("/api/revalidate/songs", { method: "POST" });
               router.push("/admin/songs");
               router.refresh();
             }}

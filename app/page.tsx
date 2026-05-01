@@ -1,7 +1,11 @@
+import { Suspense } from "react";
 import HomeButtons from "@/components/HomeButtons";
 import UpcomingJams from "@/components/UpcomingJams";
+import { getSessionServer } from "@/lib/supabase/server";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getSessionServer();
+
   return (
     <div className="space-y-6">
       {/* Hero */}
@@ -17,12 +21,14 @@ export default function HomePage() {
             <span className="text-amber-400">Sing and jam with friends.</span>
           </h1>
           <div className="mt-8 flex flex-wrap gap-3">
-            <HomeButtons />
+            <HomeButtons signedIn={!!session} />
           </div>
         </div>
       </div>
 
-      <UpcomingJams />
+      <Suspense>
+        <UpcomingJams />
+      </Suspense>
     </div>
   );
 }

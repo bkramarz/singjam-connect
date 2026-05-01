@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
@@ -12,5 +13,6 @@ export async function POST(req: Request) {
   const { songId } = await req.json();
   await supabase.from("songs").update({ needs_review: false, submitted_by: null }).eq("id", songId);
 
+  revalidateTag("songs");
   return NextResponse.json({ ok: true });
 }
