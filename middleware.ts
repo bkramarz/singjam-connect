@@ -45,11 +45,14 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refreshes the session token and writes updated cookies to the response.
-  // Do not add logic between createServerClient and getUser.
-  const { data: { user } } = await supabase.auth.getUser();
+  // getSession() validates the JWT locally from the cookie — no network call
+  // unless the token is expired and needs refreshing (~hourly). getUser() by
+  // contrast always hits Supabase's auth server, causing a cold-connection
+  // delay after periods of inactivity. For middleware route-guarding this
+  // local check is sufficient.
+  const { data: { session } } = await supabase.auth.getSession();
 
-  if (!user && authRequired.some((p) => pathname.startsWith(p))) {
+  if (!session && authRequired.some((p) => pathname.startsWith(p))) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth";
     return NextResponse.redirect(url);
