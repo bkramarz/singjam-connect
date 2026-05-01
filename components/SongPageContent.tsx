@@ -118,7 +118,8 @@ export default function SongPageContent() {
   const cultures = [...new Set((song.song_cultures as any[]).map((x: any) => x.cultures?.name as string).filter(Boolean))];
   const languages = (song.song_languages as any[]).map((x: any) => x.languages?.name as string).filter(Boolean);
   const songProductions = (song.song_productions as any[]).map((x: any) => x.productions?.name as string).filter(Boolean);
-  const firstRecorded = recordingArtists.find((a: any) => a.year)?.year ?? song.year;
+  const allYears = [song.year_written, song.year, ...recordingArtists.map((a: any) => a.year)].filter(Boolean) as number[];
+  const earliestYear = allYears.length > 0 ? Math.min(...allYears) : null;
   const tonalityPills = song.tonality ? song.tonality.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
   const meterPills = song.meter ? song.meter.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
 
@@ -128,8 +129,8 @@ export default function SongPageContent() {
         <div>
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-slate-900">{song.title}</h1>
-            {firstRecorded && (
-              <span className="shrink-0 text-sm text-slate-400">{firstRecorded}</span>
+            {earliestYear && (
+              <span className="shrink-0 text-sm text-slate-400">{earliestYear}</span>
             )}
           </div>
           {songProductions.length > 0 ? (

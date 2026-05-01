@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import DeleteSongButton from "./DeleteSongButton";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
@@ -24,7 +24,7 @@ type Song = {
   song_composers: { people: { name: string } | null }[];
   song_lyricists: { people: { name: string } | null }[];
   song_cultures: { cultures: { name: string } | null }[];
-  song_recording_artists: { year: number | null }[];
+  song_recording_artists: { year: number | null; youtube_url: string | null }[];
   youtube_url: string | null;
   song_genres: { genre_id: string }[];
   song_languages: { language_id: string }[];
@@ -59,20 +59,41 @@ function missingFields(s: Song): string[] {
   if (!s.song_languages.length) missing.push("language");
   if (!s.vibe) missing.push("vibe");
   if (!s.chord_chart_url) missing.push("chord chart");
-  if (!s.youtube_url) missing.push("video");
+  if (!s.youtube_url && !s.song_recording_artists.some((a) => a.youtube_url)) missing.push("video");
   return missing;
 }
 
-export default function AdminSongsTable({ songs }: { songs: Song[] }) {
+export default function AdminSongsTable() {
   const supabase = supabaseBrowser();
   const router = useRouter();
   const equalWidth = 100 / COLUMNS.length;
+  const [songs, setSongs] = useState<Song[] | null>(null);
   const [widths, setWidths] = useState<number[]>(COLUMNS.map(() => equalWidth));
   const [wrap, setWrap] = useState(true);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ col: SortCol; dir: SortDir }>({ col: "missing", dir: "desc" });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from("songs")
+      .select(`
+        id, title, slug, display_artist,
+        first_line, hook, genius_url, chord_chart_url, youtube_url, tonality, meter, vibe, year_written,
+        song_composers(people(name)),
+        song_lyricists(people(name)),
+        song_recording_artists(year, youtube_url),
+        song_genres(genre_id),
+        song_languages(language_id),
+        song_cultures(cultures(name)),
+        user_songs(count)
+      `)
+      .order("title")
+      .limit(500)
+      .then(({ data }) => setSongs((data ?? []) as unknown as Song[]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const dragging = useRef<{ col: number; startX: number; startW: number } | null>(null);
 
@@ -108,7 +129,7 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
   }
 
   const enriched = useMemo(() =>
-    songs.map((s) => {
+    (songs ?? []).map((s) => {
       const songwriterNames = new Set<string>([
         ...s.song_composers.map((c) => c.people?.name).filter(Boolean) as string[],
         ...s.song_lyricists.map((l) => l.people?.name).filter(Boolean) as string[],
@@ -185,6 +206,8 @@ export default function AdminSongsTable({ songs }: { songs: Song[] }) {
   }
 
   const cellClass = wrap ? "px-4 py-2.5 whitespace-normal" : "px-4 py-2.5 truncate";
+
+  if (songs === null) return <p className="text-sm text-slate-400">Loading…</p>;
 
   return (
     <div className="space-y-2">
