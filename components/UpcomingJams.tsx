@@ -1,24 +1,26 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { unstable_cache } from "next/cache";
+import { supabasePublic } from "@/lib/supabase/public";
 import JamEventCard, { type JamEventCardData } from "@/components/JamEventCard";
 
-export default function UpcomingJams() {
-  const [jams, setJams] = useState<JamEventCardData[] | null>(null);
-
-  useEffect(() => {
-    supabaseBrowser()
+const getUpcomingJams = unstable_cache(
+  async () => {
+    const { data } = await supabasePublic()
       .from("jams")
       .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url")
       .eq("visibility", "official")
       .gte("starts_at", new Date().toISOString())
       .order("starts_at", { ascending: true })
-      .limit(3)
-      .then(({ data }) => setJams(data ?? []));
-  }, []);
+      .limit(3);
+    return (data ?? []) as JamEventCardData[];
+  },
+  ["upcoming-jams"],
+  { revalidate: 300 }
+);
 
-  if (!jams || jams.length === 0) return null;
+export default async function UpcomingJams() {
+  const jams = await getUpcomingJams();
+
+  if (jams.length === 0) return null;
 
   return (
     <section className="space-y-3">

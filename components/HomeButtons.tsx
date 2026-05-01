@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function HomeButtons() {
   const [signedIn, setSignedIn] = useState(false);
-  const supabase = supabaseBrowser();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(!!data.session);
-    });
-  }, [supabase]);
+    // Read the Supabase auth cookie synchronously — no network call, no SDK import.
+    // Supabase stores session cookies as sb-*-auth-token or sb-*-auth-token.0 etc.
+    setSignedIn(document.cookie.split(";").some((c) => c.trim().match(/^sb-.+-auth-token/)));
+  }, []);
 
   if (signedIn) {
     return (
