@@ -272,6 +272,7 @@ export default function SongEditor({
   const [newComposerName, setNewComposerName] = useState("");
   const [newLyricistName, setNewLyricistName] = useState("");
   const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
+  const [pendingRecordingArtistNames, setPendingRecordingArtistNames] = useState<string[]>([]);
   const [primaryArtist, setPrimaryArtist] = useState<{ name: string; year: number | null } | null>(null);
   const [pendingComposerNames, setPendingComposerNames] = useState<string[]>([]);
   const [pendingLyricistNames, setPendingLyricistNames] = useState<string[]>([]);
@@ -720,7 +721,18 @@ export default function SongEditor({
       const allComposerIds = new Set([...composers, ...resolvedPendingComposerIds.filter((id): id is string => !!id)]);
       const allLyricistIds = new Set([...lyricists, ...resolvedPendingLyricistIds.filter((id): id is string => !!id)]);
 
-      const newRecordingArtistIds = recordingArtists.map((e) => e.id);
+      const resolvedPendingArtistIds = await Promise.all(
+        pendingRecordingArtistNames.map((name) => resolvePersonName(name, "artists", allArtists))
+      );
+      const allRecordingArtists = [
+        ...recordingArtists,
+        ...resolvedPendingArtistIds
+          .filter((id): id is string => !!id)
+          .filter((id) => !recordingArtists.find((e) => e.id === id))
+          .map((id) => ({ id, year: null as number | null, youtube_url: null as string | null })),
+      ];
+
+      const newRecordingArtistIds = allRecordingArtists.map((e) => e.id);
       const toDeleteArtists = originalRecordingArtistIds.filter((id) => !newRecordingArtistIds.includes(id));
 
       // Sync non-contextual cultures manually so the delete is scoped to context IS NULL
@@ -745,9 +757,9 @@ export default function SongEditor({
         toDeleteArtists.length
           ? supabase.from("song_recording_artists").delete().eq("song_id", songId!).in("artist_id", toDeleteArtists)
           : Promise.resolve(),
-        recordingArtists.length
+        allRecordingArtists.length
           ? supabase.from("song_recording_artists").upsert(
-              recordingArtists.map((e, i) => ({ song_id: songId!, artist_id: e.id, year: e.year, position: i, youtube_url: e.youtube_url ?? null })),
+              allRecordingArtists.map((e, i) => ({ song_id: songId!, artist_id: e.id, year: e.year, position: i, youtube_url: e.youtube_url ?? null })),
               { onConflict: "song_id,artist_id" }
             )
           : Promise.resolve(),
@@ -1178,6 +1190,9 @@ export default function SongEditor({
           onYearChange={(id, year) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, year } : e))}
           onYoutubeUrlChange={(id, url) => setRecordingArtists((prev) => prev.map((e) => e.id === id ? { ...e, youtube_url: url } : e))}
           onReorder={setRecordingArtists}
+          onAddNew={(name) => { if (!pendingRecordingArtistNames.includes(name)) setPendingRecordingArtistNames((prev) => [...prev, name]); }}
+          pendingItems={pendingRecordingArtistNames}
+          onRemovePending={(name) => setPendingRecordingArtistNames((prev) => prev.filter((n) => n !== name))}
         />
 
         <div className="space-y-3">
@@ -1409,6 +1424,7 @@ type YtResult = { videoId: string; title: string; channel: string; url: string }
 
 function RecordingArtistField({
   items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange, onYoutubeUrlChange, onReorder, songTitle,
+  onAddNew, pendingItems = [], onRemovePending,
 }: {
   items: { id: string; year: number | null; youtube_url: string | null }[];
   allArtists: Lookup[];
@@ -1420,6 +1436,9 @@ function RecordingArtistField({
   onYoutubeUrlChange: (id: string, url: string | null) => void;
   onReorder: (items: { id: string; year: number | null; youtube_url: string | null }[]) => void;
   songTitle: string;
+  onAddNew?: (name: string) => void;
+  pendingItems?: string[];
+  onRemovePending?: (name: string) => void;
 }) {
   const dragIndex = useRef<number | null>(null);
   const [searchingId, setSearchingId] = useState<string | null>(null);
@@ -1450,9 +1469,10 @@ function RecordingArtistField({
     }
   }
 
-  const showSuggestions = query.trim().length > 0;
+  const trimmedQuery = query.trim();
+  const showSuggestions = trimmedQuery.length > 0;
   const suggestions = allArtists.filter(
-    (a) => !items.find((e) => e.id === a.id) && a.name.toLowerCase().includes(query.toLowerCase().trim())
+    (a) => !items.find((e) => e.id === a.id) && !pendingItems.includes(a.name) && a.name.toLowerCase().includes(trimmedQuery.toLowerCase())
   );
 
   return (
@@ -1520,7 +1540,16 @@ function RecordingArtistField({
             </div>
           );
         })}
-        {!items.length && <span className="text-sm text-slate-400">None added.</span>}
+        {pendingItems.map((name) => (
+          <div key={name} className="flex items-center gap-2 rounded-lg border border-amber-400 bg-white px-3 py-2">
+            <span className="text-sm font-medium text-amber-700 flex-1 min-w-0 truncate">{name}</span>
+            <span className="text-xs text-amber-500">(new)</span>
+            {onRemovePending && (
+              <button onClick={() => onRemovePending(name)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
+            )}
+          </div>
+        ))}
+        {!items.length && !pendingItems.length && <span className="text-sm text-slate-400">None added.</span>}
       </div>
       <div className="relative">
         <input
@@ -1538,7 +1567,14 @@ function RecordingArtistField({
                 </button>
               </li>
             ))}
-            {!suggestions.length && (
+            {onAddNew && !suggestions.some((a) => a.name.toLowerCase() === trimmedQuery.toLowerCase()) && !pendingItems.some((n) => n.toLowerCase() === trimmedQuery.toLowerCase()) && (
+              <li>
+                <button onMouseDown={() => { onAddNew(trimmedQuery); onQueryChange(""); }} className="w-full px-3 py-2 text-left text-sm text-amber-700 hover:bg-amber-50">
+                  Create "{trimmedQuery}" <span className="text-xs opacity-60">(new)</span>
+                </button>
+              </li>
+            )}
+            {!suggestions.length && !onAddNew && (
               <li className="px-3 py-2 text-sm text-slate-400">No match — add to database first</li>
             )}
           </ul>
