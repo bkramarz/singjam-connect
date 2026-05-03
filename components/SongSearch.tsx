@@ -90,29 +90,39 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     });
 
     // Songs catalog — fires in parallel with the user fetch above
-    Promise.all([
-      supabase
-        .from("songs")
-        .select(`
-          id, title, slug, display_artist, year_written, vibe, tonality, meter,
-          song_composers(people(name)),
-          song_lyricists(people(name)),
-          song_recording_artists(year),
-          song_productions(productions(name)),
-          song_genres(genres(name)),
-          song_languages(languages(name)),
-          song_cultures(cultures(name)),
-          song_themes(themes(name))
-        `)
-        .limit(2000),
-      supabase.rpc("song_popularity_counts"),
-    ]).then(([songsRes, popularityRes]) => {
+    const SONG_PAGE = 1000;
+    async function fetchAllSongs() {
+      const all: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data } = await supabase
+          .from("songs")
+          .select(`
+            id, title, slug, display_artist, year_written, vibe, tonality, meter,
+            song_composers(people(name)),
+            song_lyricists(people(name)),
+            song_recording_artists(year),
+            song_productions(productions(name)),
+            song_genres(genres(name)),
+            song_languages(languages(name)),
+            song_cultures(cultures(name)),
+            song_themes(themes(name))
+          `)
+          .range(from, from + SONG_PAGE - 1);
+        const page = data ?? [];
+        all.push(...page);
+        if (page.length < SONG_PAGE) break;
+        from += SONG_PAGE;
+      }
+      return all;
+    }
+    Promise.all([fetchAllSongs(), supabase.rpc("song_popularity_counts")]).then(([songsData, popularityRes]) => {
       const popularityMap = new Map<string, number>(
         ((popularityRes.data ?? []) as { song_id: string; user_count: number }[]).map(
           (r) => [r.song_id, r.user_count]
         )
       );
-      const songs = (songsRes.data ?? [])
+      const songs = songsData
         .map((s: any) => ({
           song_id: s.id as string,
           title: s.title as string,

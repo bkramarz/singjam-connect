@@ -76,22 +76,34 @@ export default function AdminSongsTable() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    supabase
-      .from("songs")
-      .select(`
-        id, title, slug, display_artist,
-        first_line, hook, genius_url, chord_chart_url, youtube_url, tonality, meter, vibe, year_written,
-        song_composers(people(name)),
-        song_lyricists(people(name)),
-        song_recording_artists(year, youtube_url),
-        song_genres(genre_id),
-        song_languages(language_id),
-        song_cultures(cultures(name)),
-        user_songs(count)
-      `)
-      .order("title")
-      .limit(500)
-      .then(({ data }) => setSongs((data ?? []) as unknown as Song[]));
+    const PAGE = 1000;
+    async function fetchAll() {
+      const all: Song[] = [];
+      let from = 0;
+      while (true) {
+        const { data } = await supabase
+          .from("songs")
+          .select(`
+            id, title, slug, display_artist,
+            first_line, hook, genius_url, chord_chart_url, youtube_url, tonality, meter, vibe, year_written,
+            song_composers(people(name)),
+            song_lyricists(people(name)),
+            song_recording_artists(year, youtube_url),
+            song_genres(genre_id),
+            song_languages(language_id),
+            song_cultures(cultures(name)),
+            user_songs(count)
+          `)
+          .order("title")
+          .range(from, from + PAGE - 1);
+        const page = (data ?? []) as unknown as Song[];
+        all.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
+      setSongs(all);
+    }
+    fetchAll();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
