@@ -79,50 +79,60 @@ export default function RepertoirePage() {
         const uid = data.session.user.id;
         setUserId(uid);
 
-        const [{ data: p }, { data: rows, error }] = await Promise.all([
+        const PAGE = 1000;
+        async function fetchAllUserSongs() {
+          const all: any[] = [];
+          let from = 0;
+          while (true) {
+            const { data, error } = await supabase
+              .from("user_songs")
+              .select(
+                `
+                song_id,
+                confidence,
+                updated_at,
+                songs (
+                  title,
+                  slug,
+                  display_artist,
+                  first_line,
+                  hook,
+                  notes,
+                  vibe,
+                  tonality,
+                  meter,
+                  song_composers ( people ( name ) ),
+                  song_lyricists ( people ( name ) ),
+                  song_cultures ( cultures ( name ) ),
+                  song_productions ( productions ( name ) ),
+                  song_genres ( genres ( name ) ),
+                  song_languages ( languages ( name ) ),
+                  song_themes ( themes ( name ) )
+                )
+              `
+              )
+              .eq("user_id", uid)
+              .order("updated_at", { ascending: false })
+              .range(from, from + PAGE - 1);
+            if (error) throw error;
+            const page = data ?? [];
+            all.push(...page);
+            if (page.length < PAGE) break;
+            from += PAGE;
+          }
+          return all;
+        }
+
+        const [{ data: p }, rows] = await Promise.all([
           supabase.from("profiles").select("singing_voice").eq("id", uid).single(),
-          supabase.from("user_songs")
-          .select(
-            `
-            song_id,
-            confidence,
-            updated_at,
-            songs (
-              title,
-              slug,
-              display_artist,
-              first_line,
-              hook,
-              notes,
-              vibe,
-              tonality,
-              meter,
-              song_composers ( people ( name ) ),
-              song_lyricists ( people ( name ) ),
-              song_cultures ( cultures ( name ) ),
-              song_productions ( productions ( name ) ),
-              song_genres ( genres ( name ) ),
-              song_languages ( languages ( name ) ),
-              song_themes ( themes ( name ) )
-            )
-          `
-          )
-          .eq("user_id", uid)
-          .order("updated_at", { ascending: false }),
+          fetchAllUserSongs(),
         ]);
 
         setSingingVoice((p as any)?.singing_voice ?? null);
 
         if (cancelled) return;
 
-        if (error) {
-          console.error("Repertoire load error:", error);
-          setErrorMsg("Failed to load repertoire. Please try again.");
-          setItems([]);
-          return;
-        }
-
-        const typed = (rows ?? []) as any[];
+        const typed = rows as any[];
         const flattened: Item[] = typed
           .filter((r) => r.songs)
           .map((r) => {
