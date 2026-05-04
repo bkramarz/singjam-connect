@@ -21,7 +21,7 @@ const nextConfig = {
         ],
       },
       {
-        source: "/(repertoire|friends|jams|auth)/:path*",
+        source: "/(repertoire|friends|jams|auth)(.*)",
         headers: [
           { key: "Cache-Control", value: "private, no-store" },
         ],
