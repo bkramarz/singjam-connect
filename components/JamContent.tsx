@@ -59,15 +59,65 @@ export default function JamContent() {
     (async () => {
       setState({ status: "loading" });
 
-      // If there's an invite token, we must claim it before fetching the jam.
-      // Link-based invites have invited_user_id=null, so RLS blocks the jam
-      // select until the token is claimed and tied to the current user.
+      // Resolve auth state early when there's an invite token so we can decide
+      // which fetch path to take before making any jam queries.
+      let earlyUser: any = null;
       if (inviteToken) {
-        const { data: { user: earlyUser } } = await supabase.auth.getUser();
-        if (!earlyUser) {
-          router.push(`/auth?next=/jam/${id}&invite=${inviteToken}`);
+        const { data: { user } } = await supabase.auth.getUser();
+        earlyUser = user;
+      }
+
+      if (inviteToken && !earlyUser) {
+        // Unauthenticated visitor with a valid invite link: fetch jam data
+        // server-side (bypasses RLS) so they can view without signing in.
+        const res = await fetch(`/api/jam/${id}/public?invite=${inviteToken}`);
+        if (!res.ok) {
+          setState({ status: "not_found" });
           return;
         }
+        const data = await res.json();
+        const jam = data.jam;
+        const jamCardData: JamCardData = {
+          name: jam.name,
+          visibility: jam.visibility,
+          starts_at: jam.starts_at,
+          ends_at: jam.ends_at,
+          neighborhood: jam.neighborhood,
+          full_address: jam.full_address,
+          notes: jam.notes,
+          tickets_url: jam.tickets_url,
+          image_url: jam.image_url,
+          image_focal_point: jam.image_focal_point,
+          genres: data.genres,
+          themes: data.themes,
+          host: data.host,
+          hostUsername: data.hostUsername,
+          capacity: jam.capacity,
+          hasFullAccess: false,
+        };
+        setState({
+          status: "ready",
+          jam,
+          jamCardData,
+          userId: null,
+          rsvpStatus: null,
+          waitlistPosition: null,
+          attendingCount: data.attendingCount,
+          pendingInvite: false,
+          isOfficial: false,
+          isHost: false,
+          hasFullAccess: false,
+          showRsvp: false,
+          canInvite: false,
+          invitesEnabled: data.invitesEnabled,
+          inviteList: [],
+          alreadyInvitedIds: [],
+        });
+        return;
+      }
+
+      if (inviteToken && earlyUser) {
+        // Authenticated visitor with token: claim it so RLS allows the jam select.
         await fetch("/api/invite/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
