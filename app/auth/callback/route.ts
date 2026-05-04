@@ -139,6 +139,12 @@ export async function GET(request: Request) {
           destination = next ? `/account?next=${encodeURIComponent(next)}` : "/account";
         } else if (inviteToken) {
           const admin = supabaseAdmin();
+          // Link link-based invites (no recipient yet) to this returning user
+          await admin
+            .from("jam_invites")
+            .update({ invited_user_id: user.id })
+            .eq("token", inviteToken)
+            .is("invited_user_id", null);
           const { data: invite } = await admin
             .from("jam_invites")
             .select("jam_id")
