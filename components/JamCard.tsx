@@ -74,6 +74,16 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
               Official SingJam event
             </p>
           )}
+          {jam.visibility === "community" && (
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-sky-500">
+              Public jam
+            </p>
+          )}
+          {jam.visibility === "private" && (
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
+              Private jam
+            </p>
+          )}
           <h1 className="text-2xl font-bold text-zinc-900 leading-tight">
             {jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
           </h1>

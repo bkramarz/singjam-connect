@@ -71,6 +71,12 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
         )}
         <div className="flex items-center gap-2">
           <p className="flex-1 font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
+          {!isOfficial && jam.visibility === "community" && (
+            <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">Public</span>
+          )}
+          {!isOfficial && jam.visibility === "private" && (
+            <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Private</span>
+          )}
           {isInvited && !rsvp && (
             <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">Invited</span>
           )}
