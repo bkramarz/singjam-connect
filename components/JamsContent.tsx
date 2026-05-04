@@ -71,6 +71,12 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
         )}
         <div className="flex items-center gap-2">
           <p className="flex-1 font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
+          {!isOfficial && jam.visibility === "community" && (
+            <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">Public</span>
+          )}
+          {!isOfficial && jam.visibility === "private" && (
+            <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Private</span>
+          )}
           {isInvited && !rsvp && (
             <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">Invited</span>
           )}
@@ -281,11 +287,11 @@ export default function JamsContent() {
         </section>
       )}
 
-      {pastOfficialJams.length > 0 && (
+      {userId && hostingJams.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
           <div className="grid gap-3">
-            {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
+            {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
           </div>
         </section>
       )}
@@ -295,15 +301,6 @@ export default function JamsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Invitations</h2>
           <div className="grid gap-3">
             {pendingInviteJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
-          </div>
-        </section>
-      )}
-
-      {userId && hostingJams.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
-          <div className="grid gap-3">
-            {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
           </div>
         </section>
       )}
@@ -322,6 +319,15 @@ export default function JamsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Private jams</h2>
           <div className="grid gap-3">
             {privateJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
+          </div>
+        </section>
+      )}
+
+      {pastOfficialJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
+          <div className="grid gap-3">
+            {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
           </div>
         </section>
       )}
