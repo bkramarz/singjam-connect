@@ -281,11 +281,11 @@ export default function JamsContent() {
         </section>
       )}
 
-      {pastOfficialJams.length > 0 && (
+      {userId && hostingJams.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
           <div className="grid gap-3">
-            {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
+            {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
           </div>
         </section>
       )}
@@ -295,15 +295,6 @@ export default function JamsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Invitations</h2>
           <div className="grid gap-3">
             {pendingInviteJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
-          </div>
-        </section>
-      )}
-
-      {userId && hostingJams.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
-          <div className="grid gap-3">
-            {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
           </div>
         </section>
       )}
@@ -322,6 +313,15 @@ export default function JamsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Private jams</h2>
           <div className="grid gap-3">
             {privateJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
+          </div>
+        </section>
+      )}
+
+      {pastOfficialJams.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
+          <div className="grid gap-3">
+            {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
           </div>
         </section>
       )}
