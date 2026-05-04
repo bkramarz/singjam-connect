@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     if (!username) username = `singer${Date.now()}`;
     await admin.from("profiles").insert({ id: user.id, username });
 
-    if (user.email) syncContact(user.email).catch(() => {});
+    if (user.email) syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
   }
 
   // Link invite and resolve jam ID

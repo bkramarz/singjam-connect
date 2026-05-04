@@ -1,3 +1,5 @@
+import { resend, FROM_ADDRESS } from "@/lib/resend";
+
 const AC_API_URL = process.env.AC_API_URL;
 const AC_API_KEY = process.env.AC_API_KEY;
 
@@ -73,7 +75,11 @@ async function acFetch(path: string, options: RequestInit) {
       ...(options.headers ?? {}),
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[ActiveCampaign] ${options.method ?? "GET"} ${path} → ${res.status}`, body);
+    return null;
+  }
   return res.json();
 }
 
@@ -143,22 +149,43 @@ export async function syncContact(email: string, profile: ContactProfile = {}) {
   });
 
   const contactId: string | undefined = contactData?.contact?.id;
-  if (!contactId) return;
+  if (!contactId) {
+    console.error(`[ActiveCampaign] contact upsert returned no ID for ${email}`);
+    notifyAdminOfSyncFailure(email, ["contact upsert returned no ID"]).catch(() => {});
+    return;
+  }
 
-  await Promise.all([
-    ...LIST_IDS.map((listId) =>
-      acFetch("/contactLists", {
-        method: "POST",
-        body: JSON.stringify({
-          contactList: { contact: contactId, list: listId, status: 1 },
-        }),
-      })
-    ),
-    acFetch("/contactTags", {
-      method: "POST",
-      body: JSON.stringify({
-        contactTag: { contact: contactId, tag: TAG_ID },
-      }),
-    }),
+  const [r1, r4, r9, rtag] = await Promise.all([
+    acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: "1", status: 1 } }) }),
+    acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: "4", status: 1 } }) }),
+    acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: "9", status: 1 } }) }),
+    acFetch("/contactTags", { method: "POST", body: JSON.stringify({ contactTag: { contact: contactId, tag: TAG_ID } }) }),
   ]);
+
+  const failed = [
+    !r1 && "list 1 (Sacred Music Fellowship)",
+    !r4 && "list 4 (SingJam)",
+    !r9 && "list 9 (SMF Announcements)",
+    !rtag && "SingJam App User tag",
+  ].filter(Boolean) as string[];
+
+  if (failed.length > 0) {
+    notifyAdminOfSyncFailure(email, failed).catch(() => {});
+  }
+}
+
+async function notifyAdminOfSyncFailure(userEmail: string, failures: string[]) {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
+  await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: adminEmail,
+    subject: `[SingJam] ActiveCampaign sync failed for ${userEmail}`,
+    html: [
+      `<p>ActiveCampaign sync failed for <strong>${userEmail}</strong>.</p>`,
+      `<p>Failed steps:</p>`,
+      `<ul>${failures.map((f) => `<li>${f}</li>`).join("")}</ul>`,
+      `<p><a href="https://singjam.org/admin/settings">Go to admin panel to resync →</a></p>`,
+    ].join(""),
+  });
 }

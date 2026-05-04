@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 const SEEDED_INSTRUMENTS = [
   "Guitar", "Electric Bass", "Upright Bass", "Piano/Keys", "Drums", "Percussion", "Violin/Fiddle", "Viola", "Cello",
@@ -193,6 +194,8 @@ export default function AccountPanel() {
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
 
+  const [isAdmin, setIsAdmin] = useState(false);
+
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -203,7 +206,7 @@ export default function AccountPanel() {
       setUserId(data.user.id);
       setEmail(data.user.email ?? null);
       Promise.all([
-        supabase.from("profiles").select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, favorite_genres").eq("id", data.user.id).single(),
+        supabase.from("profiles").select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, favorite_genres, is_admin").eq("id", data.user.id).single(),
         supabase.from("song_genres").select("genres(name)"),
       ]).then(([{ data: profile }, { data: genreRows }]) => {
         const favorites: string[] = (profile as any)?.favorite_genres ?? [];
@@ -220,6 +223,7 @@ export default function AccountPanel() {
         setSingingVoice(profile?.singing_voice ? profile.singing_voice.split(",") : []);
         setInstrumentLevels((profile?.instrument_levels as Record<string, string>) ?? {});
         setFavoriteGenres(profile?.favorite_genres ?? []);
+        setIsAdmin(!!(profile as any)?.is_admin);
 
         const savedUsername = profile?.username ?? "";
         if (savedUsername) {
@@ -723,10 +727,18 @@ export default function AccountPanel() {
       </div>
 
       {/* Sign out */}
-      <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
+      <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm flex items-center gap-3">
         <button onClick={signOut} className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50">
           Sign out
         </button>
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="rounded-xl bg-amber-100 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-200 transition-colors"
+          >
+            Admin panel
+          </Link>
+        )}
       </div>
 
       {/* Delete account */}

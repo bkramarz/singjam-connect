@@ -5,11 +5,19 @@ import { useProfile } from "@/hooks/useProfile";
 import NotificationBell from "./NotificationBell";
 
 export default function MobileHeaderProfile() {
-  const { signedIn } = useProfile();
+  const { signedIn, profile } = useProfile();
 
   if (signedIn) {
     return (
-      <div className="flex items-center sm:hidden">
+      <div className="flex items-center gap-1 sm:hidden">
+        {profile?.is_admin && (
+          <Link
+            href="/admin"
+            className="rounded-lg bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"
+          >
+            Admin
+          </Link>
+        )}
         <NotificationBell />
       </div>
     );

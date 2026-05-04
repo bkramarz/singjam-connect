@@ -91,7 +91,7 @@ export async function GET(request: Request) {
         await supabaseAdmin().from("profiles").insert({ id: user.id, username });
 
         if (user.email) {
-          syncContact(user.email).catch(() => {});
+          syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
           resend.emails.send({
             from: FROM_ADDRESS,
             to: user.email,
