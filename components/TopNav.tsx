@@ -38,6 +38,14 @@ export default function TopNav() {
 
       {signedIn ? (
         <>
+          {profile?.is_admin && (
+            <Link
+              href="/admin"
+              className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"
+            >
+              Admin
+            </Link>
+          )}
           <NotificationBell />
           <Link
             href="/profile"
