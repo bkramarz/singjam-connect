@@ -59,6 +59,22 @@ export default function JamContent() {
     (async () => {
       setState({ status: "loading" });
 
+      // If there's an invite token, we must claim it before fetching the jam.
+      // Link-based invites have invited_user_id=null, so RLS blocks the jam
+      // select until the token is claimed and tied to the current user.
+      if (inviteToken) {
+        const { data: { user: earlyUser } } = await supabase.auth.getUser();
+        if (!earlyUser) {
+          router.push(`/auth?next=/jam/${id}&invite=${inviteToken}`);
+          return;
+        }
+        await fetch("/api/invite/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: inviteToken }),
+        });
+      }
+
       const [
         { data: { user } },
         jamRes,
@@ -82,10 +98,6 @@ export default function JamContent() {
       const jam = jamRes.data;
 
       if (!jam) {
-        if (!user && inviteToken) {
-          router.push(`/auth?next=/jam/${id}&invite=${inviteToken}`);
-          return;
-        }
         setState({ status: "not_found" });
         return;
       }
