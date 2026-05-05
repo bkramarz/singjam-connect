@@ -69,21 +69,25 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
         {isOfficial && (
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-500 mb-0.5">Official SingJam event</p>
         )}
+        {!isOfficial && (jam.visibility === "community" || jam.visibility === "private" || isHosting) && (
+          <div className="flex items-center gap-2 mb-0.5">
+            {jam.visibility === "community" && (
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Public</span>
+            )}
+            {jam.visibility === "private" && (
+              <span className="text-xs font-semibold uppercase tracking-wide text-violet-600">Private</span>
+            )}
+            {isHosting && (
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Hosting</span>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
-          <p className="flex-1 font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
-          {!isOfficial && jam.visibility === "community" && (
-            <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">Public</span>
-          )}
-          {!isOfficial && jam.visibility === "private" && (
-            <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Private</span>
-          )}
+          <p className="flex-1 min-w-0 font-semibold text-zinc-900 truncate">{jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}</p>
           {isInvited && !rsvp && (
             <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">Invited</span>
           )}
           {rsvp && <RsvpBadge status={rsvp.status} waitlistPosition={rsvp.waitlist_position} />}
-          {isHosting && (
-            <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">Hosting</span>
-          )}
         </div>
         {jam.starts_at && (
           <p className="text-xs text-zinc-500 mt-0.5">
@@ -281,7 +285,7 @@ export default function JamsContent() {
       {upcomingOfficialJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Upcoming SingJam events</h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {upcomingOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
           </div>
         </section>
@@ -290,7 +294,7 @@ export default function JamsContent() {
       {userId && hostingJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
           </div>
         </section>
@@ -299,7 +303,7 @@ export default function JamsContent() {
       {userId && pendingInviteJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Invitations</h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {pendingInviteJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
           </div>
         </section>
@@ -308,7 +312,7 @@ export default function JamsContent() {
       {userId && communityJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Community jams</h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {communityJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
           </div>
         </section>
@@ -317,7 +321,7 @@ export default function JamsContent() {
       {userId && privateJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Private jams</h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {privateJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam)} />)}
           </div>
         </section>
@@ -326,7 +330,7 @@ export default function JamsContent() {
       {pastOfficialJams.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
           </div>
         </section>
