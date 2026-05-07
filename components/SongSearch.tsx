@@ -282,9 +282,13 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  async function handlePendingAdd(songId: string) {
+  async function handlePendingAdd(songId: string, slug?: string | null) {
     const { data } = await supabase.auth.getSession();
-    if (!data.session) { router.push("/auth"); return; }
+    if (!data.session) {
+      const next = slug ? `/songs/${slug}` : "/search";
+      router.push(`/auth?next=${encodeURIComponent(next)}`);
+      return;
+    }
     setPendingAddId(songId);
   }
 
@@ -651,7 +655,7 @@ function SongCard({
   pendingAddId: string | null;
   singingVoice: string | null;
   setPendingAddId: (id: string | null) => void;
-  onAdd: (id: string) => void | Promise<void>;
+  onAdd: (id: string, slug?: string | null) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
 }) {
   const inRepertoire = repertoire.has(songId);
@@ -742,7 +746,7 @@ function SongCard({
           <>
             <button
               className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-              onClick={() => onAdd(songId)}
+              onClick={() => onAdd(songId, slug)}
             >
               {inRepertoire ? "Update" : "Add"}
             </button>

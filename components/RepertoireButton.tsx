@@ -140,7 +140,7 @@ export default function RepertoireButton({
 
   async function handleAddClick() {
     const { data } = await supabase.auth.getSession();
-    if (!data.session) { router.push("/auth"); return; }
+    if (!data.session) { router.push(`/auth?next=${encodeURIComponent(window.location.pathname)}`); return; }
     setPicking(true);
   }
 
