@@ -33,6 +33,9 @@ export default function TopNav() {
       <Link href="/jams" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Jams
       </Link>
+      <Link href="/sets" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+        Sets
+      </Link>
 
       <div className="mx-2 h-4 w-px bg-slate-700" />
 
