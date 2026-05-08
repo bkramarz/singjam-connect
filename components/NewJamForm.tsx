@@ -354,13 +354,18 @@ export default function NewJamForm() {
           {imagePreview ? (
             <>
               <FocalPointPicker src={imagePreview} focalPoint={focalPoint} onChange={setFocalPoint} />
-              <button
-                type="button"
-                onClick={() => { setImageFile(null); setImagePreview(null); setFocalPoint("50% 50%"); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
-              >
-                Remove image
-              </button>
+              <div className="flex gap-4">
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs text-zinc-500 hover:text-zinc-700 transition-colors">
+                  Replace image
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setImageFile(null); setImagePreview(null); setFocalPoint("50% 50%"); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
+                >
+                  Remove image
+                </button>
+              </div>
             </>
           ) : (
             <button

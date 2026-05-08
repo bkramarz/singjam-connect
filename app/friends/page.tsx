@@ -93,11 +93,9 @@ export default function MatchesPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-zinc-900">
-                    {fullName || m.username || "Someone"}
-                    {m.username && <span className="ml-1.5 text-xs font-normal text-zinc-400">@{m.username}</span>}
-                  </div>
-                  {m.neighborhood && <div className="text-xs text-zinc-500">{m.neighborhood}</div>}
+                  <div className="truncate font-semibold text-zinc-900">{fullName || m.username || "Someone"}</div>
+                  {m.username && <div className="truncate text-xs text-zinc-400">@{m.username}</div>}
+                  {m.neighborhood && <div className="truncate text-xs text-zinc-500">{m.neighborhood}</div>}
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-sm font-semibold text-zinc-900">{m.shared_count}</div>
