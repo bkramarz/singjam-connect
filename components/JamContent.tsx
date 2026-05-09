@@ -12,6 +12,7 @@ import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
 import JamSharedSongs from "@/components/JamSharedSongs";
 import JamAttendeeList from "@/components/JamAttendeeList";
+import JamSetList from "@/components/JamSetList";
 
 type InviteEntry = {
   id: string;
@@ -308,6 +309,7 @@ export default function JamContent() {
       />
       {userId && <JamSharedSongs jamId={id} />}
       {!isOfficial && <JamAttendeeList jamId={id} hostId={jam.host_user_id} />}
+      {isHost && <JamSetList jamId={id} jamName={jam.name} />}
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={id}

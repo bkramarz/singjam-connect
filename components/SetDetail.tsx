@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import {
   DndContext,
@@ -33,7 +34,7 @@ type Collaborator = {
   id: string;
   user_id: string | null;
   status: string;
-  profiles: { display_name: string | null; username: string | null; avatar_url: string | null } | null;
+  profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
 
 type SetData = {
@@ -41,7 +42,14 @@ type SetData = {
   name: string;
   description: string | null;
   owner_user_id: string;
+  jam_id: string | null;
   profiles: { display_name: string | null; username: string | null } | null;
+};
+
+type JamSong = {
+  song_id: string;
+  title: string;
+  display_artist: string | null;
 };
 
 const CONFIDENCE_LEVELS = [
@@ -119,6 +127,7 @@ export default function SetDetail({
   currentUserId,
   canEdit,
   isOwner,
+  jamSharedSongs = [],
 }: {
   set: SetData;
   initialSongs: Song[];
@@ -126,6 +135,7 @@ export default function SetDetail({
   currentUserId: string | null;
   canEdit: boolean;
   isOwner: boolean;
+  jamSharedSongs?: JamSong[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -296,6 +306,18 @@ export default function SetDetail({
 
   return (
     <div className="space-y-6">
+      {set.jam_id && (
+        <a
+          href={`/jam/${set.jam_id}`}
+          className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+          Back to jam
+        </a>
+      )}
+
       {/* Header */}
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
@@ -430,6 +452,29 @@ export default function SetDetail({
                 className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
                 autoFocus
               />
+              {jamSharedSongs.length > 0 && !searchQuery && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-zinc-500">Shared by attendees</p>
+                  <ul className="max-h-48 overflow-y-auto divide-y divide-zinc-100 rounded-xl border border-zinc-200">
+                    {jamSharedSongs.map((song) => {
+                      const alreadyAdded = songs.some((s) => s.song_id === song.song_id);
+                      return (
+                        <li key={song.song_id}>
+                          <button
+                            disabled={alreadyAdded}
+                            onClick={() => handleSelectSong(song)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <p className="text-sm font-medium text-zinc-900">{song.title}</p>
+                            {song.display_artist && <p className="text-xs text-zinc-500">{song.display_artist}</p>}
+                            {alreadyAdded && <p className="text-xs text-zinc-400">Already in set</p>}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
               {searching && <p className="text-xs text-zinc-400">Searching…</p>}
               {searchResults.length > 0 && (
                 <ul className="divide-y divide-zinc-100 max-h-64 overflow-y-auto rounded-xl border border-zinc-200">
@@ -514,11 +559,14 @@ export default function SetDetail({
             <ul className="space-y-2">
               {collaborators.map((c) => (
                 <li key={c.id} className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
-                    {(c.profiles?.display_name ?? c.profiles?.username ?? "?")[0].toUpperCase()}
+                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
+                    {c.profiles?.avatar_url
+                      ? <Image src={c.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+                      : (c.profiles?.display_name ?? c.profiles?.username ?? "?")[0].toUpperCase()
+                    }
                   </span>
                   <span className="flex-1 min-w-0 text-sm text-zinc-700 truncate">
-                    {c.profiles?.display_name ?? c.profiles?.username ?? "Unknown"}
+                    {[c.profiles?.display_name, c.profiles?.last_name].filter(Boolean).join(" ") || c.profiles?.username || "Unknown"}
                   </span>
                   {isOwner && (
                     <button

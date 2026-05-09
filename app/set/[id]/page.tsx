@@ -23,7 +23,7 @@ export default async function SetPage({
   const [setRes, songsRes, collabRes] = await Promise.all([
     supabase
       .from("sets")
-      .select("id, name, description, owner_user_id, profiles(display_name, username)")
+      .select("id, name, description, owner_user_id, jam_id, profiles(display_name, username)")
       .eq("id", id)
       .single(),
     supabase
@@ -33,7 +33,7 @@ export default async function SetPage({
       .order("position", { ascending: true }),
     supabase
       .from("set_collaborators")
-      .select("id, user_id, status, profiles(display_name, username, avatar_url)")
+      .select("id, user_id, status, profiles!user_id(display_name, last_name, username, avatar_url)")
       .eq("set_id", id)
       .eq("status", "accepted"),
   ]);
@@ -43,6 +43,10 @@ export default async function SetPage({
   const set = setRes.data as any;
   const songs = (songsRes.data ?? []) as any[];
   const collaborators = (collabRes.data ?? []) as any[];
+
+  const jamSharedSongs = (set.jam_id && user)
+    ? ((await supabase.rpc("jam_shared_songs", { jam_id_param: set.jam_id })).data ?? []) as any[]
+    : [];
 
   const isOwner = user?.id === set.owner_user_id;
   const isCollaborator = collaborators.some((c: any) => c.user_id === user?.id);
@@ -56,6 +60,7 @@ export default async function SetPage({
         currentUserId={user?.id ?? null}
         canEdit={isOwner || isCollaborator}
         isOwner={isOwner}
+        jamSharedSongs={jamSharedSongs}
       />
     </Suspense>
   );
