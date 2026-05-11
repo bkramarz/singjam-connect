@@ -10,14 +10,6 @@ export default function MobileHeaderProfile() {
   if (signedIn) {
     return (
       <div className="flex items-center gap-1 sm:hidden">
-        {profile?.is_admin && (
-          <Link
-            href="/admin"
-            className="rounded-lg bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"
-          >
-            Admin
-          </Link>
-        )}
         <Link
           href="/search"
           className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
@@ -28,6 +20,14 @@ export default function MobileHeaderProfile() {
           </svg>
         </Link>
         <NotificationBell />
+        {profile?.is_admin && (
+          <Link
+            href="/admin"
+            className="rounded-lg bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"
+          >
+            Admin
+          </Link>
+        )}
       </div>
     );
   }
