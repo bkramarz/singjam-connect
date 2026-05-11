@@ -1,28 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/hooks/useProfile";
-import LogoutButton from "./LogoutButton";
-import NotificationBell from "./NotificationBell";
+import NavMenu from "./NavMenu";
 
 export default function TopNav() {
   const pathname = usePathname();
   const { signedIn, profile } = useProfile();
 
-  const displayLabel = profile?.username
-    ? `@${profile.username}`
-    : profile?.display_name ?? "Account";
-
-  const initial = (profile?.display_name ?? profile?.username ?? "?")[0].toUpperCase();
-
   if (pathname === "/auth/reset-password") return null;
 
   return (
     <nav className="flex items-center gap-1 text-sm">
-      <Link href="/search" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
-        Song Search
+      <Link href="/search" aria-label="Search songs" className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0016.803 15.803z" />
+        </svg>
+      </Link>
+      <Link href="/jams" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+        Jams
+      </Link>
+      <Link href="/sets" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+        Sets
       </Link>
       <Link href="/repertoire" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Repertoire
@@ -30,14 +30,12 @@ export default function TopNav() {
       <Link href="/friends" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
         Friends
       </Link>
-      <Link href="/jams" className="rounded-lg px-3 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
-        Jams
-      </Link>
 
       <div className="mx-2 h-4 w-px bg-slate-700" />
 
       {signedIn ? (
         <>
+          <NavMenu />
           {profile?.is_admin && (
             <Link
               href="/admin"
@@ -46,23 +44,6 @@ export default function TopNav() {
               Admin
             </Link>
           )}
-          <NotificationBell />
-          <Link
-            href="/profile"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-          >
-            <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full bg-slate-600">
-              {profile?.avatar_url ? (
-                <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-xs font-medium text-slate-200">
-                  {initial}
-                </span>
-              )}
-            </span>
-            <span className="max-w-[100px] truncate">{displayLabel}</span>
-          </Link>
-          <LogoutButton />
         </>
       ) : (
         <Link

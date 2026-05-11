@@ -48,8 +48,8 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
   const inner = (
     <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {jam.image_url ? (
-        <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
-          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
+        <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
+          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" unoptimized />
         </div>
       ) : jam.starts_at ? (
         <div className={`shrink-0 w-20 flex flex-col items-center justify-center border-r px-2 py-4 ${isOfficial ? "bg-amber-50 border-amber-200" : "bg-zinc-50 border-zinc-100"}`}>
@@ -103,12 +103,16 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
             ))}
           </div>
         )}
-        {!isOfficial && !isHosting && hostLabel && (
+        {isOfficial ? (
+          <p className="mt-2 text-xs text-zinc-400">
+            Hosted by <span className="font-medium text-zinc-500">SingJam</span>
+          </p>
+        ) : (!isHosting && hostLabel && (
           <p className="mt-2 text-xs text-zinc-400">
             Hosted by <span className="font-medium text-zinc-500">{hostLabel}</span>
             {hostUsername && <span className="ml-1">@{hostUsername}</span>}
           </p>
-        )}
+        ))}
         {isOfficial && (
           <div className="mt-2 flex flex-wrap gap-3">
             <Link href={`/jam/${jam.id}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-700">

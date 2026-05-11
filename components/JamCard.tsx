@@ -52,13 +52,12 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
     <div className="pb-10">
       {/* Hero image */}
       {jam.image_url && (
-        <div className="relative mb-6 overflow-hidden rounded-2xl" style={{ height: 320 }}>
+        <div className="relative mb-6 overflow-hidden rounded-2xl bg-black" style={{ height: 320 }}>
           <Image
             src={jam.image_url}
             alt={jam.name ?? "Event"}
             fill
-            className="object-cover"
-            style={{ objectPosition: jam.image_focal_point ?? "50% 50%" }}
+            className="object-contain"
             sizes="(max-width: 896px) 100vw, 896px"
             priority
             unoptimized
@@ -87,7 +86,11 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
           <h1 className="text-2xl font-bold text-zinc-900 leading-tight">
             {jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
           </h1>
-          {jam.host && (
+          {isOfficial ? (
+            <p className="mt-1 text-sm text-zinc-500">
+              Hosted by <span className="font-medium text-zinc-700">SingJam</span>
+            </p>
+          ) : jam.host && (
             <p className="mt-1 text-sm text-zinc-500">
               Hosted by{" "}
               {jam.hostUsername ? (

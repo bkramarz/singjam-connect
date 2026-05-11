@@ -16,8 +16,8 @@ export default function JamEventCard({ jam }: { jam: JamEventCardData }) {
   return (
     <div className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white">
       {jam.image_url ? (
-        <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden">
-          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-cover" sizes="128px" unoptimized />
+        <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
+          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" unoptimized />
         </div>
       ) : jam.starts_at ? (
         <div className="shrink-0 w-20 flex flex-col items-center justify-center bg-amber-50 border-r border-amber-200 px-2 py-4">
