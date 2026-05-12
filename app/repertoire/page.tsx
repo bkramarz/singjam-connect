@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
+import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 
@@ -47,21 +48,6 @@ type Item = {
   popularity?: number;
 };
 
-type SearchResult = {
-  song_id: string;
-  title: string;
-  display_artist: string | null;
-  first_line: string | null;
-  aka: string[] | null;
-  score: number;
-  composers: string[];
-  cultures: string[];
-  productions: string[];
-  genres: string[];
-  languages: string[] | null;
-  year: number | null;
-  slug: string | null;
-};
 
 export default function RepertoirePage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -77,10 +63,8 @@ export default function RepertoirePage() {
   const [confidenceFilter, setConfidenceFilter] = useState<string>("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
-  const debounceRef = useRef<number | null>(null);
+  const { results: searchResults, loading: searchLoading } = useSongSearch(query);
 
   const [isPending, startTransition] = useTransition();
 
@@ -219,23 +203,6 @@ export default function RepertoirePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Debounced full-catalog search
-  useEffect(() => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    if (!query.trim()) {
-      setSearchResults([]);
-      setSearchLoading(false);
-      return;
-    }
-    setSearchLoading(true);
-    debounceRef.current = window.setTimeout(async () => {
-      const { data, error } = await supabase.rpc("search_songs", { q: query.trim(), limit_n: 50 });
-      setSearchLoading(false);
-      if (!error) setSearchResults((data ?? []) as SearchResult[]);
-    }, 250);
-    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
-  }, [query]);
-
   const repertoireMap = useMemo(() => new Map(items.map((it) => [it.song_id, it])), [items]);
   const searching = query.trim().length > 0;
 
@@ -285,7 +252,7 @@ export default function RepertoirePage() {
     });
   };
 
-  const addSong = (songId: string, confidence: string, result: SearchResult) => {
+  const addSong = (songId: string, confidence: string, result: SongSearchResult) => {
     if (!userId) return;
     setPendingAddId(null);
     startTransition(async () => {

@@ -22,6 +22,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { useSongSearch } from "@/hooks/useSongSearch";
 
 type Song = {
   id: string;
@@ -369,15 +370,13 @@ export default function SetDetail({
   const [descValue, setDescValue] = useState(set.description ?? "");
   const [showAddSong, setShowAddSong] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searching, setSearching] = useState(false);
   const [pendingSong, setPendingSong] = useState<any | null>(null);
+  const { results: searchResults, loading: searching } = useSongSearch(searchQuery, { limit: 20 });
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [savingName, setSavingName] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -406,18 +405,6 @@ export default function SetDetail({
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
-
-  function handleSearchChange(q: string) {
-    setSearchQuery(q);
-    if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    if (!q.trim()) { setSearchResults([]); return; }
-    searchDebounce.current = setTimeout(async () => {
-      setSearching(true);
-      const { data } = await supabase.rpc("search_songs", { q: q.trim(), limit_n: 20 });
-      setSearchResults((data ?? []) as any[]);
-      setSearching(false);
-    }, 250);
-  }
 
   async function handleSelectSong(song: any) {
     const existing = userRepertoire.get(song.song_id);
@@ -448,7 +435,6 @@ export default function SetDetail({
 
     setPendingSong(null);
     setSearchQuery("");
-    setSearchResults([]);
     setShowAddSong(false);
   }
 
@@ -666,7 +652,7 @@ export default function SetDetail({
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-zinc-700">Add a song</p>
                 <button
-                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setSearchResults([]); setPendingSong(null); }}
+                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setPendingSong(null); }}
                   className="text-zinc-400 hover:text-zinc-600"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -703,7 +689,7 @@ export default function SetDetail({
                   <input
                     type="search"
                     value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search songs…"
                     className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
                     autoFocus
