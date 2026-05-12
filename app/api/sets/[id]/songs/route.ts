@@ -19,7 +19,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("set_songs")
-    .select("id, song_id, position, songs(title, display_artist, slug)")
+    .select("id, song_id, position, songs(title, display_artist, slug, chord_chart_url, youtube_url, spotify_url, song_recording_artists(position, youtube_url))")
     .eq("set_id", setId)
     .order("position", { ascending: true });
 
@@ -69,7 +69,7 @@ export async function POST(
   const { data, error } = await admin
     .from("set_songs")
     .insert({ set_id: setId, song_id: songId, position, added_by_user_id: user.id })
-    .select("id, song_id, position, songs(title, display_artist, slug)")
+    .select("id, song_id, position, songs(title, display_artist, slug, chord_chart_url, youtube_url, spotify_url, song_recording_artists(position, youtube_url))")
     .single();
 
   if (error) {
