@@ -124,7 +124,7 @@ export default function MatchesPage() {
                 <div className="mt-3 text-xs text-zinc-500">
                   <span className="font-medium text-zinc-700">Shared songs: </span>
                   {m.top_shared.slice(0, 5).join(", ")}
-                  {m.top_shared.length > 5 && ` +${m.top_shared.length - 5} more`}
+                  {m.shared_count > 5 && ` +${m.shared_count - 5} more`}
                 </div>
               )}
 

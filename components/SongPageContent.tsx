@@ -38,6 +38,7 @@ type SongData = {
   isAdmin: boolean;
   singingVoice: string | null;
   userSongConfidence: string | null;
+  popularity: number;
 };
 
 export default function SongPageContent() {
@@ -74,13 +75,14 @@ export default function SongPageContent() {
 
       const song = songRes.data;
 
-      const [profileRes, userSongRes] = await Promise.all([
+      const [profileRes, userSongRes, popularityRes] = await Promise.all([
         user
           ? supabase.from("profiles").select("is_admin, singing_voice").eq("id", user.id).single()
           : Promise.resolve({ data: null }),
         user
           ? supabase.from("user_songs").select("confidence").eq("user_id", user.id).eq("song_id", song.id).maybeSingle()
           : Promise.resolve({ data: null }),
+        supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("song_id", song.id),
       ]);
 
       setData({
@@ -88,6 +90,7 @@ export default function SongPageContent() {
         isAdmin: (profileRes.data as any)?.is_admin ?? false,
         singingVoice: (profileRes.data as any)?.singing_voice ?? null,
         userSongConfidence: (userSongRes.data as any)?.confidence ?? null,
+        popularity: popularityRes.count ?? 0,
       });
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,7 +99,7 @@ export default function SongPageContent() {
   if (notFound) return <p className="text-sm text-slate-500">Song not found.</p>;
   if (!data) return null;
 
-  const { song, isAdmin, singingVoice, userSongConfidence } = data;
+  const { song, isAdmin, singingVoice, userSongConfidence, popularity } = data;
 
   const composers = (song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean) as string[];
   const lyricists = (song.song_lyricists as any[]).map((x: any) => x.people?.name).filter(Boolean) as string[];
@@ -129,9 +132,14 @@ export default function SongPageContent() {
         <div>
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-slate-900">{song.title}</h1>
-            {earliestYear && (
-              <span className="shrink-0 text-sm text-slate-400">{earliestYear}</span>
-            )}
+            <div className="flex shrink-0 items-center gap-3">
+              {popularity > 0 && (
+                <span className="text-sm text-slate-400">{popularity} {popularity === 1 ? "jammer" : "jammers"}</span>
+              )}
+              {earliestYear && (
+                <span className="text-sm text-slate-400">{earliestYear}</span>
+              )}
+            </div>
           </div>
           {songProductions.length > 0 ? (
             <p className="mt-0.5 text-base text-slate-500">from <em>{songProductions.join(", ")}</em></p>
