@@ -19,6 +19,7 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const body = await _req.json().catch(() => ({}));
   const admin = supabaseAdmin();
 
   const { data: set } = await admin
@@ -41,9 +42,12 @@ export async function POST(
     if (!collab) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Non-owners can only issue editor links
+  const role: "editor" | "viewer" = isOwner && body.role === "viewer" ? "viewer" : "editor";
+
   const { data: inserted } = await admin
     .from("set_collaborators")
-    .insert({ set_id: setId, invited_by: user.id })
+    .insert({ set_id: setId, invited_by: user.id, role })
     .select("id, token")
     .single();
 

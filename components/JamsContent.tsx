@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import Tooltip from "@/components/Tooltip";
 
 type RsvpStatus = "attending" | "waitlist" | "cancelled";
 
@@ -271,19 +270,9 @@ export default function JamsContent() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-end -mt-16 sm:-mt-14">
-        {userId && (invitesEnabled || isAdmin) && (
-          <Link href="/jam/new" className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto">
-            Post a jam
-          </Link>
-        )}
-        {userId && !invitesEnabled && !isAdmin && (
-          <Tooltip message="Jam posting is currently unavailable">
-            <span className="self-start rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-300 cursor-not-allowed sm:self-auto">
-              Post a jam
-            </span>
-          </Tooltip>
-        )}
+      <div>
+        <h1 className="text-xl font-semibold">Jams</h1>
+        <p className="text-sm text-zinc-500">Browse open jams or post your own.</p>
       </div>
 
       {upcomingOfficialJams.length > 0 && (
@@ -295,11 +284,20 @@ export default function JamsContent() {
         </section>
       )}
 
-      {userId && hostingJams.length > 0 && (
+      {userId && (invitesEnabled || isAdmin) && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
           <div className="grid grid-cols-1 gap-3">
             {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
+            <Link
+              href="/jam/new"
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 px-4 py-4 text-sm font-medium text-zinc-400 hover:border-amber-300 hover:text-amber-500 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Post a jam
+            </Link>
           </div>
         </section>
       )}

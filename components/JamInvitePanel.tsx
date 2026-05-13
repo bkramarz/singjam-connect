@@ -23,6 +23,7 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
   const [feedback, setFeedback] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [canShare, setCanShare] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -96,6 +97,24 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
         ? `https://wa.me/?text=${encoded}`
         : `sms:?&body=${encoded}`;
       window.open(href, "_blank");
+    }
+  }
+
+  async function copyInviteLink() {
+    setCopyBusy(true);
+    setFeedback(null);
+    const res = await fetch(`/api/jam/${jamId}/invite/link`, { method: "POST" });
+    const body = await res.json();
+    setCopyBusy(false);
+    if (!res.ok) {
+      setFeedback({ id: "copy", msg: body.error ?? "Failed to generate link", ok: false });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(body.url);
+      setFeedback({ id: "copy", msg: "Link copied!", ok: true });
+    } catch {
+      setFeedback({ id: "copy", msg: "Couldn't copy link", ok: false });
     }
   }
 
@@ -209,8 +228,8 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
         )}
       </div>
 
-      {/* SMS / WhatsApp share */}
-      <div>
+      {/* SMS / WhatsApp share — mobile only */}
+      <div className="md:hidden">
         <label className="block text-sm font-medium mb-1.5">Invite from your phone</label>
         {canShare ? (
           <button
@@ -262,8 +281,32 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
             </button>
           </div>
         )}
-        <p className="mt-1.5 text-xs text-zinc-400">Sends a pre-written invite with a link. You pick who to send it to.</p>
         {feedback && feedback.id === "link" && (
+          <p className={`mt-1.5 text-xs ${feedback.ok ? "text-green-600" : "text-red-600"}`}>
+            {feedback.msg}
+          </p>
+        )}
+      </div>
+
+      {/* Copy invite link */}
+      <div>
+        <label className="block text-sm font-medium mb-1.5">Copy invite link</label>
+        <button
+          onClick={copyInviteLink}
+          disabled={copyBusy}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+        >
+          {copyBusy ? "Copying…" : (
+            <>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Copy link
+            </>
+          )}
+        </button>
+        {feedback && feedback.id === "copy" && (
           <p className={`mt-1.5 text-xs ${feedback.ok ? "text-green-600" : "text-red-600"}`}>
             {feedback.msg}
           </p>

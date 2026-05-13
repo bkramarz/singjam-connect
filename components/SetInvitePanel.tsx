@@ -40,6 +40,8 @@ export default function SetInvitePanel({
   const [feedback, setFeedback] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [canShare, setCanShare] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [linkRole, setLinkRole] = useState<"editor" | "viewer">("editor");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -108,7 +110,11 @@ export default function SetInvitePanel({
   async function shareLink(fallbackChannel?: "sms" | "whatsapp") {
     setShareBusy(true);
     setFeedback(null);
-    const res = await fetch(`/api/sets/${setId}/invite/link`, { method: "POST" });
+    const res = await fetch(`/api/sets/${setId}/invite/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: linkRole }),
+    });
     const body = await res.json();
     setShareBusy(false);
     if (!res.ok) {
@@ -135,6 +141,28 @@ export default function SetInvitePanel({
         ? `https://wa.me/?text=${encoded}`
         : `sms:?&body=${encoded}`;
       window.open(href, "_blank");
+    }
+  }
+
+  async function copyInviteLink() {
+    setCopyBusy(true);
+    setFeedback(null);
+    const res = await fetch(`/api/sets/${setId}/invite/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: linkRole }),
+    });
+    const body = await res.json();
+    setCopyBusy(false);
+    if (!res.ok) {
+      setFeedback({ id: "copy", msg: body.error ?? "Failed to generate link", ok: false });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(body.url);
+      setFeedback({ id: "copy", msg: "Link copied!", ok: true });
+    } catch {
+      setFeedback({ id: "copy", msg: "Couldn't copy link", ok: false });
     }
   }
 
@@ -249,9 +277,9 @@ export default function SetInvitePanel({
             )}
           </div>
 
-      {/* Link share */}
-      <div>
-        <label className="block text-sm font-medium mb-1.5">Share invite link</label>
+      {/* Link share — mobile only */}
+      <div className="md:hidden">
+        <label className="block text-sm font-medium mb-1.5">Invite from your phone</label>
         {canShare ? (
           <button
             onClick={() => shareLink()}
@@ -302,8 +330,49 @@ export default function SetInvitePanel({
             </button>
           </div>
         )}
-        <p className="mt-1.5 text-xs text-zinc-400">Anyone with this link joins as an editor. You pick who to send it to.</p>
         {feedback && feedback.id === "link" && (
+          <p className={`mt-1.5 text-xs ${feedback.ok ? "text-green-600" : "text-red-600"}`}>
+            {feedback.msg}
+          </p>
+        )}
+      </div>
+
+      {/* Copy invite link */}
+      <div>
+        <label className="block text-sm font-medium mb-1.5">Copy invite link</label>
+        {isOwner && (
+          <div className="flex gap-2 mb-2">
+            {(["editor", "viewer"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setLinkRole(r)}
+                className={`rounded-xl border px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
+                  linkRole === r
+                    ? "border-amber-500 bg-amber-50 text-amber-700"
+                    : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={copyInviteLink}
+          disabled={copyBusy}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+        >
+          {copyBusy ? "Copying…" : (
+            <>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Copy link
+            </>
+          )}
+        </button>
+        {feedback && feedback.id === "copy" && (
           <p className={`mt-1.5 text-xs ${feedback.ok ? "text-green-600" : "text-red-600"}`}>
             {feedback.msg}
           </p>

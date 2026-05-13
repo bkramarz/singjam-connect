@@ -36,24 +36,27 @@ export default function SetsContent() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-end -mt-16 sm:-mt-14">
-        {isSignedIn && (
-          <Link
-            href="/set/new"
-            className="self-start rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors sm:self-auto"
-          >
-            New set
-          </Link>
-        )}
+      <div>
+        <h1 className="text-xl font-semibold">Sets</h1>
+        <p className="text-sm text-zinc-500">Curate ordered song lists for your performances.</p>
       </div>
 
-      {data.owned.length > 0 && (
+      {isSignedIn && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Your sets</h2>
           <div className="grid grid-cols-1 gap-3">
             {data.owned.map((set) => (
               <SetCard key={set.id} set={set} isOwner />
             ))}
+            <Link
+              href="/set/new"
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 px-4 py-4 text-sm font-medium text-zinc-400 hover:border-amber-300 hover:text-amber-500 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              New set
+            </Link>
           </div>
         </section>
       )}
@@ -69,18 +72,12 @@ export default function SetsContent() {
         </section>
       )}
 
-      {isEmpty && (
+      {!isSignedIn && isEmpty && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-          <p className="text-sm text-zinc-500">
-            {isSignedIn
-              ? "No sets yet. Create one to get started."
-              : "Sign in to create and manage sets."}
-          </p>
-          {!isSignedIn && (
-            <Link href="/auth" className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
-              Sign in →
-            </Link>
-          )}
+          <p className="text-sm text-zinc-500">Sign in to create and manage sets.</p>
+          <Link href="/auth" className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+            Sign in →
+          </Link>
         </div>
       )}
     </div>
