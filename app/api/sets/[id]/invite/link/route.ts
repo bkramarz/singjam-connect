@@ -55,11 +55,12 @@ export async function POST(
   return NextResponse.json({ inviteId, url, message });
 }
 
-// Called when the user cancels the share sheet — removes the dangling invite record
+// Removes a collaborator or cancels a pending link invite
 export async function DELETE(
   req: Request,
-  _p: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: setId } = await params;
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,12 +69,27 @@ export async function DELETE(
   if (!inviteId) return NextResponse.json({ error: "Missing inviteId" }, { status: 400 });
 
   const admin = supabaseAdmin();
-  await admin
+
+  // Allow removal if the caller is the set owner or was the one who created the invite
+  const { data: set } = await admin
+    .from("sets")
+    .select("owner_user_id")
+    .eq("id", setId)
+    .maybeSingle();
+
+  const isOwner = (set as any)?.owner_user_id === user.id;
+
+  const query = admin
     .from("set_collaborators")
     .delete()
-    .eq("id", inviteId)
-    .eq("invited_by", user.id)
-    .is("user_id", null);
+    .eq("id", inviteId);
+
+  if (!isOwner) {
+    // Non-owners can only cancel their own pending (unclaimed) invites
+    query.eq("invited_by", user.id).is("user_id", null);
+  }
+
+  await query;
 
   return NextResponse.json({ ok: true });
 }

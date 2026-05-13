@@ -65,22 +65,24 @@ export default function NavMenu() {
 
   return (
     <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Account menu"
-        className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-600 hover:ring-2 hover:ring-amber-500 transition-all"
-      >
-        {profile?.avatar_url ? (
-          <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
-        ) : (
-          <span className="text-xs font-medium text-slate-200">{initial}</span>
-        )}
+      <div className="relative inline-flex">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Account menu"
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-600 hover:ring-2 hover:ring-amber-500 transition-all"
+        >
+          {profile?.avatar_url ? (
+            <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+          ) : (
+            <span className="text-xs font-medium text-slate-200">{initial}</span>
+          )}
+        </button>
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
+          <span className="pointer-events-none absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 ring-2 ring-slate-800 text-[10px] font-bold text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
-      </button>
+      </div>
 
       {open && (
         <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-zinc-200 bg-white py-1.5 shadow-lg z-50">

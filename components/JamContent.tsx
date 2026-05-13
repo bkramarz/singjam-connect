@@ -308,8 +308,8 @@ export default function JamContent() {
         }
       />
       {userId && <JamSharedSongs jamId={id} />}
-      {!isOfficial && <JamAttendeeList jamId={id} hostId={jam.host_user_id} />}
       {isHost && <JamSetList jamId={id} jamName={jam.name} />}
+      {!isOfficial && <JamAttendeeList jamId={id} hostId={jam.host_user_id} />}
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={id}

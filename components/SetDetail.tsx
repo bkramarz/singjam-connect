@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -23,28 +23,44 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSongSearch } from "@/hooks/useSongSearch";
+import SetInvitePanel from "@/components/SetInvitePanel";
+
+const MUSICAL_KEYS = ["A", "Bb", "B", "C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab"];
 
 type Song = {
   id: string;
   song_id: string;
   position: number;
+  key_note: string | null;
+  leader_user_ids: string[];
   songs: {
     title: string;
     display_artist: string | null;
     slug: string | null;
     chord_chart_url: string | null;
     youtube_url: string | null;
-    spotify_url: string | null;
-    song_recording_artists: { position: number; youtube_url: string | null }[];
+    tonality: string | null;
+    song_recording_artists: { position: number; youtube_url: string | null; spotify_url: string | null }[];
   };
+};
+
+type Participant = {
+  user_id: string;
+  display_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
 };
 
 type Collaborator = {
   id: string;
   user_id: string | null;
   status: string;
+  role: "editor" | "viewer";
   profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
+
+type PlaylistLink = { url: string; added?: number; total?: number };
 
 type SetData = {
   id: string;
@@ -52,7 +68,12 @@ type SetData = {
   description: string | null;
   owner_user_id: string;
   jam_id: string | null;
-  profiles: { display_name: string | null; username: string | null } | null;
+  link_sharing: "disabled" | "view";
+  youtube_playlist_id: string | null;
+  youtube_playlist_fingerprint: string | null;
+  spotify_playlist_id: string | null;
+  spotify_playlist_fingerprint: string | null;
+  profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
 
 type JamSong = {
@@ -69,7 +90,16 @@ const CONFIDENCE_LEVELS = [
 
 function getYoutubeId(url: string | null | undefined): string | null {
   if (!url) return null;
-  try { return new URL(url).searchParams.get("v"); } catch { return null; }
+  try {
+    const u = new URL(url);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0] || null;
+    if (u.hostname.includes("youtube.com")) {
+      return u.searchParams.get("v")
+        ?? u.pathname.match(/\/(?:embed|v|shorts)\/([^/?]+)/)?.[1]
+        ?? null;
+    }
+    return null;
+  } catch { return null; }
 }
 
 function YoutubeIcon() {
@@ -105,26 +135,65 @@ function getPrimaryYoutubeId(song: Song["songs"]): string | null {
   return getYoutubeId(fromArtists) ?? getYoutubeId(song.youtube_url);
 }
 
+function getPrimarySpotifyUrl(song: Song["songs"]): string | null {
+  return [...(song.song_recording_artists ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .find((a) => a.spotify_url)?.spotify_url ?? null;
+}
+
+function getSpotifyTrackId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const match = new URL(url).pathname.match(/\/track\/([a-zA-Z0-9]+)/);
+    return match?.[1] ?? null;
+  } catch { return null; }
+}
+
 type AddingField = "youtube" | "spotify" | "chord" | null;
 
 function SongRowContent({
   song,
-  index,
   canEdit,
+  isAdmin,
+  isHost,
+  participants,
+  hasEligible,
+  currentUserId,
+  inRepertoire,
   onMediaAdded,
+  onKeyChanged,
+  onLeadersChanged,
+  onAddToRepertoire,
+  signInUrl,
 }: {
   song: Song;
   index: number;
   canEdit: boolean;
+  isAdmin: boolean;
+  isHost: boolean;
+  participants: Participant[];
+  hasEligible: boolean;
+  currentUserId: string | null;
+  inRepertoire: boolean;
   onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
+  onKeyChanged: (id: string, key: string | null) => void;
+  onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
+  onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
+  signInUrl?: string;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const [spotifyOpen, setSpotifyOpen] = useState(false);
   const [addingField, setAddingField] = useState<AddingField>(null);
+  const [pickingRepertoire, setPickingRepertoire] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [youtubeSearchResults, setYoutubeSearchResults] = useState<Array<{ videoId: string; title: string; channel: string; url: string }>>([]);
+  const [youtubeSearching, setYoutubeSearching] = useState(false);
 
   const videoId = getPrimaryYoutubeId(song.songs);
-  const { chord_chart_url, spotify_url } = song.songs;
+  const spotify_url = getPrimarySpotifyUrl(song.songs);
+  const spotifyTrackId = getSpotifyTrackId(spotify_url);
+  const { chord_chart_url } = song.songs;
 
   const fieldMap: Record<NonNullable<AddingField>, "youtube_url" | "spotify_url" | "chord_chart_url"> = {
     youtube: "youtube_url",
@@ -138,35 +207,71 @@ function SongRowContent({
     chord: "Paste chord chart URL…",
   };
 
+  async function handleYoutubeSearch() {
+    setYoutubeSearching(true);
+    setYoutubeSearchResults([]);
+    try {
+      const artist = song.songs.display_artist ?? "";
+      const res = await fetch(
+        `/api/youtube?title=${encodeURIComponent(song.songs.title)}&artist=${encodeURIComponent(artist)}`
+      );
+      const data = await res.json();
+      setYoutubeSearchResults(data.items ?? []);
+    } finally {
+      setYoutubeSearching(false);
+    }
+  }
+
   function toggleAdding(field: NonNullable<AddingField>) {
     if (addingField === field) {
       setAddingField(null);
       setUrlInput("");
+      setYoutubeSearchResults([]);
     } else {
       setAddingField(field);
       setUrlInput("");
+      setYoutubeSearchResults([]);
+      if (field === "youtube") handleYoutubeSearch();
     }
   }
 
-  async function handleSave() {
-    if (!addingField || !urlInput.trim()) return;
+  async function saveMedia(field: NonNullable<AddingField>, url: string) {
     setSaving(true);
     const res = await fetch(`/api/songs/${song.song_id}/media`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [fieldMap[addingField]]: urlInput.trim() }),
+      body: JSON.stringify({ [fieldMap[field]]: url }),
     });
     if (res.ok) {
-      onMediaAdded(song.song_id, fieldMap[addingField], urlInput.trim());
+      onMediaAdded(song.song_id, fieldMap[field], url);
       setAddingField(null);
       setUrlInput("");
+      setYoutubeSearchResults([]);
     }
     setSaving(false);
   }
 
+  async function handleSave() {
+    if (!addingField || !urlInput.trim()) return;
+    await saveMedia(addingField, urlInput.trim());
+  }
+
+  function handleToggleLeader(userId: string) {
+    const current = song.leader_user_ids ?? [];
+    const updated = current.includes(userId)
+      ? current.filter((id) => id !== userId)
+      : [...current, userId];
+    onLeadersChanged(song.id, updated);
+  }
+
+  const leaderIds = song.leader_user_ids ?? [];
+  const visibleParticipants = isHost
+    ? participants
+    : participants.filter((p) => leaderIds.includes(p.user_id));
+
   return (
     <div className="flex-1 min-w-0 space-y-2">
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
           {song.songs.slug ? (
             <Link href={`/songs/${song.songs.slug}`} className="font-medium text-zinc-900 hover:text-amber-600 truncate block">
@@ -177,6 +282,93 @@ function SongRowContent({
           )}
           {song.songs.display_artist && (
             <p className="text-xs text-zinc-500 truncate">{song.songs.display_artist}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            {canEdit ? (
+              <select
+                value={song.key_note ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  if (val !== song.key_note) onKeyChanged(song.id, val);
+                }}
+                className="text-xs rounded border border-zinc-300 px-0.5 py-0.5 w-14 focus:border-amber-400 focus:outline-none"
+              >
+                <option value="">key</option>
+                {MUSICAL_KEYS.map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+            ) : (
+              song.key_note && (
+                <span className="text-xs font-medium bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">
+                  {song.key_note}
+                </span>
+              )
+            )}
+            {song.songs.tonality && (
+              <span className="text-xs text-zinc-400">{song.songs.tonality}</span>
+            )}
+          </div>
+          {(visibleParticipants.length > 0 || (isHost && participants.length > 0)) && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {isHost && leaderIds.length === 0 && !hasEligible && (
+                <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
+                  No leader
+                </span>
+              )}
+              {visibleParticipants.map((p) => {
+                const isLeader = leaderIds.includes(p.user_id);
+                const firstName = p.display_name ?? p.username ?? "?";
+                const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
+                return (
+                  <button
+                    key={p.user_id}
+                    type="button"
+                    onClick={() => isHost && handleToggleLeader(p.user_id)}
+                    disabled={!isHost}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all
+                      ${isLeader ? "bg-amber-400 text-white" : "bg-zinc-100 text-zinc-500"}
+                      ${isHost ? "cursor-pointer hover:opacity-75" : "cursor-default"}
+                    `}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {!inRepertoire && (currentUserId || signInUrl) && (
+            !currentUserId ? (
+              <a
+                href={signInUrl}
+                className="mt-1.5 text-xs text-zinc-400 hover:text-amber-600 transition-colors"
+              >
+                + Add to my repertoire
+              </a>
+            ) : pickingRepertoire ? (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-xs text-zinc-400">Add to my repertoire:</span>
+                {CONFIDENCE_LEVELS.map(({ key, label, style }) => (
+                  <button
+                    key={key}
+                    onClick={async () => { await onAddToRepertoire(song.song_id, key); setPickingRepertoire(false); }}
+                    className={`rounded-full px-2 py-0.5 text-xs ${style} hover:opacity-80 transition-opacity`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button onClick={() => setPickingRepertoire(false)} className="text-xs text-zinc-400 hover:text-zinc-600">
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setPickingRepertoire(true)}
+                className="mt-1.5 text-xs text-zinc-400 hover:text-amber-600 transition-colors"
+              >
+                + Add to my repertoire
+              </button>
+            )
           )}
         </div>
 
@@ -190,7 +382,7 @@ function SongRowContent({
             >
               <YoutubeIcon />
             </button>
-          ) : canEdit ? (
+          ) : isAdmin ? (
             <button
               onClick={() => toggleAdding("youtube")}
               className={`rounded-lg p-1.5 transition-colors ${addingField === "youtube" ? "bg-red-50 text-red-500" : "text-red-400 border border-dashed border-red-300 hover:bg-red-50 hover:text-red-500 hover:border-red-400"}`}
@@ -202,16 +394,14 @@ function SongRowContent({
 
           {/* Spotify */}
           {spotify_url ? (
-            <a
-              href={spotify_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg p-1.5 text-green-500 hover:bg-green-50 transition-colors"
-              title="Open on Spotify"
+            <button
+              onClick={() => setSpotifyOpen((o) => !o)}
+              className={`rounded-lg p-1.5 transition-colors text-green-500 ${spotifyOpen ? "bg-green-50" : "hover:bg-green-50"}`}
+              title={spotifyOpen ? "Close player" : "Play on Spotify"}
             >
               <SpotifyIcon />
-            </a>
-          ) : canEdit ? (
+            </button>
+          ) : isAdmin ? (
             <button
               onClick={() => toggleAdding("spotify")}
               className={`rounded-lg p-1.5 transition-colors ${addingField === "spotify" ? "bg-green-50 text-green-500" : "text-green-500 border border-dashed border-green-300 hover:bg-green-50 hover:border-green-400"}`}
@@ -232,7 +422,7 @@ function SongRowContent({
             >
               <UltimateGuitarIcon />
             </a>
-          ) : canEdit ? (
+          ) : isAdmin ? (
             <button
               onClick={() => toggleAdding("chord")}
               className={`rounded-lg p-1.5 transition-all ${addingField === "chord" ? "opacity-100" : "opacity-50 border border-dashed border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
@@ -257,30 +447,72 @@ function SongRowContent({
         </div>
       )}
 
+      {spotifyOpen && spotifyTrackId && (
+        <iframe
+          src={`https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator`}
+          width="100%"
+          height="152"
+          className="rounded-xl border-0"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+          loading="lazy"
+        />
+      )}
+
       {addingField && (
-        <div className="flex items-center gap-2">
-          <input
-            type="url"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            placeholder={placeholders[addingField]}
-            className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") { setAddingField(null); setUrlInput(""); } }}
-            autoFocus
-          />
-          <button
-            onClick={handleSave}
-            disabled={saving || !urlInput.trim()}
-            className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            onClick={() => { setAddingField(null); setUrlInput(""); }}
-            className="text-xs text-zinc-400 hover:text-zinc-600"
-          >
-            Cancel
-          </button>
+        <div className="space-y-2">
+          {addingField === "youtube" && (
+            <div>
+              {youtubeSearching && (
+                <p className="text-xs text-zinc-400 py-1">Searching YouTube…</p>
+              )}
+              {!youtubeSearching && youtubeSearchResults.length > 0 && (
+                <div className="rounded-lg border border-zinc-200 divide-y divide-zinc-100 overflow-hidden">
+                  {youtubeSearchResults.map((r) => (
+                    <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
+                      <div className="min-w-0">
+                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
+                        <div className="text-xs text-zinc-400 truncate">{r.channel}</div>
+                      </div>
+                      <button
+                        onClick={() => saveMedia("youtube", r.url)}
+                        disabled={saving}
+                        className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-50 transition-colors"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!youtubeSearching && youtubeSearchResults.length === 0 && (
+                <p className="text-xs text-zinc-400 py-1">No results — paste URL below.</p>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder={placeholders[addingField]}
+              className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") { setAddingField(null); setUrlInput(""); setYoutubeSearchResults([]); } }}
+              autoFocus={addingField !== "youtube"}
+            />
+            <button
+              onClick={handleSave}
+              disabled={saving || !urlInput.trim()}
+              className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => { setAddingField(null); setUrlInput(""); setYoutubeSearchResults([]); }}
+              className="text-xs text-zinc-400 hover:text-zinc-600"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -291,14 +523,34 @@ function SortableSongItem({
   song,
   index,
   canEdit,
+  isAdmin,
+  isHost,
+  participants,
+  hasEligible,
+  currentUserId,
+  inRepertoire,
   onRemove,
   onMediaAdded,
+  onKeyChanged,
+  onLeadersChanged,
+  onAddToRepertoire,
+  signInUrl,
 }: {
   song: Song;
   index: number;
   canEdit: boolean;
+  isAdmin: boolean;
+  isHost: boolean;
+  participants: Participant[];
+  hasEligible: boolean;
+  currentUserId: string | null;
+  inRepertoire: boolean;
   onRemove: (songId: string) => void;
   onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
+  onKeyChanged: (id: string, key: string | null) => void;
+  onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
+  onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
+  signInUrl?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
 
@@ -326,7 +578,17 @@ function SortableSongItem({
         song={song}
         index={index}
         canEdit={canEdit}
+        isAdmin={isAdmin}
+        isHost={isHost}
+        participants={participants}
+        hasEligible={hasEligible}
+        currentUserId={currentUserId}
+        inRepertoire={inRepertoire}
         onMediaAdded={onMediaAdded}
+        onKeyChanged={onKeyChanged}
+        onLeadersChanged={onLeadersChanged}
+        onAddToRepertoire={onAddToRepertoire}
+        signInUrl={signInUrl}
       />
 
       <button
@@ -335,7 +597,7 @@ function SortableSongItem({
         aria-label="Remove song"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
         </svg>
       </button>
     </div>
@@ -346,18 +608,26 @@ export default function SetDetail({
   set,
   initialSongs,
   collaborators: initialCollaborators,
+  accessRequests: initialAccessRequests = [],
   currentUserId,
   canEdit,
   isOwner,
+  isAdmin,
+  isPublicViewer = false,
   jamSharedSongs = [],
+  leaderEligible = [],
 }: {
   set: SetData;
   initialSongs: Song[];
   collaborators: Collaborator[];
+  accessRequests?: Collaborator[];
   currentUserId: string | null;
   canEdit: boolean;
   isOwner: boolean;
+  isAdmin: boolean;
+  isPublicViewer?: boolean;
   jamSharedSongs?: JamSong[];
+  leaderEligible?: { user_id: string; song_id: string }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -365,6 +635,7 @@ export default function SetDetail({
 
   const [songs, setSongs] = useState(initialSongs);
   const [collaborators, setCollaborators] = useState(initialCollaborators);
+  const [accessRequests, setAccessRequests] = useState(initialAccessRequests);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(set.name);
   const [descValue, setDescValue] = useState(set.description ?? "");
@@ -373,10 +644,20 @@ export default function SetDetail({
   const [pendingSong, setPendingSong] = useState<any | null>(null);
   const { results: searchResults, loading: searching } = useSongSearch(searchQuery, { limit: 20 });
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
-  const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [showInvitePanel, setShowInvitePanel] = useState(false);
+  const [showAllCollaborators, setShowAllCollaborators] = useState(false);
+  const [linkSharing, setLinkSharing] = useState<"disabled" | "view">(set.link_sharing ?? "disabled");
   const [savingName, setSavingName] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [creatingPlaylist, setCreatingPlaylist] = useState<"youtube" | "spotify" | null>(null);
+  const [lastSyncedYoutubeFingerprint, setLastSyncedYoutubeFingerprint] = useState<string | null>(set.youtube_playlist_fingerprint ?? null);
+  const [lastSyncedSpotifyFingerprint, setLastSyncedSpotifyFingerprint] = useState<string | null>(set.spotify_playlist_fingerprint ?? null);
+  const [playlistLinks, setPlaylistLinks] = useState<{ youtube?: PlaylistLink; spotify?: PlaylistLink }>({
+    youtube: set.youtube_playlist_id ? { url: `https://www.youtube.com/playlist?list=${set.youtube_playlist_id}` } : undefined,
+    spotify: set.spotify_playlist_id ? { url: `https://open.spotify.com/playlist/${set.spotify_playlist_id}` } : undefined,
+  });
+  const [playlistError, setPlaylistError] = useState<"youtube" | "spotify" | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -438,6 +719,13 @@ export default function SetDetail({
     setShowAddSong(false);
   }
 
+  async function handleAddToRepertoire(songId: string, confidence: string) {
+    await supabase
+      .from("user_songs")
+      .upsert({ user_id: currentUserId!, song_id: songId, confidence }, { onConflict: "user_id,song_id" });
+    setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
+  }
+
   async function handleRemoveSong(songId: string) {
     await fetch(`/api/sets/${set.id}/songs/${songId}`, { method: "DELETE" });
     setSongs((prev) => prev.filter((s) => s.song_id !== songId));
@@ -450,6 +738,42 @@ export default function SetDetail({
       )
     );
   }
+
+  async function handleKeyChanged(id: string, key: string | null) {
+    setSongs((prev) => prev.map((s) => s.id === id ? { ...s, key_note: key } : s));
+    const entry = songs.find((s) => s.id === id);
+    if (!entry) return;
+    fetch(`/api/sets/${set.id}/songs/${entry.song_id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key_note: key }),
+    });
+  }
+
+  function handleLeadersChanged(id: string, leaderUserIds: string[]) {
+    setSongs((prev) => prev.map((s) => s.id === id ? { ...s, leader_user_ids: leaderUserIds } : s));
+    const entry = songs.find((s) => s.id === id);
+    if (!entry) return;
+    if (currentUserId && leaderUserIds.includes(currentUserId) && !userRepertoire.has(entry.song_id)) {
+      setUserRepertoire((prev) => new Map(prev).set(entry.song_id, "lead"));
+    }
+    fetch(`/api/sets/${set.id}/songs/${entry.song_id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leader_user_ids: leaderUserIds }),
+    });
+  }
+
+  const participants: Participant[] = [
+    ...(set.profiles ? [{ user_id: set.owner_user_id, display_name: set.profiles.display_name, last_name: null, username: set.profiles.username, avatar_url: null }] : []),
+    ...collaborators.filter((c) => c.user_id).map((c) => ({
+      user_id: c.user_id!,
+      display_name: c.profiles?.display_name ?? null,
+      last_name: c.profiles?.last_name ?? null,
+      username: c.profiles?.username ?? null,
+      avatar_url: c.profiles?.avatar_url ?? null,
+    })),
+  ];
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -479,34 +803,111 @@ export default function SetDetail({
     setEditingName(false);
   }
 
-  async function handleShare() {
-    const res = await fetch(`/api/sets/${set.id}/invite/link`, { method: "POST" });
-    const { inviteId, url, message } = await res.json();
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ text: message });
-      } catch {
-        await fetch(`/api/sets/${set.id}/invite/link`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inviteId }),
-        });
-      }
-    } else {
-      navigator.clipboard.writeText(url).catch(() => {});
-      setShareStatus("Link copied!");
-      setTimeout(() => setShareStatus(null), 2500);
-    }
+  async function handleChangeCollaboratorRole(collaboratorId: string, role: "editor" | "viewer") {
+    const prev = collaborators;
+    setCollaborators((cs) => cs.map((c) => c.id === collaboratorId ? { ...c, role } : c));
+    const res = await fetch(`/api/sets/${set.id}/collaborators`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collaboratorId, role }),
+    });
+    if (!res.ok) setCollaborators(prev);
   }
 
   async function handleRemoveCollaborator(collaboratorId: string) {
-    await fetch(`/api/sets/${set.id}/invite/link`, {
+    const removed = collaborators.find((c) => c.id === collaboratorId);
+    setCollaborators((prev) => prev.filter((c) => c.id !== collaboratorId));
+    const res = await fetch(`/api/sets/${set.id}/invite/link`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ inviteId: collaboratorId }),
     });
-    setCollaborators((prev) => prev.filter((c) => c.id !== collaboratorId));
+    if (!res.ok && removed) setCollaborators((prev) => [...prev, removed].sort((a, b) => {
+      const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
+      const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
+      return nameA.localeCompare(nameB);
+    }));
+  }
+
+  async function handleApproveRequest(requestId: string, role: "editor" | "viewer") {
+    const request = accessRequests.find((r) => r.id === requestId);
+    if (!request) return;
+    setAccessRequests((prev) => prev.filter((r) => r.id !== requestId));
+    setCollaborators((prev) => [...prev, { ...request, status: "accepted", role }].sort((a, b) => {
+      const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
+      const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
+      return nameA.localeCompare(nameB);
+    }));
+    const res = await fetch(`/api/sets/${set.id}/collaborators`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collaboratorId: requestId, role }),
+    });
+    if (!res.ok) {
+      setAccessRequests((prev) => [...prev, request]);
+      setCollaborators((prev) => prev.filter((c) => c.id !== requestId));
+    }
+  }
+
+  async function handleDenyRequest(requestId: string) {
+    setAccessRequests((prev) => prev.filter((r) => r.id !== requestId));
+    await fetch(`/api/sets/${set.id}/invite/link`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inviteId: requestId }),
+    });
+  }
+
+  async function handleToggleLinkSharing() {
+    const next = linkSharing === "disabled" ? "view" : "disabled";
+    setLinkSharing(next);
+    const res = await fetch(`/api/sets/${set.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link_sharing: next }),
+    });
+    if (!res.ok) setLinkSharing(linkSharing);
+  }
+
+  function handleCSVDownload() {
+    const headers = ["#", "Title", "Artist", "Key", "YouTube", "Spotify", "Chord Chart"];
+    const rows = songs.map((s, i) => {
+      const videoId = getPrimaryYoutubeId(s.songs);
+      const ytUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
+      const spotifyUrl = getPrimarySpotifyUrl(s.songs) ?? "";
+      return [
+        i + 1,
+        `"${s.songs.title.replace(/"/g, '""')}"`,
+        `"${(s.songs.display_artist ?? "").replace(/"/g, '""')}"`,
+        s.key_note ?? "",
+        ytUrl,
+        spotifyUrl,
+        s.songs.chord_chart_url ?? "",
+      ].join(",");
+    });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${set.name}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCreatePlaylist(platform: "youtube" | "spotify") {
+    setCreatingPlaylist(platform);
+    setPlaylistError(null);
+    const res = await fetch(`/api/sets/${set.id}/playlists/${platform}`, { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      setPlaylistLinks(prev => ({ ...prev, [platform]: { url: data.url, added: data.added, total: data.total } }));
+      if (platform === "youtube") setLastSyncedYoutubeFingerprint(data.fingerprint ?? null);
+      else setLastSyncedSpotifyFingerprint(data.fingerprint ?? null);
+    } else {
+      setPlaylistError(platform);
+    }
+    setCreatingPlaylist(null);
   }
 
   async function handleDeleteSet() {
@@ -515,10 +916,45 @@ export default function SetDetail({
     router.push("/sets");
   }
 
+  const youtubeFingerprint = songs.map(s => getPrimaryYoutubeId(s.songs)).filter(Boolean).join(",");
+  const spotifyFingerprint = songs.map(s => getSpotifyTrackId(getPrimarySpotifyUrl(s.songs))).filter(Boolean).join(",");
+  const youtubeOutdated = !!playlistLinks.youtube && lastSyncedYoutubeFingerprint !== youtubeFingerprint;
+  const spotifyOutdated = !!playlistLinks.spotify && lastSyncedSpotifyFingerprint !== spotifyFingerprint;
+
   const ownerLabel = set.profiles?.display_name ?? set.profiles?.username ?? "Unknown";
 
   return (
     <div className="space-y-6">
+      {(playlistLinks.youtube?.added !== undefined || playlistLinks.spotify?.added !== undefined || playlistError) && (
+        <div className={`rounded-xl border px-4 py-3 space-y-1.5 ${playlistError ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}>
+          {playlistLinks.youtube?.added !== undefined && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-green-700">
+                {playlistLinks.youtube.added < (playlistLinks.youtube.total ?? 0)
+                  ? `YouTube playlist synced — ${playlistLinks.youtube.added} of ${playlistLinks.youtube.total} songs added (${(playlistLinks.youtube.total ?? 0) - playlistLinks.youtube.added} have no YouTube link).`
+                  : `YouTube playlist synced — all ${playlistLinks.youtube.total} songs added.`}
+              </p>
+              <a href={playlistLinks.youtube.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm font-medium text-green-700 underline">Open →</a>
+            </div>
+          )}
+          {playlistLinks.spotify?.added !== undefined && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-green-700">
+                {playlistLinks.spotify.added < (playlistLinks.spotify.total ?? 0)
+                  ? `Spotify playlist synced — ${playlistLinks.spotify.added} of ${playlistLinks.spotify.total} songs added (${(playlistLinks.spotify.total ?? 0) - playlistLinks.spotify.added} have no Spotify link).`
+                  : `Spotify playlist synced — all ${playlistLinks.spotify.total} songs added.`}
+              </p>
+              <a href={playlistLinks.spotify.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm font-medium text-green-700 underline">Open →</a>
+            </div>
+          )}
+          {playlistError && (
+            <p className="text-sm text-red-700">
+              Couldn&apos;t sync {playlistError === "youtube" ? "YouTube" : "Spotify"} playlist. Please try again.
+            </p>
+          )}
+        </div>
+      )}
+
       {set.jam_id && (
         <a
           href={`/jam/${set.jam_id}`}
@@ -588,24 +1024,289 @@ export default function SetDetail({
         )}
       </div>
 
-      {/* Actions */}
-      {canEdit && (
-        <div className="flex flex-wrap gap-2">
+      {/* Link sharing toggle — owner only */}
+      {isOwner && (
+        <div className="flex items-center justify-between rounded-xl border border-zinc-100 bg-white px-3 py-2">
+          <div className="flex items-center gap-1.5 text-sm text-zinc-600">
+            {linkSharing === "view" ? (
+              <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            )}
+            {linkSharing === "view" ? "Anyone with link can view" : "Invite only"}
+          </div>
           <button
-            onClick={handleShare}
-            className="flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+            onClick={handleToggleLinkSharing}
+            className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
-            </svg>
-            Invite collaborator
+            {linkSharing === "view" ? "Make private" : "Allow link viewing"}
           </button>
-
-          {shareStatus && (
-            <span className="self-center text-xs text-zinc-500">{shareStatus}</span>
-          )}
         </div>
       )}
+
+      {/* Collaborators — owner first, then accepted collaborators */}
+      {!isPublicViewer && <ul className="space-y-2">
+        {/* Owner card */}
+        <li className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
+          <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
+            {set.profiles?.avatar_url
+              ? <Image src={set.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+              : (set.profiles?.display_name ?? set.profiles?.username ?? "?")[0].toUpperCase()
+            }
+          </span>
+          {set.profiles?.username ? (
+            <Link href={`/u/${set.profiles.username}`} className="flex-1 min-w-0 text-sm text-zinc-700 truncate hover:underline">
+              {[set.profiles.display_name, set.profiles.last_name].filter(Boolean).join(" ") || set.profiles.username}
+            </Link>
+          ) : (
+            <span className="flex-1 min-w-0 text-sm text-zinc-700 truncate">
+              {[set.profiles?.display_name, set.profiles?.last_name].filter(Boolean).join(" ") || ownerLabel}
+            </span>
+          )}
+          <span className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700">Owner</span>
+        </li>
+
+        {/* Access request cards */}
+        {isOwner && accessRequests.map((r) => (
+          <li key={r.id} className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+            <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber-100 text-xs font-medium text-amber-700">
+              {r.profiles?.avatar_url
+                ? <Image src={r.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+                : (r.profiles?.display_name ?? r.profiles?.username ?? "?")[0].toUpperCase()
+              }
+            </span>
+            {r.profiles?.username ? (
+              <Link href={`/u/${r.profiles.username}`} className="flex-1 min-w-0 text-sm text-zinc-700 truncate hover:underline">
+                {[r.profiles?.display_name, r.profiles?.last_name].filter(Boolean).join(" ") || r.profiles.username}
+              </Link>
+            ) : (
+              <span className="flex-1 min-w-0 text-sm text-zinc-700 truncate">
+                {[r.profiles?.display_name, r.profiles?.last_name].filter(Boolean).join(" ") || "Unknown"}
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-amber-600 mr-1">Requested</span>
+              <div className="flex rounded-lg border border-zinc-200 overflow-hidden bg-white">
+                {(["editor", "viewer"] as const).map((role) => (
+                  <button
+                    key={role}
+                    onClick={() => handleApproveRequest(r.id, role)}
+                    className="px-2.5 py-1 text-xs font-medium capitalize text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700 transition-colors"
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => handleDenyRequest(r.id)}
+                className="text-xs text-zinc-400 hover:text-red-400 transition-colors"
+              >
+                Deny
+              </button>
+            </div>
+          </li>
+        ))}
+
+        {/* Collaborator cards */}
+        {(showAllCollaborators ? collaborators : collaborators.slice(0, 3)).map((c) => (
+          <li key={c.id} className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
+            <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
+              {c.profiles?.avatar_url
+                ? <Image src={c.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+                : (c.profiles?.display_name ?? c.profiles?.username ?? "?")[0].toUpperCase()
+              }
+            </span>
+            {c.profiles?.username ? (
+              <Link href={`/u/${c.profiles.username}`} className="flex-1 min-w-0 text-sm text-zinc-700 truncate hover:underline">
+                {[c.profiles?.display_name, c.profiles?.last_name].filter(Boolean).join(" ") || c.profiles.username}
+              </Link>
+            ) : (
+              <span className="flex-1 min-w-0 text-sm text-zinc-700 truncate">
+                {[c.profiles?.display_name, c.profiles?.last_name].filter(Boolean).join(" ") || "Unknown"}
+              </span>
+            )}
+            {isOwner ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex rounded-lg border border-zinc-200 overflow-hidden">
+                  {(["editor", "viewer"] as const).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => handleChangeCollaboratorRole(c.id, r)}
+                      className={`px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                        c.role === r
+                          ? "bg-zinc-100 text-zinc-700"
+                          : "text-zinc-400 hover:text-zinc-600"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => handleRemoveCollaborator(c.id)}
+                  className="text-xs text-zinc-400 hover:text-red-400 transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : canEdit ? (
+              <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium capitalize ${
+                c.role === "editor" ? "bg-zinc-100 text-zinc-600" : "bg-zinc-50 text-zinc-400"
+              }`}>
+                {c.role}
+              </span>
+            ) : null}
+          </li>
+        ))}
+
+        {collaborators.length > 3 && (
+          <li>
+            <button
+              onClick={() => setShowAllCollaborators((v) => !v)}
+              className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
+            >
+              {showAllCollaborators ? "Show less" : `+${collaborators.length - 3} more`}
+            </button>
+          </li>
+        )}
+      </ul>}
+
+      {/* Actions */}
+      <div className="flex flex-wrap gap-2">
+        {canEdit && (
+          <>
+            <button
+              onClick={() => setShowInvitePanel((v) => !v)}
+              className="flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+              </svg>
+              Invite collaborator
+            </button>
+            {showInvitePanel && (
+              <div className="basis-full">
+                <SetInvitePanel
+                  setId={set.id}
+                  isOwner={isOwner}
+                  alreadyCollaboratorIds={collaborators.filter((c) => c.user_id).map((c) => c.user_id!)}
+                  onCollaboratorAdded={(c) => setCollaborators((prev) => [...prev, c])}
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {isAdmin ? (
+          !playlistLinks.youtube ? (
+            <button
+              onClick={() => handleCreatePlaylist("youtube")}
+              disabled={!!creatingPlaylist}
+              className="flex items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            >
+              <YoutubeIcon />
+              {creatingPlaylist === "youtube" ? "Creating…" : "YouTube playlist"}
+            </button>
+          ) : youtubeOutdated ? (
+            <div className="flex items-center rounded-xl border border-red-200 overflow-hidden">
+              <button
+                onClick={() => handleCreatePlaylist("youtube")}
+                disabled={!!creatingPlaylist}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+              >
+                <YoutubeIcon />
+                <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
+                {creatingPlaylist === "youtube" ? "Updating…" : "Update playlist"}
+              </button>
+              <a href={playlistLinks.youtube.url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors border-l border-red-200">
+                Open →
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center rounded-xl border border-red-200 overflow-hidden">
+              <a href={playlistLinks.youtube.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
+                <YoutubeIcon />
+                Open playlist
+              </a>
+              <button
+                onClick={() => handleCreatePlaylist("youtube")}
+                disabled={!!creatingPlaylist}
+                className="px-3 py-2 text-sm text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors border-l border-red-200"
+                title="Re-sync playlist"
+              >
+                {creatingPlaylist === "youtube" ? "…" : "↺"}
+              </button>
+            </div>
+          )
+        ) : playlistLinks.youtube ? (
+          <a href={playlistLinks.youtube.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
+            <YoutubeIcon />
+            YouTube playlist →
+          </a>
+        ) : null}
+
+        {isAdmin ? (
+          !playlistLinks.spotify ? (
+            <button
+              onClick={() => handleCreatePlaylist("spotify")}
+              disabled={!!creatingPlaylist}
+              className="flex items-center gap-1.5 rounded-xl border border-green-200 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50 transition-colors"
+            >
+              <SpotifyIcon />
+              {creatingPlaylist === "spotify" ? "Creating…" : "Spotify playlist"}
+            </button>
+          ) : spotifyOutdated ? (
+            <div className="flex items-center rounded-xl border border-green-200 overflow-hidden">
+              <button
+                onClick={() => handleCreatePlaylist("spotify")}
+                disabled={!!creatingPlaylist}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50 transition-colors"
+              >
+                <SpotifyIcon />
+                <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
+                {creatingPlaylist === "spotify" ? "Updating…" : "Update playlist"}
+              </button>
+              <a href={playlistLinks.spotify.url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 text-sm font-medium text-green-500 hover:bg-green-50 transition-colors border-l border-green-200">
+                Open →
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center rounded-xl border border-green-200 overflow-hidden">
+              <a href={playlistLinks.spotify.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 transition-colors">
+                <SpotifyIcon />
+                Open playlist
+              </a>
+              <button
+                onClick={() => handleCreatePlaylist("spotify")}
+                disabled={!!creatingPlaylist}
+                className="px-3 py-2 text-sm text-green-400 hover:bg-green-50 hover:text-green-600 disabled:opacity-50 transition-colors border-l border-green-200"
+                title="Re-sync playlist"
+              >
+                {creatingPlaylist === "spotify" ? "…" : "↺"}
+              </button>
+            </div>
+          )
+        ) : playlistLinks.spotify ? (
+          <a href={playlistLinks.spotify.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-xl border border-green-200 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 transition-colors">
+            <SpotifyIcon />
+            Spotify playlist →
+          </a>
+        ) : null}
+
+        <button
+          onClick={handleCSVDownload}
+          className="flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
 
       {/* Song list */}
       <div className="space-y-2">
@@ -619,30 +1320,67 @@ export default function SetDetail({
           canEdit ? (
             <DndContext id={set.id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={songs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                {songs.map((song, i) => (
-                  <SortableSongItem
-                    key={song.id}
-                    song={song}
-                    index={i}
-                    canEdit={canEdit}
-                    onRemove={handleRemoveSong}
-                    onMediaAdded={handleMediaAdded}
-                  />
-                ))}
+                {songs.map((song, i) => {
+                  const eligibleForSong = participants.filter((p) =>
+                    leaderEligible.some((e) => e.user_id === p.user_id && e.song_id === song.song_id)
+                  );
+                  const hasEligible = eligibleForSong.length > 0;
+                  const rowParticipants = hasEligible
+                    ? participants.filter((p) =>
+                        eligibleForSong.some((e) => e.user_id === p.user_id) ||
+                        (song.leader_user_ids ?? []).includes(p.user_id)
+                      )
+                    : participants;
+                  return (
+                    <SortableSongItem
+                      key={song.id}
+                      song={song}
+                      index={i}
+                      canEdit={canEdit}
+                      isAdmin={isAdmin}
+                      isHost={isOwner}
+                      participants={rowParticipants}
+                      hasEligible={hasEligible}
+                      currentUserId={currentUserId}
+                      inRepertoire={userRepertoire.has(song.song_id)}
+                      onRemove={handleRemoveSong}
+                      onMediaAdded={handleMediaAdded}
+                      onKeyChanged={handleKeyChanged}
+                      onLeadersChanged={handleLeadersChanged}
+                      onAddToRepertoire={handleAddToRepertoire}
+                      signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
+                    />
+                  );
+                })}
               </SortableContext>
             </DndContext>
           ) : (
-            songs.map((song, i) => (
-              <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
-                <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{i + 1}</span>
-                <SongRowContent
-                  song={song}
-                  index={i}
-                  canEdit={false}
-                  onMediaAdded={() => {}}
-                />
-              </div>
-            ))
+            songs.map((song, i) => {
+              const rowParticipants = isPublicViewer ? [] : participants.filter((p) =>
+                (song.leader_user_ids ?? []).includes(p.user_id)
+              );
+              return (
+                <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
+                  <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{i + 1}</span>
+                  <SongRowContent
+                    song={song}
+                    index={i}
+                    canEdit={false}
+                    isAdmin={false}
+                    isHost={false}
+                    participants={rowParticipants}
+                    hasEligible={false}
+                    currentUserId={currentUserId}
+                    inRepertoire={userRepertoire.has(song.song_id)}
+                    onMediaAdded={() => {}}
+                    onKeyChanged={() => {}}
+                    onLeadersChanged={() => {}}
+                    onAddToRepertoire={handleAddToRepertoire}
+                    signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
+                  />
+                </div>
+              );
+            })
           )
         )}
 
@@ -759,40 +1497,6 @@ export default function SetDetail({
           )
         )}
       </div>
-
-      {/* Collaborators */}
-      {(collaborators.length > 0 || isOwner) && (
-        <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Collaborators</h2>
-          {collaborators.length === 0 ? (
-            <p className="text-sm text-zinc-400">None yet. Share an invite link to add collaborators.</p>
-          ) : (
-            <ul className="space-y-2">
-              {collaborators.map((c) => (
-                <li key={c.id} className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
-                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
-                    {c.profiles?.avatar_url
-                      ? <Image src={c.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
-                      : (c.profiles?.display_name ?? c.profiles?.username ?? "?")[0].toUpperCase()
-                    }
-                  </span>
-                  <span className="flex-1 min-w-0 text-sm text-zinc-700 truncate">
-                    {[c.profiles?.display_name, c.profiles?.last_name].filter(Boolean).join(" ") || c.profiles?.username || "Unknown"}
-                  </span>
-                  {isOwner && (
-                    <button
-                      onClick={() => handleRemoveCollaborator(c.id)}
-                      className="shrink-0 text-xs text-zinc-400 hover:text-red-400 transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
 
       {/* Danger zone */}
       {isOwner && (

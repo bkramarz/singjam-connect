@@ -14,30 +14,126 @@ type SharedSong = {
   who_else_leads: string[];
 };
 
+type SortMode = "popular" | "alpha" | "leader";
+
+function displayedSongs(songs: SharedSong[], mode: SortMode, selectedLeaders: Set<string>): SharedSong[] {
+  if (mode === "leader" && selectedLeaders.size > 0) {
+    return [...songs]
+      .filter((s) =>
+        [...selectedLeaders].every((name) =>
+          name === "You" ? s.viewer_leads : s.who_else_leads.includes(name)
+        )
+      )
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+  return [...songs].sort((a, b) => {
+    if (mode === "alpha") return a.title.localeCompare(b.title);
+    const aTotal = a.who_else.length + (a.viewer_has ? 1 : 0);
+    const bTotal = b.who_else.length + (b.viewer_has ? 1 : 0);
+    return bTotal !== aTotal ? bTotal - aTotal : a.title.localeCompare(b.title);
+  });
+}
+
 export default function JamSharedSongs({ jamId }: { jamId: string }) {
   const [songs, setSongs] = useState<SharedSong[] | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>("popular");
+  const [selectedLeaders, setSelectedLeaders] = useState<Set<string>>(new Set());
+  const [linkedSetId, setLinkedSetId] = useState<string | null | undefined>(undefined);
+  const [inSetSongIds, setInSetSongIds] = useState<Set<string>>(new Set());
+  const [addingId, setAddingId] = useState<string | null>(null);
   const supabase = supabaseBrowser();
 
   useEffect(() => {
     supabase.rpc("jam_shared_songs", { jam_id_param: jamId }).then(({ data }) => {
-      const sorted = ((data as SharedSong[] | null) ?? []).sort((a, b) => {
-        const aTotal = a.who_else.length + (a.viewer_has ? 1 : 0);
-        const bTotal = b.who_else.length + (b.viewer_has ? 1 : 0);
-        const diff = bTotal - aTotal;
-        return diff !== 0 ? diff : a.title.localeCompare(b.title);
-      });
-      setSongs(sorted);
+      setSongs((data as SharedSong[] | null) ?? []);
     });
+
+    fetch(`/api/jam/${jamId}/set`)
+      .then((r) => r.json())
+      .then(({ set }) => {
+        if (!set) { setLinkedSetId(null); return; }
+        setLinkedSetId(set.id);
+        fetch(`/api/sets/${set.id}/songs`)
+          .then((r) => r.json())
+          .then(({ songs: setSongs }) => {
+            setInSetSongIds(new Set((setSongs ?? []).map((s: any) => s.song_id as string)));
+          });
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jamId]);
 
+  async function addToSet(songId: string) {
+    if (!linkedSetId || addingId) return;
+    setAddingId(songId);
+    const res = await fetch(`/api/sets/${linkedSetId}/songs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ songId }),
+    });
+    setAddingId(null);
+    if (res.ok || res.status === 409) {
+      setInSetSongIds((prev) => new Set(prev).add(songId));
+    }
+  }
+
   if (!songs || songs.length === 0) return null;
+
+  const leaderNames = Array.from(
+    new Set(songs.flatMap((s) => [...(s.viewer_leads ? ["You"] : []), ...s.who_else_leads]))
+  ).sort((a, b) => (a === "You" ? -1 : b === "You" ? 1 : a.localeCompare(b)));
+
+  const sorted = displayedSongs(songs, sortMode, selectedLeaders);
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-      <h2 className="text-base font-semibold">Songs you share</h2>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-base font-semibold">Songs you share</h2>
+        <div className="flex items-center self-start gap-0.5 rounded-lg bg-zinc-100 p-0.5 text-xs font-medium">
+          {(["popular", "alpha", "leader"] as SortMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setSortMode(mode);
+                if (mode !== "leader") setSelectedLeaders(new Set());
+              }}
+              className={`rounded-md px-2.5 py-1 transition-colors ${
+                sortMode === mode
+                  ? "bg-white text-zinc-900 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-700"
+              }`}
+            >
+              {mode === "popular" ? "Popular" : mode === "alpha" ? "A–Z" : "Leader"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {sortMode === "leader" && leaderNames.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {leaderNames.map((name) => (
+            <button
+              key={name}
+              onClick={() =>
+                setSelectedLeaders((prev) => {
+                  const next = new Set(prev);
+                  next.has(name) ? next.delete(name) : next.add(name);
+                  return next;
+                })
+              }
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                selectedLeaders.has(name)
+                  ? "bg-amber-500 text-white"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <ul className="divide-y divide-zinc-100 max-h-96 overflow-y-auto">
-        {songs.map((s) => {
+        {sorted.map((s) => {
           const leadsSet = new Set(s.who_else_leads);
           const nameParts = [
             ...(s.viewer_has
@@ -52,9 +148,11 @@ export default function JamSharedSongs({ jamId }: { jamId: string }) {
           const nameNodes = nameParts.flatMap((node, i) =>
             i < nameParts.length - 1 ? [node, ", "] : [node]
           );
+          const inSet = inSetSongIds.has(s.song_id);
+          const isAdding = addingId === s.song_id;
           return (
-            <li key={s.song_id} className="flex items-baseline justify-between gap-4 py-2.5">
-              <div className="min-w-0">
+            <li key={s.song_id} className="flex items-center justify-between gap-4 py-2.5">
+              <div className={`min-w-0 ${inSet ? "opacity-40" : ""}`}>
                 {s.slug ? (
                   <a
                     href={`/songs/${s.slug}`}
@@ -71,7 +169,33 @@ export default function JamSharedSongs({ jamId }: { jamId: string }) {
                   <span className="ml-1.5 text-xs text-zinc-400">{s.display_artist}</span>
                 )}
               </div>
-              <span className="shrink-0 text-xs text-zinc-500">({nameNodes})</span>
+              <div className="shrink-0 flex items-center gap-2">
+                <span className={`text-xs text-zinc-500 ${inSet ? "opacity-40" : ""}`}>
+                  ({nameNodes})
+                </span>
+                {linkedSetId && (
+                  <button
+                    onClick={() => addToSet(s.song_id)}
+                    disabled={inSet || isAdding}
+                    title={inSet ? "Already in set" : "Add to set list"}
+                    className={`flex items-center justify-center w-5 h-5 rounded-full border transition-colors shrink-0 ${
+                      inSet
+                        ? "border-green-300 text-green-500"
+                        : "border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-zinc-700"
+                    } disabled:cursor-default`}
+                  >
+                    {inSet ? (
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    ) : (
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
             </li>
           );
         })}
