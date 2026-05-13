@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (existing) {
-    return NextResponse.json({ error: "This song is already in our library.", slug: existing.slug }, { status: 409 });
+    return NextResponse.json({ error: "This song is already in our library.", id: existing.id, slug: existing.slug }, { status: 409 });
   }
 
   // Enrich
@@ -143,5 +143,5 @@ export async function POST(req: Request) {
   )];
   if (langIds.length) await db.from("song_languages").insert(langIds.map((id) => ({ song_id: song.id, language_id: id })));
 
-  return NextResponse.json({ slug: song.slug });
+  return NextResponse.json({ id: song.id, slug: song.slug });
 }

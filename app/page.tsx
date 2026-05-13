@@ -1,18 +1,7 @@
-import { redirect } from "next/navigation";
-import { getSessionServer } from "@/lib/supabase/server";
 import HomeButtons from "@/components/HomeButtons";
 import UpcomingJams from "@/components/UpcomingJams";
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ home?: string }>;
-}) {
-  const params = await searchParams;
-  if (!("home" in params)) {
-    const session = await getSessionServer();
-    if (session) redirect("/jams");
-  }
+export default async function HomePage() {
   return (
     <div className="space-y-6">
       {/* Hero */}
