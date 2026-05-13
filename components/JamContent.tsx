@@ -260,7 +260,27 @@ export default function JamContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (state.status === "loading") return null;
+  if (state.status === "loading") {
+    return (
+      <div className="space-y-4 pb-10">
+        {/* Hero image placeholder */}
+        <div className="relative overflow-hidden rounded-2xl bg-zinc-100 animate-pulse" style={{ height: 320 }} />
+        {/* Event name + date */}
+        <div className="space-y-2 pt-2">
+          <div className="h-6 w-2/3 animate-pulse rounded bg-zinc-200" />
+          <div className="h-4 w-1/2 animate-pulse rounded bg-zinc-100" />
+          <div className="h-4 w-1/3 animate-pulse rounded bg-zinc-100" />
+        </div>
+        {/* Tags */}
+        <div className="flex gap-1.5">
+          <div className="h-5 w-16 animate-pulse rounded-full bg-zinc-100" />
+          <div className="h-5 w-20 animate-pulse rounded-full bg-zinc-100" />
+        </div>
+        {/* Action button */}
+        <div className="h-10 w-36 animate-pulse rounded-xl bg-zinc-100" />
+      </div>
+    );
+  }
   if (state.status === "not_found") return <p className="text-sm text-zinc-500">Jam not found.</p>;
 
   const {
