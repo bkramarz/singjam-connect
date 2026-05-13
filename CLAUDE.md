@@ -29,6 +29,12 @@ Use a hybrid of conventional and descriptive style:
 - All schema changes **must** include a new migration file in `supabase/migrations/`
 - Never modify the schema directly via the Supabase dashboard without a corresponding migration file
 - Migration files should be named with an incrementing number prefix: `002_description.sql`
+- Every migration that creates a new table **must** include explicit grants — Supabase no longer auto-grants access to the Data API:
+  ```sql
+  grant select on public.your_table to anon;
+  grant select, insert, update, delete on public.your_table to authenticated;
+  grant select, insert, update, delete on public.your_table to service_role;
+  ```
 
 ## Testing
 
