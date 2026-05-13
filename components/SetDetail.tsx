@@ -658,6 +658,11 @@ export default function SetDetail({
     spotify: set.spotify_playlist_id ? { url: `https://open.spotify.com/playlist/${set.spotify_playlist_id}` } : undefined,
   });
   const [playlistError, setPlaylistError] = useState<"youtube" | "spotify" | null>(null);
+  const [showMissingSong, setShowMissingSong] = useState(false);
+  const [missingSongTitle, setMissingSongTitle] = useState("");
+  const [missingSongArtist, setMissingSongArtist] = useState("");
+  const [missingSongBusy, setMissingSongBusy] = useState(false);
+  const [missingSongError, setMissingSongError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -717,6 +722,25 @@ export default function SetDetail({
     setPendingSong(null);
     setSearchQuery("");
     setShowAddSong(false);
+  }
+
+  async function submitMissingSong() {
+    if (!missingSongTitle.trim()) return;
+    setMissingSongBusy(true);
+    setMissingSongError(null);
+    const res = await fetch("/api/songs/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: missingSongTitle.trim(), artist: missingSongArtist.trim() }),
+    });
+    const json = await res.json();
+    setMissingSongBusy(false);
+    if ((res.status === 409 || res.ok) && json.id) {
+      setShowMissingSong(false);
+      await handleSelectSong({ song_id: json.id, title: missingSongTitle.trim(), display_artist: missingSongArtist.trim() || null });
+      return;
+    }
+    setMissingSongError(json.error ?? "Something went wrong. Please try again.");
   }
 
   async function handleAddToRepertoire(songId: string, confidence: string) {
@@ -1390,7 +1414,7 @@ export default function SetDetail({
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-zinc-700">Add a song</p>
                 <button
-                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setPendingSong(null); }}
+                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setPendingSong(null); setShowMissingSong(false); setMissingSongError(null); }}
                   className="text-zinc-400 hover:text-zinc-600"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -1427,7 +1451,7 @@ export default function SetDetail({
                   <input
                     type="search"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => { setSearchQuery(e.target.value); setShowMissingSong(false); setMissingSongError(null); }}
                     placeholder="Search songs…"
                     className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
                     autoFocus
@@ -1479,7 +1503,51 @@ export default function SetDetail({
                     </ul>
                   )}
                   {searchQuery.trim() && !searching && searchResults.length === 0 && (
-                    <p className="text-xs text-zinc-400">No songs found.</p>
+                    showMissingSong ? (
+                      <div className="space-y-2 rounded-xl border border-zinc-200 p-3">
+                        <p className="text-sm font-medium text-zinc-700">Add a missing song</p>
+                        <input
+                          value={missingSongTitle}
+                          onChange={(e) => setMissingSongTitle(e.target.value)}
+                          placeholder="Song title"
+                          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                        <input
+                          value={missingSongArtist}
+                          onChange={(e) => setMissingSongArtist(e.target.value)}
+                          placeholder="Recording artist (optional)"
+                          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                        {missingSongError && <p className="text-xs text-red-500">{missingSongError}</p>}
+                        {missingSongBusy && <p className="text-xs text-zinc-400">Looking up song info — this may take a moment…</p>}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={submitMissingSong}
+                            disabled={missingSongBusy || !missingSongTitle.trim()}
+                            className="rounded-xl bg-amber-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                          >
+                            {missingSongBusy ? "Adding…" : "Add song"}
+                          </button>
+                          <button
+                            onClick={() => setShowMissingSong(false)}
+                            disabled={missingSongBusy}
+                            className="rounded-xl border border-zinc-200 px-4 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-xs text-zinc-400">No songs found.</p>
+                        <button
+                          onClick={() => { setShowMissingSong(true); setMissingSongTitle(searchQuery.trim()); setMissingSongArtist(""); }}
+                          className="text-xs text-amber-600 hover:text-amber-700 transition-colors"
+                        >
+                          Add a missing song →
+                        </button>
+                      </div>
+                    )
                   )}
                 </>
               )}

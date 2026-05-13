@@ -64,6 +64,9 @@ export default function RepertoirePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
+  const [userSets, setUserSets] = useState<{ id: string; name: string }[]>([]);
+  const [addToSetFor, setAddToSetFor] = useState<string | null>(null);
+  const [addToSetStatus, setAddToSetStatus] = useState<Record<string, string>>({});
   const { results: searchResults, loading: searchLoading } = useSongSearch(query);
 
   const [isPending, startTransition] = useTransition();
@@ -142,13 +145,15 @@ export default function RepertoirePage() {
           return all;
         }
 
-        const [{ data: p }, rows, popularityRes] = await Promise.all([
+        const [{ data: p }, rows, popularityRes, setsJson] = await Promise.all([
           supabase.from("profiles").select("singing_voice").eq("id", uid).single(),
           fetchAllUserSongs(),
           supabase.rpc("song_popularity_counts"),
+          fetch("/api/sets").then((r) => (r.ok ? r.json() : { owned: [], collaborating: [] })),
         ]);
 
         setSingingVoice((p as any)?.singing_voice ?? null);
+        setUserSets([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]);
 
         if (cancelled) return;
 
@@ -290,6 +295,28 @@ export default function RepertoirePage() {
     });
   };
 
+  async function addToSet(songId: string, setId: string) {
+    setAddToSetFor(null);
+    const set = userSets.find((s) => s.id === setId);
+    const res = await fetch(`/api/sets/${setId}/songs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ songId }),
+    });
+    const msg = res.ok
+      ? `Added to ${set?.name ?? "set"}`
+      : res.status === 409
+      ? "Already in that set"
+      : null;
+    if (msg) {
+      setAddToSetStatus((prev) => ({ ...prev, [songId]: msg }));
+      setTimeout(
+        () => setAddToSetStatus((prev) => { const { [songId]: _, ...rest } = prev; return rest; }),
+        2500
+      );
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -376,7 +403,7 @@ export default function RepertoirePage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                       {inRep ? (
                         <>
                           <select
@@ -399,6 +426,38 @@ export default function RepertoirePage() {
                               </option>
                             ))}
                           </select>
+                          {userSets.length > 0 && (
+                            addToSetFor === result.song_id ? (
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
+                                  defaultValue=""
+                                  onChange={(e) => { if (e.target.value) addToSet(result.song_id, e.target.value); }}
+                                >
+                                  <option value="" disabled>Pick a set…</option>
+                                  {userSets.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => setAddToSetFor(null)}
+                                  className="text-zinc-400 hover:text-zinc-600 text-sm"
+                                  aria-label="Cancel"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : addToSetStatus[result.song_id] ? (
+                              <span className="text-xs text-green-600">{addToSetStatus[result.song_id]}</span>
+                            ) : (
+                              <button
+                                onClick={() => setAddToSetFor(result.song_id)}
+                                className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                              >
+                                Add to set
+                              </button>
+                            )
+                          )}
                           <Link
                             href={href}
                             className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
@@ -555,7 +614,7 @@ export default function RepertoirePage() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 sm:shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                     <select
                       value={(it.confidence ?? "") as ConfidenceKey}
                       onChange={(e) => updateConfidence(it.song_id, e.target.value)}
@@ -576,6 +635,39 @@ export default function RepertoirePage() {
                         </option>
                       ))}
                     </select>
+
+                    {userSets.length > 0 && (
+                      addToSetFor === it.song_id ? (
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
+                            defaultValue=""
+                            onChange={(e) => { if (e.target.value) addToSet(it.song_id, e.target.value); }}
+                          >
+                            <option value="" disabled>Pick a set…</option>
+                            {userSets.map((s) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => setAddToSetFor(null)}
+                            className="text-zinc-400 hover:text-zinc-600 text-sm"
+                            aria-label="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : addToSetStatus[it.song_id] ? (
+                        <span className="text-xs text-green-600">{addToSetStatus[it.song_id]}</span>
+                      ) : (
+                        <button
+                          onClick={() => setAddToSetFor(it.song_id)}
+                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                        >
+                          Add to set
+                        </button>
+                      )
+                    )}
 
                     <Link
                       href={`/songs/${it.slug ?? it.song_id}`}
