@@ -353,7 +353,19 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             ) : null}
           </div>
         ) : songsLoading ? (
-          <div className="py-6 text-center text-sm text-zinc-400">Loading songs…</div>
+          <div className="divide-y rounded-md border">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center justify-between p-4">
+                <div className="space-y-1.5">
+                  <div className="h-4 w-48 animate-pulse rounded bg-zinc-200" />
+                  <div className="h-3 w-32 animate-pulse rounded bg-zinc-100" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="h-7 w-16 animate-pulse rounded-xl bg-zinc-100" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : popularSongs.length > 0 ? (
           <div className="grid gap-2">
             {visibleSongs.map((r) => (
