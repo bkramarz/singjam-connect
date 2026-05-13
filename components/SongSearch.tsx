@@ -7,24 +7,9 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
+import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
-
-type Result = {
-  song_id: string;
-  title: string;
-  display_artist: string | null;
-  first_line: string | null;
-  aka: string[] | null;
-  score: number;
-  composers: string[];
-  cultures: string[];
-  productions: string[];
-  genres: string[];
-  languages?: string[];
-  year: number | null;
-  slug: string | null;
-};
 
 type PopularSong = {
   song_id: string;
@@ -68,8 +53,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [q, setQ] = useState(initialQuery);
-  const [results, setResults] = useState<Result[]>([]);
-  const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
@@ -77,9 +60,8 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [hideMySongs, setHideMySongs] = useState(false);
 
-  const debounceRef = useRef<number | null>(null);
-  const [debouncing, setDebouncing] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
 
   const {
     filterOptions, matchesFilters,
@@ -232,37 +214,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     return () => observer.disconnect();
   }, [sortedBrowse.length]);
 
-  async function runSearch(query: string) {
-    const trimmed = query.trim();
-    if (!trimmed) { setResults([]); return; }
-    setLoading(true);
-    setStatus(null);
-    const { data, error } = await supabase.rpc("search_songs", { q: trimmed, limit_n: 50 });
-    setLoading(false);
-    if (error) {
-      console.error("Song search error:", error);
-      setStatus("Search failed. Please try again.");
-      setResults([]);
-      return;
-    }
-    setResults((data ?? []) as Result[]);
-  }
-
-  useEffect(() => {
-    if (initialQuery.trim()) runSearch(initialQuery);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => {
-      setDebouncing(false);
-      runSearch(q);
-    }, 200);
-    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
-
   async function handlePendingAdd(songId: string, slug?: string | null) {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -274,7 +225,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   }
 
   async function addSong(songId: string, level: string) {
-    setStatus(null);
     setPendingAddId(null);
     const { data } = await supabase.auth.getSession();
     const session = data.session;
@@ -301,18 +251,18 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
           <input
             className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
             value={q}
-            onChange={(e) => { setQ(e.target.value); setDebouncing(!!e.target.value.trim()); }}
+            onChange={(e) => setQ(e.target.value)}
             placeholder="Search by title, first line, recording artist, or composer"
           />
         </div>
         <div className="text-xs text-zinc-500">
-          {loading || debouncing
+          {loading
             ? "Searching…"
             : q.trim()
               ? `${sortedSearch.length} song(s)${activeFilterCount > 0 && sortedSearch.length < results.length ? ` (${results.length} before filters)` : ""}`
               : null}
         </div>
-        {status ? <div className="text-sm text-zinc-700">{status}</div> : null}
+        {(searchError ?? status) ? <div className="text-sm text-zinc-700">{searchError ?? status}</div> : null}
       </div>
 
       {/* Filter bar */}
@@ -396,7 +346,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 addSong={addSong}
               />
             ))}
-            {!loading && !debouncing && sortedSearch.length === 0 ? (
+            {!loading && sortedSearch.length === 0 ? (
               <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
                 {results.length > 0 ? "No results match the active filters." : "No songs found."}
               </div>
