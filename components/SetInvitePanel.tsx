@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import QRCode from "qrcode";
 
 type UserResult = {
   id: string;
@@ -41,6 +42,8 @@ export default function SetInvitePanel({
   const [shareBusy, setShareBusy] = useState(false);
   const [canShare, setCanShare] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
+  const [qrBusy, setQrBusy] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [linkRole, setLinkRole] = useState<"editor" | "viewer">("editor");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -163,6 +166,28 @@ export default function SetInvitePanel({
       setFeedback({ id: "copy", msg: "Link copied!", ok: true });
     } catch {
       setFeedback({ id: "copy", msg: "Couldn't copy link", ok: false });
+    }
+  }
+
+  async function showQR() {
+    setQrBusy(true);
+    setFeedback(null);
+    const res = await fetch(`/api/sets/${setId}/invite/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: linkRole }),
+    });
+    const body = await res.json();
+    setQrBusy(false);
+    if (!res.ok) {
+      setFeedback({ id: "qr", msg: body.error ?? "Failed to generate link", ok: false });
+      return;
+    }
+    try {
+      const dataUrl = await QRCode.toDataURL(body.url, { width: 280, margin: 2 });
+      setQrDataUrl(dataUrl);
+    } catch {
+      setFeedback({ id: "qr", msg: "Failed to generate QR code", ok: false });
     }
   }
 
@@ -357,27 +382,70 @@ export default function SetInvitePanel({
             ))}
           </div>
         )}
-        <button
-          onClick={copyInviteLink}
-          disabled={copyBusy}
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
-        >
-          {copyBusy ? "Copying…" : (
-            <>
+        <div className="flex gap-2">
+          <button
+            onClick={copyInviteLink}
+            disabled={copyBusy}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+          >
+            {copyBusy ? "Copying…" : (
+              <>
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy link
+              </>
+            )}
+          </button>
+          <button
+            onClick={showQR}
+            disabled={qrBusy}
+            className="flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+          >
+            {qrBusy ? "Generating…" : (
+              <>
               <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="3" height="3" rx="0.5"/>
+                <rect x="19" y="14" width="2" height="2" rx="0.5"/>
+                <rect x="14" y="19" width="2" height="2" rx="0.5"/>
+                <rect x="18" y="18" width="3" height="3" rx="0.5"/>
               </svg>
-              Copy link
-            </>
-          )}
-        </button>
-        {feedback && feedback.id === "copy" && (
+              QR code
+              </>
+            )}
+          </button>
+        </div>
+        {feedback && (feedback.id === "copy" || feedback.id === "qr") && (
           <p className={`mt-1.5 text-xs ${feedback.ok ? "text-green-600" : "text-red-600"}`}>
             {feedback.msg}
           </p>
         )}
       </div>
+
+      {qrDataUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setQrDataUrl(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 flex flex-col items-center gap-4 shadow-xl max-w-xs w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-medium text-zinc-700">Scan to join this set</p>
+            <img src={qrDataUrl} alt="QR code invite link" className="w-64 h-64 rounded-lg" />
+            <button
+              onClick={() => setQrDataUrl(null)}
+              className="w-full rounded-xl bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

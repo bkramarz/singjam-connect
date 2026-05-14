@@ -44,8 +44,8 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
-  if (!profile?.is_admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { data: setOwner } = await supabase.from("sets").select("owner_user_id").eq("id", setId).single();
+  if (!setOwner || setOwner.owner_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const access_token = await getAccessToken();
   if (!access_token) return NextResponse.json({ error: "Could not authenticate with Spotify" }, { status: 500 });
