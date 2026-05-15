@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
@@ -74,6 +74,15 @@ export default function RepertoirePage() {
   const [userSets, setUserSets] = useState<{ id: string; name: string }[]>([]);
   const [addToSetFor, setAddToSetFor] = useState<string | null>(null);
   const [addToSetStatus, setAddToSetStatus] = useState<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRemoveConfirm, setBulkRemoveConfirm] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const [bulkSetId, setBulkSetId] = useState("");
+  const [bulkConfidenceLevel, setBulkConfidenceLevel] = useState("");
+  const [newSetName, setNewSetName] = useState("");
+  const [newSetForSongId, setNewSetForSongId] = useState<string | null>(null);
+  const [bulkCreatingSet, setBulkCreatingSet] = useState(false);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const { results: searchResults, loading: searchLoading } = useSongSearch(query);
 
   const [isPending, startTransition] = useTransition();
@@ -256,6 +265,111 @@ export default function RepertoirePage() {
     if (sortBy === "title_desc") return list.sort((a, b) => b.title.localeCompare(a.title));
     return list.sort((a, b) => a.title.localeCompare(b.title));
   }, [filtered, sortBy]);
+
+  useEffect(() => {
+    const el = selectAllRef.current;
+    if (!el) return;
+    const visibleIds = sortedFiltered.map((it) => it.song_id);
+    const someSelected = visibleIds.some((id) => selectedIds.has(id));
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    el.indeterminate = someSelected && !allSelected;
+  }, [sortedFiltered, selectedIds]);
+
+  function toggleSelect(songId: string) {
+    setBulkRemoveConfirm(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(songId)) next.delete(songId);
+      else next.add(songId);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setBulkRemoveConfirm(false);
+    const visibleIds = sortedFiltered.map((it) => it.song_id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleIds));
+    }
+  }
+
+  async function bulkAddToSet(setId: string) {
+    const ids = Array.from(selectedIds);
+    const set = userSets.find((s) => s.id === setId);
+    setBulkSetId("");
+    await Promise.all(
+      ids.map((songId) =>
+        fetch(`/api/sets/${setId}/songs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ songId }),
+        })
+      )
+    );
+    setBulkStatus(`Added to ${set?.name ?? "set"}`);
+    setTimeout(() => setBulkStatus(null), 2500);
+  }
+
+  function bulkUpdateConfidence(level: string) {
+    if (!userId) return;
+    const ids = Array.from(selectedIds);
+    setBulkConfidenceLevel("");
+    setItems((cur) => cur.map((it) => (ids.includes(it.song_id) ? { ...it, confidence: level } : it)));
+    startTransition(async () => {
+      const { error } = await supabase
+        .from("user_songs")
+        .update({ confidence: level })
+        .eq("user_id", userId)
+        .in("song_id", ids);
+      if (error) alert(error.message);
+    });
+  }
+
+  function bulkRemove() {
+    if (!userId) return;
+    const ids = Array.from(selectedIds);
+    startTransition(async () => {
+      const { error } = await supabase
+        .from("user_songs")
+        .delete()
+        .eq("user_id", userId)
+        .in("song_id", ids);
+      if (error) { alert(error.message); return; }
+      setItems((prev) => prev.filter((x) => !ids.includes(x.song_id)));
+      setBulkRemoveConfirm(false);
+    });
+  }
+
+  async function createSetAndAdd(name: string, songId: string) {
+    const res = await fetch("/api/sets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) { alert("Failed to create set"); return; }
+    const { id } = await res.json();
+    setUserSets((prev) => [{ id, name }, ...prev]);
+    setNewSetForSongId(null);
+    setNewSetName("");
+    await addToSet(songId, id);
+  }
+
+  async function createSetAndBulkAdd(name: string) {
+    const res = await fetch("/api/sets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) { alert("Failed to create set"); return; }
+    const { id } = await res.json();
+    setUserSets((prev) => [{ id, name }, ...prev]);
+    setBulkCreatingSet(false);
+    setNewSetName("");
+    await bulkAddToSet(id);
+  }
 
   const updateConfidence = (song_id: string, next: string) => {
     if (!userId) return;
@@ -475,25 +589,59 @@ export default function RepertoirePage() {
                           </select>
                           {userSets.length > 0 && (
                             addToSetFor === result.song_id ? (
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
-                                  defaultValue=""
-                                  onChange={(e) => { if (e.target.value) addToSet(result.song_id, e.target.value); }}
-                                >
-                                  <option value="" disabled>Pick a set…</option>
-                                  {userSets.map((s) => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => setAddToSetFor(null)}
-                                  className="text-zinc-400 hover:text-zinc-600 text-sm"
-                                  aria-label="Cancel"
-                                >
-                                  ✕
-                                </button>
-                              </div>
+                              newSetForSongId === result.song_id ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={newSetName}
+                                    onChange={(e) => setNewSetName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && newSetName.trim()) createSetAndAdd(newSetName.trim(), result.song_id);
+                                      if (e.key === "Escape") { setNewSetForSongId(null); setNewSetName(""); }
+                                    }}
+                                    placeholder="Set name…"
+                                    autoFocus
+                                    className="w-28 rounded-xl border border-zinc-300 px-2 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={() => { if (newSetName.trim()) createSetAndAdd(newSetName.trim(), result.song_id); }}
+                                    disabled={!newSetName.trim()}
+                                    className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-40"
+                                  >
+                                    Create
+                                  </button>
+                                  <button
+                                    onClick={() => { setNewSetForSongId(null); setNewSetName(""); }}
+                                    className="text-zinc-400 hover:text-zinc-600 text-sm"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <select
+                                    className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
+                                    defaultValue=""
+                                    onChange={(e) => {
+                                      if (e.target.value === "__new__") setNewSetForSongId(result.song_id);
+                                      else if (e.target.value) addToSet(result.song_id, e.target.value);
+                                    }}
+                                  >
+                                    <option value="" disabled>Pick a set…</option>
+                                    {userSets.map((s) => (
+                                      <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                    <option value="__new__">+ New set…</option>
+                                  </select>
+                                  <button
+                                    onClick={() => { setAddToSetFor(null); setNewSetForSongId(null); setNewSetName(""); }}
+                                    className="text-zinc-400 hover:text-zinc-600 text-sm"
+                                    aria-label="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )
                             ) : addToSetStatus[result.song_id] ? (
                               <span className="text-xs text-green-600">{addToSetStatus[result.song_id]}</span>
                             ) : (
@@ -611,6 +759,114 @@ export default function RepertoirePage() {
             </div>
           </div>
 
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <span className="text-sm font-medium text-amber-800">
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-amber-700 underline underline-offset-2"
+              >
+                Deselect all
+              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {bulkStatus ? (
+                  <span className="text-xs text-green-700">{bulkStatus}</span>
+                ) : null}
+                {userSets.length > 0 && (
+                  bulkCreatingSet ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={newSetName}
+                        onChange={(e) => setNewSetName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newSetName.trim()) createSetAndBulkAdd(newSetName.trim());
+                          if (e.key === "Escape") { setBulkCreatingSet(false); setNewSetName(""); }
+                        }}
+                        placeholder="Set name…"
+                        autoFocus
+                        className="w-28 rounded-xl border border-zinc-300 px-2 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => { if (newSetName.trim()) createSetAndBulkAdd(newSetName.trim()); }}
+                        disabled={!newSetName.trim()}
+                        className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-40"
+                      >
+                        Create
+                      </button>
+                      <button
+                        onClick={() => { setBulkCreatingSet(false); setNewSetName(""); }}
+                        className="text-zinc-400 hover:text-zinc-600 text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={bulkSetId}
+                      onChange={(e) => {
+                        if (e.target.value === "__new__") { setBulkCreatingSet(true); setBulkSetId(""); }
+                        else if (e.target.value) bulkAddToSet(e.target.value);
+                      }}
+                      className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Add to set…</option>
+                      {userSets.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                      <option value="__new__">+ New set…</option>
+                    </select>
+                  )
+                )}
+                <select
+                  value={bulkConfidenceLevel}
+                  onChange={(e) => { if (e.target.value) bulkUpdateConfidence(e.target.value); }}
+                  className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Change role…</option>
+                  {CONFIDENCE_LEVELS.map((l) => (
+                    <option
+                      key={l.key}
+                      value={l.key}
+                      disabled={l.key === "lead" && (!singingVoice || singingVoice === "none")}
+                    >
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+                {bulkRemoveConfirm ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-700">
+                      Remove {selectedIds.size} song{selectedIds.size === 1 ? "" : "s"}?
+                    </span>
+                    <button
+                      onClick={bulkRemove}
+                      className="rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setBulkRemoveConfirm(false)}
+                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-xs text-zinc-500 hover:bg-zinc-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setBulkRemoveConfirm(true)}
+                    className="rounded-xl border border-zinc-200 px-3 py-1.5 text-xs text-zinc-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {filtersOpen && (
             <FilterPanel
               filterOptions={filterOptions}
@@ -642,12 +898,34 @@ export default function RepertoirePage() {
             {sortedFiltered.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No matches.</div>
             ) : (
-              sortedFiltered.map((it) => (
+              <>
+                <div className="flex items-center gap-3 bg-zinc-50 px-4 py-2">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={sortedFiltered.length > 0 && sortedFiltered.every((it) => selectedIds.has(it.song_id))}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-amber-500"
+                    aria-label="Select all"
+                  />
+                  <span className="text-xs text-zinc-400">Select all</span>
+                </div>
+                {sortedFiltered.map((it) => (
                 <div
                   key={it.song_id}
-                  className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
+                  className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between transition-colors ${
+                    selectedIds.has(it.song_id) ? "bg-amber-50/60" : ""
+                  }`}
                 >
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(it.song_id)}
+                      onChange={() => toggleSelect(it.song_id)}
+                      className="mt-1 h-4 w-4 flex-shrink-0 cursor-pointer rounded border-zinc-300 accent-amber-500"
+                      aria-label={`Select ${it.title}`}
+                    />
+                    <div className="min-w-0">
                     <div className="truncate font-medium">
                       <Link href={`/songs/${it.slug ?? it.song_id}`} className="hover:text-amber-600">
                         {it.title}
@@ -666,6 +944,7 @@ export default function RepertoirePage() {
                     {(it.popularity ?? 0) > 0 && (
                       <div className="text-xs text-zinc-400">{it.popularity} {it.popularity === 1 ? "jammer" : "jammers"}</div>
                     )}
+                  </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -692,25 +971,59 @@ export default function RepertoirePage() {
 
                     {userSets.length > 0 && (
                       addToSetFor === it.song_id ? (
-                        <div className="flex items-center gap-1.5">
-                          <select
-                            className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
-                            defaultValue=""
-                            onChange={(e) => { if (e.target.value) addToSet(it.song_id, e.target.value); }}
-                          >
-                            <option value="" disabled>Pick a set…</option>
-                            {userSets.map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => setAddToSetFor(null)}
-                            className="text-zinc-400 hover:text-zinc-600 text-sm"
-                            aria-label="Cancel"
-                          >
-                            ✕
-                          </button>
-                        </div>
+                        newSetForSongId === it.song_id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={newSetName}
+                              onChange={(e) => setNewSetName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && newSetName.trim()) createSetAndAdd(newSetName.trim(), it.song_id);
+                                if (e.key === "Escape") { setNewSetForSongId(null); setNewSetName(""); }
+                              }}
+                              placeholder="Set name…"
+                              autoFocus
+                              className="w-28 rounded-xl border border-zinc-300 px-2 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => { if (newSetName.trim()) createSetAndAdd(newSetName.trim(), it.song_id); }}
+                              disabled={!newSetName.trim()}
+                              className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-40"
+                            >
+                              Create
+                            </button>
+                            <button
+                              onClick={() => { setNewSetForSongId(null); setNewSetName(""); }}
+                              className="text-zinc-400 hover:text-zinc-600 text-sm"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
+                              defaultValue=""
+                              onChange={(e) => {
+                                if (e.target.value === "__new__") setNewSetForSongId(it.song_id);
+                                else if (e.target.value) addToSet(it.song_id, e.target.value);
+                              }}
+                            >
+                              <option value="" disabled>Pick a set…</option>
+                              {userSets.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                              <option value="__new__">+ New set…</option>
+                            </select>
+                            <button
+                              onClick={() => { setAddToSetFor(null); setNewSetForSongId(null); setNewSetName(""); }}
+                              className="text-zinc-400 hover:text-zinc-600 text-sm"
+                              aria-label="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )
                       ) : addToSetStatus[it.song_id] ? (
                         <span className="text-xs text-green-600">{addToSetStatus[it.song_id]}</span>
                       ) : (
@@ -738,7 +1051,8 @@ export default function RepertoirePage() {
                     </button>
                   </div>
                 </div>
-              ))
+              ))}
+              </>
             )}
           </div>
         </>
