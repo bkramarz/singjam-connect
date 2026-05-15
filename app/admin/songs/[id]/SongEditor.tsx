@@ -73,7 +73,7 @@ type Song = {
   song_languages: { language_id: string }[];
   song_composers: { person_id: string }[];
   song_lyricists: { person_id: string }[];
-  song_recording_artists: { artist_id: string; year: number | null; position: number | null; youtube_url: string | null }[];
+  song_recording_artists: { artist_id: string; year: number | null; position: number | null; youtube_url: string | null; spotify_url: string | null }[];
   song_alternate_titles: AltTitle[];
   song_productions: { production_id: string }[];
 };
@@ -137,7 +137,7 @@ export default function SongEditor({
   const initialRecordingArtistEntries: RecordingArtistEntry[] = (song?.song_recording_artists ?? [])
     .slice()
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
-    .map((x) => ({ id: x.artist_id, year: x.year, youtube_url: x.youtube_url }));
+    .map((x) => ({ id: x.artist_id, year: x.year, youtube_url: x.youtube_url, spotify_url: x.spotify_url }));
   const seededRecordingArtistEntries: RecordingArtistEntry[] = initialRecordingArtistEntries.length
     ? initialRecordingArtistEntries
     : allArtists.filter((a) => a.name.toLowerCase() === (song?.display_artist ?? "").toLowerCase()).map((a) => ({ id: a.id, year: null, youtube_url: null }));
@@ -1520,6 +1520,9 @@ function RecordingArtistField({
   const [searchResults, setSearchResults] = useState<YtResult[]>([]);
   const [openResultsId, setOpenResultsId] = useState<string | null>(null);
   const [searchingSpotifyId, setSearchingSpotifyId] = useState<string | null>(null);
+  const [spotifyNotFoundIds, setSpotifyNotFoundIds] = useState<Set<string>>(new Set());
+  const [pasteSpotifyId, setPasteSpotifyId] = useState<string | null>(null);
+  const [pasteSpotifyValue, setPasteSpotifyValue] = useState("");
 
   function handleDragStart(i: number) { dragIndex.current = i; }
   function handleDrop(i: number) {
@@ -1547,12 +1550,18 @@ function RecordingArtistField({
 
   async function handleSpotifySearch(id: string, artistName: string) {
     setSearchingSpotifyId(id);
+    setSpotifyNotFoundIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
     try {
       const res = await fetch(
         `/api/admin/songs/spotify-search?title=${encodeURIComponent(songTitle)}&artist=${encodeURIComponent(artistName)}`
       );
       const data = await res.json();
-      onSpotifyUrlChange(id, data.spotify_url ?? null);
+      if (data.spotify_url) {
+        onSpotifyUrlChange(id, data.spotify_url);
+        setPasteSpotifyId(null);
+      } else {
+        setSpotifyNotFoundIds((prev) => new Set([...prev, id]));
+      }
     } finally {
       setSearchingSpotifyId(null);
     }
@@ -1591,18 +1600,49 @@ function RecordingArtistField({
                   placeholder="year"
                   className="w-16 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs focus:border-amber-400 focus:outline-none"
                 />
-                {e.spotify_url && (
-                  <a href={e.spotify_url} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-green-600 hover:text-green-700 shrink-0">🎵 linked</a>
+                {e.spotify_url ? (
+                  <>
+                    <a href={e.spotify_url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-green-600 hover:text-green-700 shrink-0">🎵 linked</a>
+                    <button
+                      type="button"
+                      onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
+                      disabled={isSearchingSpotify || !songTitle.trim()}
+                      title="Re-search Spotify"
+                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-400 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+                    >
+                      {isSearchingSpotify ? "…" : "↺"}
+                    </button>
+                  </>
+                ) : spotifyNotFoundIds.has(e.id) ? (
+                  <>
+                    <span className="text-xs text-slate-400 shrink-0">Not found</span>
+                    <button
+                      type="button"
+                      onClick={() => { setPasteSpotifyId(pasteSpotifyId === e.id ? null : e.id); setPasteSpotifyValue(""); }}
+                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600"
+                    >
+                      Paste URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
+                      disabled={isSearchingSpotify || !songTitle.trim()}
+                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+                    >
+                      {isSearchingSpotify ? "…" : "↺ Retry"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
+                    disabled={isSearchingSpotify || !songTitle.trim()}
+                    className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+                  >
+                    {isSearchingSpotify ? "…" : "🎵 Spotify"}
+                  </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
-                  disabled={isSearchingSpotify || !songTitle.trim()}
-                  className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
-                >
-                  {isSearchingSpotify ? "…" : "🎵 Spotify"}
-                </button>
                 {e.youtube_url && (
                   <a href={e.youtube_url} target="_blank" rel="noopener noreferrer"
                     className="text-xs text-green-600 hover:text-green-700 shrink-0">▶ linked</a>
@@ -1620,6 +1660,30 @@ function RecordingArtistField({
                 </button>
                 <button onClick={() => onRemove(e.id)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
               </div>
+              {pasteSpotifyId === e.id && (
+                <div className="ml-6 flex items-center gap-2 pt-1">
+                  <input
+                    autoFocus
+                    value={pasteSpotifyValue}
+                    onChange={(ev) => setPasteSpotifyValue(ev.target.value)}
+                    placeholder="https://open.spotify.com/track/…"
+                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:border-green-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={!pasteSpotifyValue.trim().startsWith("https://open.spotify.com/")}
+                    onClick={() => {
+                      onSpotifyUrlChange(e.id, pasteSpotifyValue.trim());
+                      setSpotifyNotFoundIds((prev) => { const next = new Set(prev); next.delete(e.id); return next; });
+                      setPasteSpotifyId(null);
+                      setPasteSpotifyValue("");
+                    }}
+                    className="shrink-0 rounded border border-green-400 bg-white px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
               {resultsOpen && searchResults.length > 0 && (
                 <div className="ml-6 space-y-0 rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
                   {searchResults.map((r) => (
