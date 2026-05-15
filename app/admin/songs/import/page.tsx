@@ -160,7 +160,7 @@ export default function ImportCSVPage() {
           setProgress(i + 1);
           continue;
         }
-        let slug = generateSlug(finalTitle, composerNames);
+        let slug = generateSlug(finalTitle, [...composerNames, ...lyricistNames]);
         const { data: slugConflict } = await supabase.from("songs").select("id").eq("slug", slug).maybeSingle();
         if (slugConflict) slug = `${slug}-${Date.now()}`;
 

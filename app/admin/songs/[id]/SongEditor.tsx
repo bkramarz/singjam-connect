@@ -398,7 +398,8 @@ export default function SongEditor({
 
       // Duplicate check
       const composerNamesForSlug = cIds.map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
-      const potentialSlug = generateSlug(canonicalTitle, [...composerNamesForSlug, ...cPending]);
+      const lyricistNamesForSlug = lIds.map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
+      const potentialSlug = generateSlug(canonicalTitle, [...composerNamesForSlug, ...cPending, ...lyricistNamesForSlug, ...lPending], ai.music_culture || undefined);
       const { data: existing } = await supabase
         .from("songs")
         .select("id, slug, title")
@@ -593,7 +594,11 @@ export default function SongEditor({
         ...[...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n),
         ...pendingComposerNames,
       ];
-      const resolvedSlug = slug.trim() || generateSlug(finalTitle, composerNamesForSlug, composerTraditionalCulture || undefined);
+      const lyricistNamesForSlug = [
+        ...[...lyricists].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n),
+        ...pendingLyricistNames,
+      ];
+      const resolvedSlug = slug.trim() || generateSlug(finalTitle, [...composerNamesForSlug, ...lyricistNamesForSlug], composerTraditionalCulture || undefined);
       const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
 
       const payload = {

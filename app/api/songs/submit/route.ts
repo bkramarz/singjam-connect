@@ -79,7 +79,7 @@ export async function POST(req: Request) {
   }
 
   // Ensure slug is unique
-  let slug = generateSlug(finalTitle, composerNames);
+  let slug = generateSlug(finalTitle, [...composerNames, ...lyricistNames]);
   const { data: slugConflict } = await db.from("songs").select("id").eq("slug", slug).maybeSingle();
   if (slugConflict) slug = `${slug}-${Date.now()}`;
 
