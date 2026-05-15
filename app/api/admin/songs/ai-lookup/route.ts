@@ -73,6 +73,7 @@ Given a song title and optional recording artist, research the song and return a
 - lyric_culture: For traditional songs, the cultural tradition the lyrics come from. Single value or null. Must be from the cultures list.
 - languages: Languages the song is sung in, as plain English names (e.g. "English", "French")
 - notes: A concise factual paragraph about the song's history, origin, or cultural significance. Null if nothing meaningful to add.
+- production: The show, film, or album the song originates from (e.g. "Hamilton", "The Lion King", "Abbey Road"). Null if not from a specific production. Single value only.
 - alternate_titles: Other titles the song is commonly known by
 - confidence: Your overall confidence in the data
 
@@ -105,6 +106,7 @@ Respond with valid JSON only:
   "lyric_culture": string | null,
   "languages": string[],
   "notes": string | null,
+  "production": string | null,
   "alternate_titles": string[],
   "confidence": "high" | "medium" | "low"
 }`;
@@ -164,7 +166,7 @@ export async function POST(req: Request) {
   const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
   if (!profile?.is_admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { title, artist = "" } = await req.json();
+  const { title, artist = "", production = "" } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "title is required" }, { status: 400 });
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -175,7 +177,7 @@ export async function POST(req: Request) {
       model: "gpt-4o",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Research this song and return accurate data.\n\nTitle: ${title.trim()}\nArtist: ${artist.trim() || "(unknown)"}` },
+        { role: "user", content: `Research this song and return accurate data.\n\nTitle: ${title.trim()}\nArtist: ${artist.trim() || "(unknown)"}${production.trim() ? `\nProduction: ${production.trim()}` : ""}` },
       ],
       response_format: { type: "json_object" },
       temperature: 0.1,
