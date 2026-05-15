@@ -306,21 +306,6 @@ async function enrichSpotify(title: string, artist: string) {
     (await trySearch(`track:${title}`));
   if (!track) return null;
 
-  // Fetch audio features for energy
-  const featRes = await fetch(
-    `https://api.spotify.com/v1/audio-features/${track.id}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  let energyRaw: number | undefined;
-  if (featRes.ok) {
-    const feat = await featRes.json();
-    // Spotify energy is 0.0–1.0, map to 1–5
-    if (typeof feat.energy === "number") {
-      energyRaw = Math.max(1, Math.min(5, Math.round(feat.energy * 5)));
-    }
-  }
-
   // Fetch artist genres
   const artistId = track.artists?.[0]?.id;
   let genres: string[] = [];
@@ -335,17 +320,9 @@ async function enrichSpotify(title: string, artist: string) {
     }
   }
 
-  // Spotify popularity is 0–100, map to 1–5
-  const popularity =
-    typeof track.popularity === "number"
-      ? Math.max(1, Math.min(5, Math.round(track.popularity / 20)))
-      : undefined;
-
   return {
     title: track.name as string,
     artist: (track.artists?.[0]?.name ?? "") as string,
-    popularity,
-    energy: energyRaw,
     genres,
   };
 }
@@ -432,7 +409,7 @@ async function scrapeGeniusLyrics(url: string): Promise<{ first_line?: string; h
   }
 }
 
-async function enrichGenius(title: string, artist: string) {
+async function enrichGenius(title: string, artist: string, scrape = true) {
   const token = process.env.GENIUS_ACCESS_TOKEN;
   if (!token) return null;
 
@@ -446,6 +423,8 @@ async function enrichGenius(title: string, artist: string) {
   const data = await res.json();
   const hit = data.response?.hits?.[0]?.result;
   if (!hit) return null;
+
+  if (!scrape) return { lyrics_url: hit.url as string };
 
   const { first_line, hook } = await scrapeGeniusLyrics(hit.url as string);
 
@@ -485,7 +464,7 @@ export async function GET(req: NextRequest) {
   // import mode: MusicBrainz + Genius + Spotify + Last.fm (skip SHS, Wikidata)
   if (mode === "import") {
     const [genius, spotify, lastfm] = await Promise.allSettled([
-      enrichGenius(canonicalTitle, canonicalArtist),
+      enrichGenius(canonicalTitle, canonicalArtist, false),
       enrichSpotify(canonicalTitle, canonicalArtist),
       enrichLastFm(canonicalTitle, canonicalArtist),
     ]);

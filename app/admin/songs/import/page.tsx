@@ -119,15 +119,15 @@ export default function ImportCSVPage() {
       setResults([...current]);
 
       try {
-        // Skip if already in DB
-        const { data: existing } = await supabase
-          .from("songs")
-          .select("id")
-          .ilike("title", title)
-          .limit(1)
-          .maybeSingle();
+        // Fast pre-check on raw input — avoids enrichment cost for obvious duplicates
+        const rawNormArtist = artist?.trim() ?? "";
+        let preQuery = supabase.from("songs").select("id").ilike("title", title);
+        preQuery = rawNormArtist
+          ? preQuery.ilike("display_artist", rawNormArtist)
+          : preQuery.is("display_artist", null);
+        const { data: preExisting } = await preQuery.limit(1).maybeSingle();
 
-        if (existing) {
+        if (preExisting) {
           current[i] = { status: "skipped", reason: "Already in database" };
           setResults([...current]);
           setProgress(i + 1);
@@ -152,6 +152,21 @@ export default function ImportCSVPage() {
 
         // Primary display_artist: first topArtist name, or passed-in artist
         const primaryArtistName = mb?.display_artist ?? artist ?? null;
+
+        // Post-enrichment check using canonical values from MusicBrainz
+        const canonNormArtist = primaryArtistName ?? "";
+        let postQuery = supabase.from("songs").select("id").ilike("title", finalTitle);
+        postQuery = canonNormArtist
+          ? postQuery.ilike("display_artist", canonNormArtist)
+          : postQuery.is("display_artist", null);
+        const { data: postExisting } = await postQuery.limit(1).maybeSingle();
+
+        if (postExisting) {
+          current[i] = { status: "skipped", reason: "Already in database" };
+          setResults([...current]);
+          setProgress(i + 1);
+          continue;
+        }
         const slug = generateSlug(finalTitle, composerNames);
 
         // Create song

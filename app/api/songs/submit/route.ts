@@ -54,19 +54,7 @@ export async function POST(req: Request) {
 
   const db = admin();
 
-  // Duplicate check
-  const { data: existing } = await db
-    .from("songs")
-    .select("id, slug")
-    .ilike("title", title.trim())
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    return NextResponse.json({ error: "This song is already in our library.", id: existing.id, slug: existing.slug }, { status: 409 });
-  }
-
-  // Enrich
+  // Enrich first so the duplicate check uses canonical title/artist from MusicBrainz
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const enrichRes = await fetch(
     `${baseUrl}/api/enrich?title=${encodeURIComponent(title.trim())}&artist=${encodeURIComponent(artist?.trim() ?? "")}&mode=import`
@@ -84,6 +72,18 @@ export async function POST(req: Request) {
   const primaryYear: number | null = mb?.year ?? null;
   const langCodes: string[] = mb?.languages ?? [];
   const primaryArtistName: string | null = mb?.display_artist ?? artist?.trim() ?? null;
+
+  // Duplicate check using canonical values
+  const normArtist = primaryArtistName ?? "";
+  let dupeQuery = db.from("songs").select("id, slug").ilike("title", finalTitle);
+  dupeQuery = normArtist
+    ? dupeQuery.ilike("display_artist", normArtist)
+    : dupeQuery.is("display_artist", null);
+  const { data: existing } = await dupeQuery.limit(1).maybeSingle();
+
+  if (existing) {
+    return NextResponse.json({ error: "This song is already in our library.", id: existing.id, slug: existing.slug }, { status: 409 });
+  }
 
   // Ensure slug is unique
   let slug = generateSlug(finalTitle, composerNames);

@@ -269,10 +269,12 @@ export default function SongEditor({
   const [found, setFound] = useState(false);
   const [standardizedTitle, setStandardizedTitle] = useState("");
   const [standardizedArtist, setStandardizedArtist] = useState("");
+  const [newSongProduction, setNewSongProduction] = useState("");
   const [newComposerName, setNewComposerName] = useState("");
   const [newLyricistName, setNewLyricistName] = useState("");
   const [newRecordingArtistName, setNewRecordingArtistName] = useState("");
   const [pendingRecordingArtists, setPendingRecordingArtists] = useState<{ name: string; year: number | null; spotify_url: string | null }[]>([]);
+  const [pendingAltTitles, setPendingAltTitles] = useState<string[]>([]);
   const [primaryArtist, setPrimaryArtist] = useState<{ name: string; year: number | null } | null>(null);
   const [pendingComposerNames, setPendingComposerNames] = useState<string[]>([]);
   const [pendingLyricistNames, setPendingLyricistNames] = useState<string[]>([]);
@@ -337,7 +339,7 @@ export default function SongEditor({
       const res = await fetch("/api/admin/songs/ai-lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), artist: displayArtist.trim() }),
+        body: JSON.stringify({ title: title.trim(), artist: displayArtist.trim(), production: newSongProduction.trim() }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { ai, genius_url } = await res.json();
@@ -355,6 +357,15 @@ export default function SongEditor({
       if (ai.hook) setHook(ai.hook);
       if (ai.notes) setNotes(ai.notes);
       if (genius_url) setGeniusUrl(genius_url);
+      if (ai.production) {
+        setIsFromProduction(true);
+        const existingProd = allProductions.find((p) => p.name.toLowerCase() === (ai.production as string).toLowerCase());
+        if (existingProd) {
+          setProductions(new Set([existingProd.id]));
+        } else {
+          setPendingProductionNames([ai.production as string]);
+        }
+      }
       if (ai.tonality && TONALITY_OPTIONS.includes(ai.tonality)) setTonalities([ai.tonality]);
       if (ai.meter && METER_OPTIONS.includes(ai.meter)) setMeters([ai.meter]);
       if (ai.vibe === "Banger" || ai.vibe === "Ballad") setVibe(ai.vibe);
@@ -390,6 +401,9 @@ export default function SongEditor({
       setRecordingArtists(existingRAEntries);
       setPendingRecordingArtists(pendingRAEntries);
       if (aiArtists[0]) setPrimaryArtist({ name: aiArtists[0].artist, year: aiArtists[0].year });
+
+      // Alternate titles
+      if (ai.alternate_titles?.length) setPendingAltTitles(ai.alternate_titles);
 
       // Duplicate check
       const composerNamesForSlug = cIds.map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
@@ -608,6 +622,19 @@ export default function SongEditor({
       let songId = song?.id;
 
       if (isNew) {
+        // Duplicate check before inserting
+        const artistVal = payload.display_artist;
+        let dupeQuery = supabase.from("songs").select("id, slug").ilike("title", finalTitle);
+        dupeQuery = artistVal
+          ? dupeQuery.ilike("display_artist", artistVal)
+          : dupeQuery.is("display_artist", null);
+        const { data: dupe } = await dupeQuery.limit(1).maybeSingle();
+        if (dupe) {
+          setError(`This song already exists in the library.`);
+          setSaving(false);
+          return;
+        }
+
         const { data, error } = await supabase.from("songs").insert(payload).select("id").single();
         if (error) throw error;
         songId = data.id;
@@ -734,6 +761,20 @@ export default function SongEditor({
       const originalProductionIds = (song?.song_productions ?? []).map((x) => x.production_id);
       await syncJoinTable(songId!, "song_productions", "production_id", resolvedProductionIds, originalProductionIds);
 
+      // Insert pending alternate titles (new-song flow only)
+      if (pendingAltTitles.length) {
+        const existingTitleSet = new Set(altTitles.map((t) => t.title.toLowerCase()));
+        const newTitles = pendingAltTitles.filter((t) => !existingTitleSet.has(t.toLowerCase()));
+        if (newTitles.length) {
+          const { data: inserted } = await supabase
+            .from("song_alternate_titles")
+            .insert(newTitles.map((t) => ({ song_id: songId!, title: t })))
+            .select("id, title");
+          if (inserted) setAltTitles((prev) => [...prev, ...inserted]);
+        }
+        setPendingAltTitles([]);
+      }
+
       setSlug(resolvedSlug);
       router.push(`/admin/songs/${resolvedSlug}`);
       router.refresh();
@@ -781,7 +822,7 @@ export default function SongEditor({
         )}
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Title *">
               <input value={title} onChange={(e) => setTitle(e.target.value)}
                 className="input" placeholder="Song title" />
@@ -789,6 +830,10 @@ export default function SongEditor({
             <Field label="Artist">
               <input value={displayArtist} onChange={(e) => setDisplayArtist(e.target.value)}
                 className="input" placeholder="e.g. The Beatles" />
+            </Field>
+            <Field label="Show / film (optional)">
+              <input value={newSongProduction} onChange={(e) => setNewSongProduction(e.target.value)}
+                className="input" placeholder="e.g. Hamilton, The Lion King" />
             </Field>
           </div>
           <button
@@ -863,6 +908,34 @@ export default function SongEditor({
                   pendingItems={pendingRecordingArtists}
                   onRemovePending={(name) => setPendingRecordingArtists((prev) => prev.filter((r) => r.name !== name))}
                 />
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isFromProduction}
+                      onChange={(e) => {
+                        setIsFromProduction(e.target.checked);
+                        if (!e.target.checked) { setProductions(new Set()); setPendingProductionNames([]); setProductionQuery(""); }
+                      }}
+                      className="rounded border-slate-300"
+                    />
+                    From theater, film, or TV?
+                  </label>
+                  {isFromProduction && (
+                    <PeopleField
+                      label="Production"
+                      items={[...productions].map((id) => allProductions.find((p) => p.id === id)).filter((p): p is Lookup => !!p)}
+                      query={productionQuery}
+                      onQueryChange={setProductionQuery}
+                      suggestions={allProductions.filter((p) => p.name.toLowerCase().includes(productionQuery.toLowerCase()) && !productions.has(p.id))}
+                      onAdd={(p) => { setProductions((prev) => new Set([...prev, p.id])); setProductionQuery(""); }}
+                      onRemove={(id) => setProductions((prev) => { const s = new Set(prev); s.delete(id); return s; })}
+                      onAddNew={(name) => { setPendingProductionNames((prev) => [...prev, name]); setProductionQuery(""); }}
+                      pendingItems={pendingProductionNames}
+                      onRemovePending={(name) => setPendingProductionNames((prev) => prev.filter((n) => n !== name))}
+                    />
+                  )}
+                </div>
               </section>
 
               {/* Lyrics & feel */}
@@ -922,6 +995,19 @@ export default function SongEditor({
                 <TagPillsField label="Genres" value={genres} suggestions={allGenres.map((g) => g.name)} onChange={setGenres} />
                 <TagPillsField label="Languages" value={languages} suggestions={allLanguages.map((l) => l.name)} onChange={setLanguages} />
                 <TagPillsField label="Themes" value={themes} suggestions={allThemes.map((t) => t.name)} onChange={setThemes} />
+                {pendingAltTitles.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Alternate titles</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {pendingAltTitles.map((t) => (
+                        <span key={t} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs text-slate-700">
+                          {t}
+                          <button type="button" onClick={() => setPendingAltTitles((prev) => prev.filter((x) => x !== t))} className="text-slate-400 hover:text-slate-600 leading-none">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             </>
           );
