@@ -4,6 +4,7 @@ type FilterOptions = {
   genres: string[];
   languages: string[];
   themes: string[];
+  cultures: string[];
   vibes: string[];
   tonalities: string[];
   meters: string[];
@@ -14,32 +15,46 @@ export function FilterPanel({
   selectedGenres,
   selectedLanguages,
   selectedThemes,
+  selectedCultures,
   selectedVibe,
   setSelectedVibe,
   selectedTonality,
   setSelectedTonality,
   selectedMeter,
   setSelectedMeter,
+  yearMin,
+  setYearMin,
+  yearMax,
+  setYearMax,
+  yearBounds,
   activeFilterCount,
   toggleGenre,
   toggleLanguage,
   toggleTheme,
+  toggleCulture,
   clearFilters,
 }: {
   filterOptions: FilterOptions;
   selectedGenres: Set<string>;
   selectedLanguages: Set<string>;
   selectedThemes: Set<string>;
+  selectedCultures: Set<string>;
   selectedVibe: string;
   setSelectedVibe: (v: string) => void;
   selectedTonality: string;
   setSelectedTonality: (v: string) => void;
   selectedMeter: string;
   setSelectedMeter: (v: string) => void;
+  yearMin: string;
+  setYearMin: (v: string) => void;
+  yearMax: string;
+  setYearMax: (v: string) => void;
+  yearBounds: { min: number; max: number } | null;
   activeFilterCount: number;
   toggleGenre: (g: string) => void;
   toggleLanguage: (l: string) => void;
   toggleTheme: (t: string) => void;
+  toggleCulture: (c: string) => void;
   clearFilters: () => void;
 }) {
   return (
@@ -59,6 +74,27 @@ export function FilterPanel({
                 }`}
               >
                 {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {filterOptions.cultures.length > 0 && (
+        <div>
+          <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Culture</div>
+          <div className="flex flex-wrap gap-1.5">
+            {filterOptions.cultures.map((c) => (
+              <button
+                key={c}
+                onClick={() => toggleCulture(c)}
+                className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                  selectedCultures.has(c)
+                    ? "border-amber-400 bg-amber-50 text-amber-700"
+                    : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                }`}
+              >
+                {c}
               </button>
             ))}
           </div>
@@ -155,6 +191,27 @@ export function FilterPanel({
             </select>
           </div>
         )}
+
+        <div className="flex-1 min-w-[180px]">
+          <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Year</label>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              value={yearMin}
+              onChange={(e) => setYearMin(e.target.value)}
+              placeholder={yearBounds ? String(yearBounds.min) : "From"}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <span className="text-xs text-zinc-400 shrink-0">–</span>
+            <input
+              type="number"
+              value={yearMax}
+              onChange={(e) => setYearMax(e.target.value)}
+              placeholder={yearBounds ? String(yearBounds.max) : "To"}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </div>
+        </div>
       </div>
 
       {activeFilterCount > 0 && (

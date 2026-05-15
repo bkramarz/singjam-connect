@@ -45,6 +45,7 @@ type Item = {
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
+  year: number | null;
   popularity?: number;
 };
 
@@ -59,8 +60,14 @@ export default function RepertoirePage() {
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
 
   const [items, setItems] = useState<Item[]>([]);
-  const [query, setQuery] = useState("");
-  const [confidenceFilter, setConfidenceFilter] = useState<string>("all");
+  const [query, setQuery] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("q") ?? "";
+  });
+  const [confidenceFilter, setConfidenceFilter] = useState<string>(() => {
+    if (typeof window === "undefined") return "all";
+    return new URLSearchParams(window.location.search).get("role") ?? "all";
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
@@ -73,12 +80,15 @@ export default function RepertoirePage() {
 
   const {
     filterOptions, matchesFilters,
-    selectedGenres, selectedLanguages, selectedThemes,
+    selectedGenres, selectedLanguages, selectedThemes, selectedCultures,
     selectedVibe, setSelectedVibe,
     selectedTonality, setSelectedTonality,
     selectedMeter, setSelectedMeter,
+    yearMin, setYearMin,
+    yearMax, setYearMax,
+    yearBounds,
     activeFilterCount,
-    toggleGenre, toggleLanguage, toggleTheme, clearFilters,
+    toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
   } = useSongFilters(items, "title_asc");
 
@@ -123,13 +133,15 @@ export default function RepertoirePage() {
                   vibe,
                   tonality,
                   meter,
+                  year_written,
                   song_composers ( people ( name ) ),
                   song_lyricists ( people ( name ) ),
                   song_cultures ( cultures ( name ) ),
                   song_productions ( productions ( name ) ),
                   song_genres ( genres ( name ) ),
                   song_languages ( languages ( name ) ),
-                  song_themes ( themes ( name ) )
+                  song_themes ( themes ( name ) ),
+                  song_recording_artists ( year )
                 )
               `
               )
@@ -184,6 +196,16 @@ export default function RepertoirePage() {
               vibe: r.songs.vibe ?? null,
               tonality: r.songs.tonality ?? null,
               meter: r.songs.meter ?? null,
+              year: (() => {
+                const recordings = (r.songs.song_recording_artists ?? []) as any[];
+                const firstRecording = recordings
+                  .map((rec: any) => rec.year as number)
+                  .filter((y): y is number => typeof y === "number")
+                  .sort((a, b) => a - b)[0] ?? null;
+                const yearWritten = (r.songs.year_written ?? null) as number | null;
+                if (yearWritten && firstRecording) return Math.min(yearWritten, firstRecording);
+                return yearWritten ?? firstRecording ?? null;
+              })(),
               composers: [...names].sort(),
               cultures: (r.songs.song_cultures ?? []).map((c: any) => c.cultures?.name).filter(Boolean),
               productions: (r.songs.song_productions ?? []).map((p: any) => p.productions?.name).filter(Boolean),
@@ -207,6 +229,14 @@ export default function RepertoirePage() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (query) { params.set("q", query); } else { params.delete("q"); }
+    if (confidenceFilter !== "all") { params.set("role", confidenceFilter); } else { params.delete("role"); }
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [query, confidenceFilter]);
 
   const repertoireMap = useMemo(() => new Map(items.map((it) => [it.song_id, it])), [items]);
   const searching = query.trim().length > 0;
@@ -289,6 +319,7 @@ export default function RepertoirePage() {
           vibe: null,
           tonality: null,
           meter: null,
+          year: null,
         };
         return [...prev, newItem].sort((a, b) => a.title.localeCompare(b.title));
       });
@@ -586,16 +617,23 @@ export default function RepertoirePage() {
               selectedGenres={selectedGenres}
               selectedLanguages={selectedLanguages}
               selectedThemes={selectedThemes}
+              selectedCultures={selectedCultures}
               selectedVibe={selectedVibe}
               setSelectedVibe={setSelectedVibe}
               selectedTonality={selectedTonality}
               setSelectedTonality={setSelectedTonality}
               selectedMeter={selectedMeter}
               setSelectedMeter={setSelectedMeter}
+              yearMin={yearMin}
+              setYearMin={setYearMin}
+              yearMax={yearMax}
+              setYearMax={setYearMax}
+              yearBounds={yearBounds}
               activeFilterCount={activeFilterCount}
               toggleGenre={toggleGenre}
               toggleLanguage={toggleLanguage}
               toggleTheme={toggleTheme}
+              toggleCulture={toggleCulture}
               clearFilters={clearFilters}
             />
           )}
