@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import RepertoireButton from "@/components/RepertoireButton";
@@ -44,6 +44,7 @@ type SongData = {
 export default function SongPageContent() {
   const params = useParams();
   const slug = params.slug as string;
+  const router = useRouter();
   const [data, setData] = useState<SongData | null>(null);
   const [notFound, setNotFound] = useState(false);
   const supabase = supabaseBrowser();
@@ -55,9 +56,7 @@ export default function SongPageContent() {
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
 
-      const [{ data: { user } }, songRes] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from("songs").select(`
+      const songQuery = supabase.from("songs").select(`
           id, title, slug, display_artist, first_line, hook, notes, genius_url, chord_chart_url, youtube_url, year, year_written, tonality, meter, vibe,
           song_composers(people(name)),
           song_lyricists(people(name)),
@@ -68,10 +67,17 @@ export default function SongPageContent() {
           song_cultures(context, cultures(name)),
           song_languages(languages(name)),
           song_productions(productions(name))
-        `).eq(isUuid ? "id" : "slug", slug).single(),
+        `);
+      const [{ data: { user } }, songRes] = await Promise.all([
+        supabase.auth.getUser(),
+        (isUuid ? songQuery.eq("id", slug) : songQuery.or(`slug.eq.${slug},former_slug.eq.${slug}`)).single(),
       ]);
 
       if (!songRes.data) { setNotFound(true); return; }
+
+      if (!isUuid && songRes.data.slug !== slug) {
+        router.replace(`/songs/${songRes.data.slug}`);
+      }
 
       const song = songRes.data;
 

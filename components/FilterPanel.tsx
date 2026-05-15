@@ -80,6 +80,77 @@ export function FilterPanel({
         </div>
       )}
 
+      <div className="flex flex-wrap gap-3">
+        <div className="flex-1 min-w-[180px]">
+          <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Year</label>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              value={yearMin}
+              onChange={(e) => setYearMin(e.target.value)}
+              placeholder={yearBounds ? String(yearBounds.min) : "From"}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <span className="text-xs text-zinc-400 shrink-0">–</span>
+            <input
+              type="number"
+              value={yearMax}
+              onChange={(e) => setYearMax(e.target.value)}
+              placeholder={String(new Date().getFullYear())}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </div>
+        </div>
+
+        {filterOptions.vibes.length > 0 && (
+          <div className="flex-1 min-w-[120px]">
+            <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Vibe</label>
+            <select
+              value={selectedVibe}
+              onChange={(e) => setSelectedVibe(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Any</option>
+              {filterOptions.vibes.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {filterOptions.tonalities.length > 0 && (
+          <div className="flex-1 min-w-[120px]">
+            <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Tonality</label>
+            <select
+              value={selectedTonality}
+              onChange={(e) => setSelectedTonality(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Any</option>
+              {filterOptions.tonalities.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {filterOptions.meters.length > 0 && (
+          <div className="flex-1 min-w-[120px]">
+            <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Meter</label>
+            <select
+              value={selectedMeter}
+              onChange={(e) => setSelectedMeter(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Any</option>
+              {filterOptions.meters.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       {filterOptions.cultures.length > 0 && (
         <div>
           <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Culture</div>
@@ -142,77 +213,6 @@ export function FilterPanel({
           </div>
         </div>
       )}
-
-      <div className="flex flex-wrap gap-3">
-        {filterOptions.vibes.length > 0 && (
-          <div className="flex-1 min-w-[120px]">
-            <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Vibe</label>
-            <select
-              value={selectedVibe}
-              onChange={(e) => setSelectedVibe(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Any</option>
-              {filterOptions.vibes.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {filterOptions.tonalities.length > 0 && (
-          <div className="flex-1 min-w-[120px]">
-            <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Tonality</label>
-            <select
-              value={selectedTonality}
-              onChange={(e) => setSelectedTonality(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Any</option>
-              {filterOptions.tonalities.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {filterOptions.meters.length > 0 && (
-          <div className="flex-1 min-w-[120px]">
-            <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Meter</label>
-            <select
-              value={selectedMeter}
-              onChange={(e) => setSelectedMeter(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Any</option>
-              {filterOptions.meters.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="flex-1 min-w-[180px]">
-          <label className="mb-1 block text-xs font-medium text-zinc-500 uppercase tracking-wide">Year</label>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number"
-              value={yearMin}
-              onChange={(e) => setYearMin(e.target.value)}
-              placeholder={yearBounds ? String(yearBounds.min) : "From"}
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <span className="text-xs text-zinc-400 shrink-0">–</span>
-            <input
-              type="number"
-              value={yearMax}
-              onChange={(e) => setYearMax(e.target.value)}
-              placeholder={yearBounds ? String(yearBounds.max) : "To"}
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-          </div>
-        </div>
-      </div>
 
       {activeFilterCount > 0 && (
         <button
