@@ -52,7 +52,10 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const [q, setQ] = useState(initialQuery);
+  const [q, setQ] = useState(() => {
+    if (typeof window === "undefined") return initialQuery;
+    return new URLSearchParams(window.location.search).get("q") ?? initialQuery;
+  });
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
@@ -65,12 +68,15 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
 
   const {
     filterOptions, matchesFilters,
-    selectedGenres, selectedLanguages, selectedThemes,
+    selectedGenres, selectedLanguages, selectedThemes, selectedCultures,
     selectedVibe, setSelectedVibe,
     selectedTonality, setSelectedTonality,
     selectedMeter, setSelectedMeter,
+    yearMin, setYearMin,
+    yearMax, setYearMax,
+    yearBounds,
     activeFilterCount,
-    toggleGenre, toggleLanguage, toggleTheme, clearFilters,
+    toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
   } = useSongFilters(popularSongs, "popularity");
 
@@ -214,6 +220,17 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     return () => observer.disconnect();
   }, [sortedBrowse.length]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (q) {
+      params.set("q", q);
+    } else {
+      params.delete("q");
+    }
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [q]);
+
   async function handlePendingAdd(songId: string, slug?: string | null) {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -306,16 +323,23 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             selectedGenres={selectedGenres}
             selectedLanguages={selectedLanguages}
             selectedThemes={selectedThemes}
+            selectedCultures={selectedCultures}
             selectedVibe={selectedVibe}
             setSelectedVibe={setSelectedVibe}
             selectedTonality={selectedTonality}
             setSelectedTonality={setSelectedTonality}
             selectedMeter={selectedMeter}
             setSelectedMeter={setSelectedMeter}
+            yearMin={yearMin}
+            setYearMin={setYearMin}
+            yearMax={yearMax}
+            setYearMax={setYearMax}
+            yearBounds={yearBounds}
             activeFilterCount={activeFilterCount}
             toggleGenre={toggleGenre}
             toggleLanguage={toggleLanguage}
             toggleTheme={toggleTheme}
+            toggleCulture={toggleCulture}
             clearFilters={clearFilters}
           />
         )}

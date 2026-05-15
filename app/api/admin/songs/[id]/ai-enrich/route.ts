@@ -11,18 +11,14 @@ const VALID_TONALITIES = [
 const VALID_METERS = ["4", "3", "5", "7", "9", "11", "Free", "Irregular"];
 
 const VALID_GENRES = [
-  "Acoustic", "Afrobeats", "Afropop", "Alternative", "Ambient", "Americana", "Art Rock",
-  "Bluegrass", "Blues", "Bossa Nova", "Cabaret", "Cajun", "Celtic", "Chanson", "Children's",
-  "Classical", "Contemporary Christian", "Country", "Country Rock", "Dance",
-  "Disco", "Doo-Wop", "Dream Pop", "Drum and Bass", "Electronic", "Emo", "Experimental",
-  "Flamenco", "Folk", "Folk Rock", "Funk", "Gospel", "Glam Rock", "Grunge", "Hard Rock",
-  "Hip-Hop/Rap", "Holiday", "House", "Hymns", "Indie", "Jazz", "Klezmer",
-  "Latin", "Metal", "Motown", "Musical Theatre", "New Age", "New Wave", "Opera",
-  "Outlaw Country", "Pop", "Post-Punk", "Post-Rock", "Progressive Rock", "Psychedelic Rock",
-  "Punk", "R&B", "Reggae", "Rockabilly", "Rock", "Roots Rock", "Salsa", "Shanties",
-  "Shoegaze", "Singer-Songwriter", "Ska", "Soul", "Spiritual", "Surf Rock", "Synthpop",
-  "Tango", "Techno", "Traditional", "Trance", "Trap", "Western Swing", "Work Songs",
-  "World", "Worship", "Zydeco",
+  "Afropop", "Alternative Rock", "Americana", "Bluegrass", "Blues", "Bossa Nova",
+  "Cajun", "Calypso", "Celtic", "Child Ballad", "Children's Music", "Classic Rock",
+  "Contemporary Christian", "Country", "Disco", "Doo-Wop", "Emo", "Flamenco",
+  "Folk", "Folk Rock", "Funk", "Gospel", "Grunge", "Hard Rock", "Hip-Hop & Rap",
+  "Holiday", "Hymns", "Indie Rock", "Jam Band", "Jazz", "Klezmer", "Latin",
+  "Lullaby", "Metal", "Motown", "Musical", "New Wave", "Pop", "Progressive Rock",
+  "Psychedelic Rock", "Punk", "R&B", "Reggae", "Rock", "Rockabilly", "Roots Rock",
+  "Salsa", "Sea Shanties", "Ska", "Soft Rock", "Soul", "Spiritual", "Zydeco",
 ];
 
 const VALID_THEMES = [
@@ -37,7 +33,7 @@ const VALID_THEMES = [
 ];
 
 const VALID_CULTURES = [
-  "American", "Appalachian", "Arab", "Argentine", "Australian", "Belgian", "Brazilian", "Cajun", "Cambodian", "Chilean", "Chinese",
+  "American", "Arab", "Argentine", "Australian", "Belgian", "Brazilian", "Cajun", "Cambodian", "Chilean", "Chinese",
   "Colombian", "Creole", "Cuban", "Czech", "Danish", "Dutch", "East African", "Egyptian", "English",
   "Ethiopian", "Filipino", "Finnish", "First Nations/Native American", "French", "German", "Ghanaian", "Greek",
   "Haitian", "Hawaiian", "Hungarian", "Indian", "Indonesian", "Irish", "Israeli", "Italian",
@@ -80,6 +76,7 @@ Rules:
 - For traditional or folk songs, use ["Traditional"] for both composers and lyricists.
 - Return the full suggested list even if some names are already correct.
 - Only use values from the provided lists for tonality, meter, vibe, genres, themes, and cultures. Do not invent new values.
+- For genres specifically: choose the closest match from the list. Never invent a value outside it — return an empty array rather than approximate.
 - Never use "British" for any culture field — use "English", "Scottish", "Welsh", or "Irish" as appropriate.
 - Set confidence to "high" only when you are certain. Use "medium" or "low" otherwise.
 
