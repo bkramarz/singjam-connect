@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { generateSlug } from "@/lib/generateSlug";
 
 type Lookup = { id: string; name: string };
 type AltTitle = { id: string; title: string };
@@ -40,16 +41,6 @@ const TONALITY_OPTIONS = [
 
 const METER_OPTIONS = ["4", "3", "5", "7", "9", "11", "Free", "Irregular"];
 
-function generateSlug(title: string, composerNames: string[], culture?: string): string {
-  const parts = [title, ...composerNames];
-  if (culture) parts.push(culture);
-  return parts
-    .join(" ")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
 
 type Song = {
   id: string;
@@ -598,8 +589,11 @@ export default function SongEditor({
 
     try {
       const finalTitle = (standardizedTitle || title).trim();
-      const composerNamesForSlug = [...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n);
-      const resolvedSlug = slug.trim() || generateSlug(finalTitle, composerNamesForSlug);
+      const composerNamesForSlug = [
+        ...[...composers].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n),
+        ...pendingComposerNames,
+      ];
+      const resolvedSlug = slug.trim() || generateSlug(finalTitle, composerNamesForSlug, composerTraditionalCulture || undefined);
       const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
 
       const payload = {

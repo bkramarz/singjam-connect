@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { generateSlug } from "@/lib/generateSlug";
 
 type ParsedRow = { title: string; artist: string };
 
@@ -24,14 +25,6 @@ const LANG_CODE_MAP: Record<string, string> = {
   tur: "Turkish", vie: "Vietnamese", tha: "Thai", ind: "Indonesian",
 };
 
-function generateSlug(title: string, composerNames: string[]): string {
-  return [title, ...composerNames]
-    .join(" ")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
 
 function parseCSV(text: string): ParsedRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -167,7 +160,9 @@ export default function ImportCSVPage() {
           setProgress(i + 1);
           continue;
         }
-        const slug = generateSlug(finalTitle, composerNames);
+        let slug = generateSlug(finalTitle, composerNames);
+        const { data: slugConflict } = await supabase.from("songs").select("id").eq("slug", slug).maybeSingle();
+        if (slugConflict) slug = `${slug}-${Date.now()}`;
 
         // Create song
         const { data: song, error: songErr } = await supabase

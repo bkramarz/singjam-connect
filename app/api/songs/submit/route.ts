@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
+import { generateSlug } from "@/lib/generateSlug";
 
 const LANG_CODE_MAP: Record<string, string> = {
   eng: "English", fra: "French", spa: "Spanish", deu: "German",
@@ -11,14 +12,6 @@ const LANG_CODE_MAP: Record<string, string> = {
   tur: "Turkish", vie: "Vietnamese", tha: "Thai", ind: "Indonesian",
 };
 
-function generateSlug(title: string, composerNames: string[]): string {
-  return [title, ...composerNames]
-    .join(" ")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
 
 function admin() {
   return createClient(
