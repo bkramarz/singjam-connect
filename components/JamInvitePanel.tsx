@@ -58,7 +58,9 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
     const body = await res.json();
     if (res.ok) {
       setSent((prev) => new Set([...prev, userId]));
-      setFeedback({ id: userId, msg: "Invite sent!", ok: true });
+      setQuery("");
+      setResults([]);
+      setFeedback({ id: "search", msg: "Invite sent!", ok: true });
       router.refresh();
     } else {
       setFeedback({ id: userId, msg: body.error ?? "Failed to send invite", ok: false });
