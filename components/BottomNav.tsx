@@ -92,7 +92,7 @@ export default function BottomNav() {
           </Link>
         ) : (
           <Link
-            href="/auth"
+            href={pathname === "/" ? "/auth" : `/auth?next=${encodeURIComponent(pathname)}`}
             className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-2.5"
           >
             <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

@@ -381,7 +381,7 @@ export default function AccountPanel() {
         }),
       }).catch(() => {});
     }
-    if (!error) router.push(next ?? "/repertoire");
+    if (!error) router.push(next ?? "/profile");
     else setStatus(error.message);
   }
 

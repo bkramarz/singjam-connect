@@ -51,6 +51,20 @@ export async function POST(
     return NextResponse.json({ ok: true, alreadyOwner: true });
   }
 
+  const { data: existingCollabs } = await admin
+    .from("set_collaborators")
+    .select("id")
+    .eq("set_id", setId)
+    .eq("user_id", user.id)
+    .eq("status", "accepted")
+    .limit(1);
+
+  if (existingCollabs && existingCollabs.length > 0) {
+    // Delete the stale unclaimed invite so it can't be used again
+    await admin.from("set_collaborators").delete().eq("id", (invite as any).id);
+    return NextResponse.json({ ok: true, alreadyCollaborator: true });
+  }
+
   await admin
     .from("set_collaborators")
     .update({ user_id: user.id, status: "accepted" })
