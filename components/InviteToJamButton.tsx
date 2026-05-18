@@ -125,7 +125,7 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
       )}
 
       {open && (
-        <div className="absolute left-0 bottom-0 z-20 w-64 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+        <div className="absolute right-0 bottom-full mb-1 z-20 w-64 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
           {jams === null ? (
             <p className="px-4 py-3 text-sm text-zinc-400">Loading…</p>
           ) : jams.length === 0 ? (

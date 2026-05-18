@@ -10,6 +10,23 @@ import FocalPointPicker from "./FocalPointPicker";
 
 type LookupItem = { id: string; name: string };
 
+export type NewJamInitialData = {
+  visibility: "community" | "private" | "official";
+  name: string;
+  notes: string;
+  fullAddress: string;
+  neighborhood: string;
+  capacity: string;
+  guestsCanInvite: boolean;
+  ticketsUrl: string;
+  imageUrl: string | null;
+  imageFocalPoint: string;
+  selectedGenreIds: string[];
+  selectedThemeIds: string[];
+  startTime: string;
+  endTime: string;
+};
+
 function Label({ text, required, optional }: { text: string; required?: boolean; optional?: boolean }) {
   return (
     <label className="block text-sm font-medium">
@@ -20,33 +37,38 @@ function Label({ text, required, optional }: { text: string; required?: boolean;
   );
 }
 
-export default function NewJamForm() {
+export default function NewJamForm({ initialData }: { initialData?: NewJamInitialData | null }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const [visibility, setVisibility] = useState<"community" | "private" | "official">("community");
+  const [visibility, setVisibility] = useState<"community" | "private" | "official">(initialData?.visibility ?? "community");
   const [previewing, setPreviewing] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
   const [genres, setGenres] = useState<LookupItem[]>([]);
   const [themes, setThemes] = useState<LookupItem[]>([]);
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
-  const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(initialData?.selectedGenreIds ?? []);
+  const [selectedThemes, setSelectedThemes] = useState<string[]>(initialData?.selectedThemeIds ?? []);
 
-  const [guestsCanInvite, setGuestsCanInvite] = useState(false);
-  const [name, setName] = useState("");
-  const [ticketsUrl, setTicketsUrl] = useState("");
+  const [guestsCanInvite, setGuestsCanInvite] = useState(initialData?.guestsCanInvite ?? false);
+  const [name, setName] = useState(initialData?.name ?? "");
+  const [ticketsUrl, setTicketsUrl] = useState(initialData?.ticketsUrl ?? "");
   const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [location, setLocation] = useState<LocationValue>({ fullAddress: "", neighborhood: "" });
-  const [capacity, setCapacity] = useState("");
-  const [description, setDescription] = useState("");
+  const [startTime, setStartTime] = useState(initialData?.startTime ?? "");
+  const [endTime, setEndTime] = useState(initialData?.endTime ?? "");
+  const [location, setLocation] = useState<LocationValue>({
+    fullAddress: initialData?.fullAddress ?? "",
+    neighborhood: initialData?.neighborhood ?? "",
+  });
+  const [locationTbd, setLocationTbd] = useState(false);
+  const [capacity, setCapacity] = useState(initialData?.capacity ?? "");
+  const [description, setDescription] = useState(initialData?.notes ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [focalPoint, setFocalPoint] = useState("50% 50%");
+  const [imagePreview, setImagePreview] = useState<string | null>(initialData?.imageUrl ?? null);
+  const [copiedImageUrl, setCopiedImageUrl] = useState<string | null>(initialData?.imageUrl ?? null);
+  const [focalPoint, setFocalPoint] = useState(initialData?.imageFocalPoint ?? "50% 50%");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [busy, setBusy] = useState(false);
@@ -75,6 +97,7 @@ export default function NewJamForm() {
     const file = e.target.files?.[0] ?? null;
     setImageFile(file);
     setImagePreview(file ? URL.createObjectURL(file) : null);
+    setCopiedImageUrl(null);
     setFocalPoint("50% 50%");
   }
 
@@ -87,7 +110,7 @@ export default function NewJamForm() {
     const errs: string[] = [];
     if (!date) errs.push("Date is required.");
     if (!startTime) errs.push("Start time is required.");
-    if (!location.fullAddress) errs.push("Location is required.");
+    if (!locationTbd && !location.fullAddress) errs.push("Location is required.");
     return errs;
   }
 
@@ -106,7 +129,7 @@ export default function NewJamForm() {
     const uid = userData.user?.id;
     if (!uid) { setBusy(false); setStatus("Not signed in."); return; }
 
-    let imageUrl: string | null = null;
+    let imageUrl: string | null = copiedImageUrl;
     if (imageFile) {
       const ext = imageFile.name.split(".").pop();
       const path = `${uid}-${Date.now()}.${ext}`;
@@ -130,8 +153,8 @@ export default function NewJamForm() {
       name: jamName,
       starts_at: toIso(date, startTime),
       ends_at: toIso(date, endTime),
-      neighborhood: location.neighborhood || location.fullAddress || null,
-      full_address: location.fullAddress || null,
+      neighborhood: locationTbd ? "TBD" : (location.neighborhood || location.fullAddress || null),
+      full_address: locationTbd ? null : (location.fullAddress || null),
       notes: description || null,
       visibility,
       guests_can_invite: (visibility === "private" || visibility === "community") ? guestsCanInvite : false,
@@ -187,8 +210,8 @@ export default function NewJamForm() {
             visibility,
             starts_at: toIso(date, startTime),
             ends_at: toIso(date, endTime),
-            neighborhood: location.neighborhood || location.fullAddress || null,
-            full_address: location.fullAddress || null,
+            neighborhood: locationTbd ? "TBD" : (location.neighborhood || location.fullAddress || null),
+            full_address: locationTbd ? null : (location.fullAddress || null),
             notes: description || null,
             tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
             image_url: imagePreview,
@@ -308,15 +331,31 @@ export default function NewJamForm() {
 
       {/* Location */}
       <div>
-        <Label text={isOfficial ? "Venue / address" : "Location"} required />
-        {!isOfficial && (
+        <div className="flex items-center justify-between">
+          <Label text={isOfficial ? "Venue / address" : "Location"} required={!locationTbd} />
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={locationTbd}
+              onChange={(e) => {
+                setLocationTbd(e.target.checked);
+                if (e.target.checked) setLocation({ fullAddress: "", neighborhood: "" });
+              }}
+              className="h-4 w-4 rounded"
+            />
+            <span className="text-sm text-zinc-500">TBD</span>
+          </label>
+        </div>
+        {!isOfficial && !locationTbd && (
           <p className="text-xs text-zinc-400 mt-0.5 mb-1">Exact address is only shared with people who RSVP</p>
         )}
-        <LocationAutocomplete
-          value={location.fullAddress}
-          onChange={setLocation}
-          placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Cedar Rose Park, Berkeley"}
-        />
+        {!locationTbd && (
+          <LocationAutocomplete
+            value={location.fullAddress}
+            onChange={setLocation}
+            placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Cedar Rose Park, Berkeley"}
+          />
+        )}
       </div>
 
       {/* Capacity */}
@@ -360,7 +399,7 @@ export default function NewJamForm() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setImageFile(null); setImagePreview(null); setFocalPoint("50% 50%"); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  onClick={() => { setImageFile(null); setImagePreview(null); setCopiedImageUrl(null); setFocalPoint("50% 50%"); if (fileInputRef.current) fileInputRef.current.value = ""; }}
                   className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
                 >
                   Remove image

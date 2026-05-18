@@ -1,14 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function JamHostActions({ jamId }: { jamId: string }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   async function deleteJam() {
     setDeleting(true);
@@ -26,45 +38,68 @@ export default function JamHostActions({ jamId }: { jamId: string }) {
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-      <h2 className="text-base font-semibold">Manage jam</h2>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Link
-          href={`/jam/${jamId}/edit`}
-          className="flex-1 rounded-xl border border-zinc-300 px-4 py-2.5 text-center text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
-        >
-          Edit details
-        </Link>
-
-        {!confirming ? (
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">Manage jam</h2>
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={() => setConfirming(true)}
-            className="flex-1 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            onClick={() => { setOpen((o) => !o); setConfirming(false); }}
+            className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors"
+            aria-label="More options"
           >
-            Cancel jam
+            <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+              <circle cx="4" cy="10" r="1.5" />
+              <circle cx="10" cy="10" r="1.5" />
+              <circle cx="16" cy="10" r="1.5" />
+            </svg>
           </button>
-        ) : (
-          <div className="flex-1 rounded-xl border border-red-300 bg-red-50 px-4 py-3 space-y-2">
-            <p className="text-sm font-medium text-red-800">Cancel this jam? This can't be undone.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirming(false)}
-                disabled={deleting}
-                className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+          {open && (
+            <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-zinc-200 bg-white shadow-lg z-10 overflow-hidden py-1">
+              <Link
+                href={`/jam/${jamId}/edit`}
+                onClick={() => setOpen(false)}
+                className="flex items-center px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
               >
-                Keep it
-              </button>
-              <button
-                onClick={deleteJam}
-                disabled={deleting}
-                className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                Edit details
+              </Link>
+              <Link
+                href={`/jam/new?copy=${jamId}`}
+                onClick={() => setOpen(false)}
+                className="flex items-center px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
               >
-                {deleting ? "Cancelling…" : "Yes, cancel"}
+                Copy event
+              </Link>
+              <button
+                onClick={() => { setConfirming(true); setOpen(false); }}
+                className="w-full text-left flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              >
+                Cancel jam
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {confirming && (
+        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 space-y-2">
+          <p className="text-sm font-medium text-red-800">Cancel this jam? This can't be undone.</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+              className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+            >
+              Keep it
+            </button>
+            <button
+              onClick={deleteJam}
+              disabled={deleting}
+              className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+            >
+              {deleting ? "Cancelling…" : "Yes, cancel"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>

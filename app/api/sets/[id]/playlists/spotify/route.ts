@@ -69,25 +69,35 @@ export async function POST(
   }
 
   let playlistId = setRes.data.spotify_playlist_id as string | null;
-  let playlistUrl: string;
+  let playlistUrl = "";
 
   if (playlistId) {
-    // Replace all tracks in the existing playlist
-    await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+    const replaceRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ uris: trackUris.slice(0, 100) }),
     });
-    // Add any overflow beyond 100
-    for (let i = 100; i < trackUris.length; i += 100) {
-      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ uris: trackUris.slice(i, i + 100) }),
-      });
+
+    if (replaceRes.status === 404) {
+      // Playlist was deleted from Spotify; clear stored ID and create a fresh one
+      await admin.from("sets").update({ spotify_playlist_id: null }).eq("id", setId);
+      playlistId = null;
+    } else if (!replaceRes.ok) {
+      return NextResponse.json({ error: "Failed to update Spotify playlist" }, { status: 502 });
+    } else {
+      for (let i = 100; i < trackUris.length; i += 100) {
+        const addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ uris: trackUris.slice(i, i + 100) }),
+        });
+        if (!addRes.ok) return NextResponse.json({ error: "Failed to add tracks to Spotify playlist" }, { status: 502 });
+      }
+      playlistUrl = `https://open.spotify.com/playlist/${playlistId}`;
     }
-    playlistUrl = `https://open.spotify.com/playlist/${playlistId}`;
-  } else {
+  }
+
+  if (!playlistId) {
     const meRes = await fetch("https://api.spotify.com/v1/me", {
       headers: { Authorization: `Bearer ${access_token}` },
     });
@@ -106,11 +116,12 @@ export async function POST(
     await admin.from("sets").update({ spotify_playlist_id: playlistId }).eq("id", setId);
 
     for (let i = 0; i < trackUris.length; i += 100) {
-      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+      const addRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
         method: "POST",
         headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ uris: trackUris.slice(i, i + 100) }),
       });
+      if (!addRes.ok) return NextResponse.json({ error: "Failed to add tracks to Spotify playlist" }, { status: 502 });
     }
   }
 

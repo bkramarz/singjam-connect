@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
+import AddToCalendarButton from "@/components/AddToCalendarButton";
 
 export type JamCardData = {
+  id?: string | null;
   name: string | null;
   visibility: "official" | "community" | "private";
   starts_at: string | null;
@@ -44,8 +46,9 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
 
-  const showFullAddress = jam.hasFullAccess && jam.full_address;
-  const mapQuery = showFullAddress ? jam.full_address! : jam.neighborhood;
+  const isTbd = jam.neighborhood === "TBD" && !jam.full_address || jam.full_address === "TBD";
+  const showFullAddress = (jam.hasFullAccess || jam.visibility === "private") && jam.full_address && !isTbd;
+  const mapQuery = isTbd ? null : (showFullAddress ? jam.full_address! : jam.neighborhood);
   const mapZoom = showFullAddress ? 16 : 13;
 
   return (
@@ -146,7 +149,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
                 ) : (
                   <>
                     <p className="text-sm font-medium text-zinc-800">{jam.neighborhood}</p>
-                    {!isOfficial && (
+                    {!isOfficial && jam.neighborhood !== "TBD" && (
                       <p className="text-xs text-zinc-400 mt-0.5">Full address shown after RSVP</p>
                     )}
                   </>
@@ -179,7 +182,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
         )}
 
         {/* Actions */}
-        {(jam.tickets_url || actions) && (
+        {(jam.tickets_url || jam.starts_at || actions) && (
           <div className="flex flex-wrap gap-3 items-center">
             {jam.tickets_url && (
               <a
@@ -190,6 +193,16 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
               >
                 Get tickets ↗
               </a>
+            )}
+            {jam.starts_at && (
+              <AddToCalendarButton
+                title={jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
+                startsAt={jam.starts_at}
+                endsAt={jam.ends_at}
+                location={showFullAddress ? jam.full_address : jam.neighborhood}
+                description={jam.notes}
+                jamId={jam.id ?? undefined}
+              />
             )}
             {actions}
           </div>

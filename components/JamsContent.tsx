@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
@@ -34,7 +34,7 @@ function RsvpBadge({ status, waitlistPosition }: { status: RsvpStatus; waitlistP
   return null;
 }
 
-function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isInvited, isHosting }: {
+function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isInvited, isHosting, onDeleted }: {
   jam: any;
   tags: string[];
   hostLabel?: string | null;
@@ -43,8 +43,36 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
   rsvp?: { status: RsvpStatus; waitlist_position?: number | null } | null;
   isInvited?: boolean;
   isHosting?: boolean;
+  onDeleted?: () => void;
 }) {
-  const inner = (
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isHosting) return;
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [isHosting]);
+
+  async function deleteJam() {
+    setDeleting(true);
+    const res = await fetch(`/api/jam/${jam.id}`, { method: "DELETE" });
+    if (res.ok) {
+      onDeleted?.();
+    } else {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  }
+
+  const cardBody = (
     <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
@@ -128,90 +156,157 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
     </div>
   );
 
-  if (isOfficial) return <div>{inner}</div>;
-  return <Link href={`/jam/${jam.id}`} className="block">{inner}</Link>;
+  const wrapped = isOfficial
+    ? <div>{cardBody}</div>
+    : <Link href={`/jam/${jam.id}`} className="block">{cardBody}</Link>;
+
+  if (!isHosting) return wrapped;
+
+  return (
+    <div className="relative">
+      {wrapped}
+      <div className="absolute top-2 right-2" ref={menuRef}>
+        <button
+          onClick={() => { setMenuOpen((o) => !o); setConfirming(false); }}
+          className="rounded-lg p-1 bg-white/90 text-zinc-400 hover:text-zinc-600 hover:bg-white transition-colors shadow-sm"
+          aria-label="More options"
+        >
+          <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+            <circle cx="4" cy="10" r="1.5" />
+            <circle cx="10" cy="10" r="1.5" />
+            <circle cx="16" cy="10" r="1.5" />
+          </svg>
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-zinc-200 bg-white shadow-lg z-10 overflow-hidden py-1">
+            <Link
+              href={`/jam/${jam.id}/edit`}
+              className="flex items-center px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+            >
+              Edit details
+            </Link>
+            <Link
+              href={`/jam/new?copy=${jam.id}`}
+              className="flex items-center px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+            >
+              Copy event
+            </Link>
+            <button
+              onClick={() => { setConfirming(true); setMenuOpen(false); }}
+              className="w-full text-left flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Cancel jam
+            </button>
+          </div>
+        )}
+        {confirming && (
+          <div className="absolute right-0 top-full mt-1 w-56 rounded-xl border border-red-300 bg-red-50 px-4 py-3 shadow-lg z-10 space-y-2">
+            <p className="text-sm font-medium text-red-800">Cancel this jam? This can't be undone.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={deleting}
+                className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+              >
+                Keep it
+              </button>
+              <button
+                onClick={deleteJam}
+                disabled={deleting}
+                className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? "Cancelling…" : "Yes, cancel"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function JamsContent() {
   const [data, setData] = useState<JamsData | null>(null);
   const supabase = supabaseBrowser();
 
+  async function fetchData() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user.id ?? null;
+
+    const [flagRes, adminRes, jamsRes, rsvpsRes, invitesRes] = await Promise.all([
+      supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+      userId
+        ? supabase.from("profiles").select("is_admin").eq("id", userId).single()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("jams")
+        .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
+        .gte("starts_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+        .order("starts_at", { ascending: true, nullsFirst: false })
+        .limit(100),
+      userId
+        ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", userId)
+        : Promise.resolve({ data: [] }),
+      userId
+        ? supabase.from("jam_invites").select("jam_id, status").eq("invited_user_id", userId)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const allJams = (jamsRes.data ?? []) as any[];
+    const jamIds = allJams.map((j) => j.id);
+    const hostIds = [...new Set(allJams.map((j) => j.host_user_id).filter(Boolean))] as string[];
+
+    const [genresRes, themesRes, profilesRes] = await Promise.all([
+      jamIds.length > 0
+        ? supabase.from("jam_genres").select("jam_id, genres(name)").in("jam_id", jamIds)
+        : Promise.resolve({ data: [] }),
+      jamIds.length > 0
+        ? supabase.from("jam_themes").select("jam_id, themes(name)").in("jam_id", jamIds)
+        : Promise.resolve({ data: [] }),
+      hostIds.length > 0
+        ? supabase.from("profiles").select("id, display_name, username").in("id", hostIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const rsvpByJam = new Map(((rsvpsRes.data ?? []) as any[]).map((r) => [r.jam_id, r]));
+    const inviteByJam = new Map(((invitesRes.data ?? []) as any[]).map((i) => [i.jam_id, i]));
+    const genresByJam = new Map<string, string[]>();
+    const themesByJam = new Map<string, string[]>();
+    const profileById = new Map<string, { label: string; username: string | null }>();
+
+    for (const row of (genresRes.data ?? []) as any[]) {
+      const name = row.genres?.name;
+      if (!name) continue;
+      const arr = genresByJam.get(row.jam_id) ?? [];
+      arr.push(name);
+      genresByJam.set(row.jam_id, arr);
+    }
+    for (const row of (themesRes.data ?? []) as any[]) {
+      const name = row.themes?.name;
+      if (!name) continue;
+      const arr = themesByJam.get(row.jam_id) ?? [];
+      arr.push(name);
+      themesByJam.set(row.jam_id, arr);
+    }
+    for (const p of (profilesRes.data ?? []) as any[]) {
+      profileById.set(p.id, { label: p.display_name ?? p.username ?? null, username: p.username ?? null });
+    }
+
+    setData({
+      userId,
+      invitesEnabled: flagRes.data?.enabled ?? true,
+      isAdmin: (adminRes.data as any)?.is_admin ?? false,
+      allJams,
+      rsvpByJam,
+      inviteByJam,
+      genresByJam,
+      themesByJam,
+      profileById,
+    });
+  }
+
   useEffect(() => {
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user.id ?? null;
-
-      const [flagRes, adminRes, jamsRes, rsvpsRes, invitesRes] = await Promise.all([
-        supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
-        userId
-          ? supabase.from("profiles").select("is_admin").eq("id", userId).single()
-          : Promise.resolve({ data: null }),
-        supabase
-          .from("jams")
-          .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url, visibility, host_user_id")
-          .gte("starts_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
-          .order("starts_at", { ascending: true, nullsFirst: false })
-          .limit(100),
-        userId
-          ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", userId)
-          : Promise.resolve({ data: [] }),
-        userId
-          ? supabase.from("jam_invites").select("jam_id, status").eq("invited_user_id", userId)
-          : Promise.resolve({ data: [] }),
-      ]);
-
-      const allJams = (jamsRes.data ?? []) as any[];
-      const jamIds = allJams.map((j) => j.id);
-      const hostIds = [...new Set(allJams.map((j) => j.host_user_id).filter(Boolean))] as string[];
-
-      const [genresRes, themesRes, profilesRes] = await Promise.all([
-        jamIds.length > 0
-          ? supabase.from("jam_genres").select("jam_id, genres(name)").in("jam_id", jamIds)
-          : Promise.resolve({ data: [] }),
-        jamIds.length > 0
-          ? supabase.from("jam_themes").select("jam_id, themes(name)").in("jam_id", jamIds)
-          : Promise.resolve({ data: [] }),
-        hostIds.length > 0
-          ? supabase.from("profiles").select("id, display_name, username").in("id", hostIds)
-          : Promise.resolve({ data: [] }),
-      ]);
-
-      const rsvpByJam = new Map(((rsvpsRes.data ?? []) as any[]).map((r) => [r.jam_id, r]));
-      const inviteByJam = new Map(((invitesRes.data ?? []) as any[]).map((i) => [i.jam_id, i]));
-      const genresByJam = new Map<string, string[]>();
-      const themesByJam = new Map<string, string[]>();
-      const profileById = new Map<string, { label: string; username: string | null }>();
-
-      for (const row of (genresRes.data ?? []) as any[]) {
-        const name = row.genres?.name;
-        if (!name) continue;
-        const arr = genresByJam.get(row.jam_id) ?? [];
-        arr.push(name);
-        genresByJam.set(row.jam_id, arr);
-      }
-      for (const row of (themesRes.data ?? []) as any[]) {
-        const name = row.themes?.name;
-        if (!name) continue;
-        const arr = themesByJam.get(row.jam_id) ?? [];
-        arr.push(name);
-        themesByJam.set(row.jam_id, arr);
-      }
-      for (const p of (profilesRes.data ?? []) as any[]) {
-        profileById.set(p.id, { label: p.display_name ?? p.username ?? null, username: p.username ?? null });
-      }
-
-      setData({
-        userId,
-        invitesEnabled: flagRes.data?.enabled ?? true,
-        isAdmin: (adminRes.data as any)?.is_admin ?? false,
-        allJams,
-        rsvpByJam,
-        inviteByJam,
-        genresByJam,
-        themesByJam,
-        profileById,
-      });
-    })();
+    fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -250,7 +345,7 @@ export default function JamsContent() {
       hostLabel: profileById.get(jam.host_user_id)?.label ?? null,
       hostUsername: profileById.get(jam.host_user_id)?.username ?? null,
       isOfficial: opts.isOfficial ?? false,
-      isHosting: opts.isHosting ?? false,
+      isHosting: opts.isHosting ?? (!!userId && jam.host_user_id === userId),
       rsvp: (rsvpByJam.get(jam.id) as any) ?? null,
       isInvited: (inviteByJam.get(jam.id) as any)?.status === "pending",
     };
@@ -260,33 +355,50 @@ export default function JamsContent() {
   const upcomingOfficialJams = allJams.filter(
     (j) => j.visibility === "official" && (j.ends_at ?? j.starts_at) >= now
   );
-  const pastOfficialJams = allJams.filter(
-    (j) => j.visibility === "official" && (j.ends_at ?? j.starts_at) < now
-  );
   const pendingInviteJams = userId
-    ? allJams.filter((j) => j.host_user_id !== userId && (inviteByJam.get(j.id) as any)?.status === "pending")
+    ? allJams.filter((j) =>
+        j.host_user_id !== userId &&
+        (inviteByJam.get(j.id) as any)?.status === "pending" &&
+        (j.ends_at ?? j.starts_at) >= now
+      )
     : [];
   const hostingJams = userId
-    ? allJams.filter((j) => j.visibility !== "official" && j.host_user_id === userId)
+    ? allJams.filter((j) =>
+        j.visibility !== "official" &&
+        j.host_user_id === userId &&
+        (j.ends_at ?? j.starts_at) >= now
+      )
     : [];
   const communityJams = userId
     ? allJams.filter((j) =>
         j.visibility === "community" &&
         j.host_user_id !== userId &&
-        (inviteByJam.get(j.id) as any)?.status !== "pending"
+        (inviteByJam.get(j.id) as any)?.status !== "pending" &&
+        (j.ends_at ?? j.starts_at) >= now
       )
     : [];
   const privateJams = userId
     ? allJams.filter((j) => {
         if (j.visibility !== "private" || j.host_user_id === userId) return false;
         const s = (inviteByJam.get(j.id) as any)?.status;
-        return s === "accepted" || s === "declined";
+        return (s === "accepted" || s === "declined") && (j.ends_at ?? j.starts_at) >= now;
       })
     : [];
+  const pastJams = [...allJams]
+    .reverse()
+    .filter((j) => {
+      if ((j.ends_at ?? j.starts_at) >= now) return false;
+      if (j.visibility === "official") return true;
+      if (!userId) return false;
+      if (j.host_user_id === userId) return true;
+      if (rsvpByJam.has(j.id)) return true;
+      const s = (inviteByJam.get(j.id) as any)?.status;
+      return s === "accepted" || s === "declined";
+    });
 
   const isEmpty =
     upcomingOfficialJams.length === 0 &&
-    pastOfficialJams.length === 0 &&
+    pastJams.length === 0 &&
     pendingInviteJams.length === 0 &&
     hostingJams.length === 0 &&
     communityJams.length === 0 &&
@@ -310,7 +422,7 @@ export default function JamsContent() {
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-3">
-            {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} />)}
+            {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} onDeleted={fetchData} />)}
             <Link
               href="/jam/new"
               className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 px-4 py-4 text-sm font-medium text-zinc-400 hover:border-amber-300 hover:text-amber-500 transition-colors"
@@ -360,11 +472,20 @@ export default function JamsContent() {
         </section>
       )}
 
-      {pastOfficialJams.length > 0 && (
+      {pastJams.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past SingJam events</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Past events</h2>
           <div className="grid grid-cols-1 gap-3">
-            {pastOfficialJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isOfficial: true })} />)}
+            {pastJams.map((jam) => (
+              <JamListCard
+                key={jam.id}
+                {...cardProps(jam, {
+                  isOfficial: jam.visibility === "official",
+                  isHosting: jam.host_user_id === userId,
+                })}
+                onDeleted={fetchData}
+              />
+            ))}
           </div>
         </section>
       )}

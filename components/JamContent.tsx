@@ -79,6 +79,7 @@ export default function JamContent() {
         const data = await res.json();
         const jam = data.jam;
         const jamCardData: JamCardData = {
+          id: jam.id,
           name: jam.name,
           visibility: jam.visibility,
           starts_at: jam.starts_at,
@@ -220,6 +221,7 @@ export default function JamContent() {
       }
 
       const jamCardData: JamCardData = {
+        id: jam.id,
         name: jam.name,
         visibility: jam.visibility as any,
         starts_at: jam.starts_at,
