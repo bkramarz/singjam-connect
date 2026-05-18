@@ -112,7 +112,7 @@ export default function MatchesPage() {
           const initial = (m.display_name ?? m.username ?? "?")[0].toUpperCase();
 
           return (
-            <div key={m.user_id} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm overflow-hidden">
+            <div key={m.user_id} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
               {/* Header */}
               <div className="flex items-center gap-3 min-w-0">
                 <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-100">

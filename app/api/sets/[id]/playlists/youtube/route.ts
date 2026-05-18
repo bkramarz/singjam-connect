@@ -40,7 +40,8 @@ async function getAccessToken(): Promise<string | null> {
   return access_token ?? null;
 }
 
-async function clearPlaylistItems(playlistId: string, access_token: string) {
+// Returns false if the playlist was not found (deleted), throws on other failures
+async function clearPlaylistItems(playlistId: string, access_token: string): Promise<boolean> {
   let pageToken: string | undefined;
   const itemIds: string[] = [];
 
@@ -54,7 +55,8 @@ async function clearPlaylistItems(playlistId: string, access_token: string) {
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${access_token}` },
     });
-    if (!res.ok) break;
+    if (res.status === 404) return false;
+    if (!res.ok) throw new Error(`YouTube list failed: ${res.status}`);
     const data = await res.json();
     itemIds.push(...(data.items ?? []).map((i: any) => i.id));
     pageToken = data.nextPageToken;
@@ -66,6 +68,7 @@ async function clearPlaylistItems(playlistId: string, access_token: string) {
       headers: { Authorization: `Bearer ${access_token}` },
     });
   }
+  return true;
 }
 
 export async function POST(
@@ -97,8 +100,19 @@ export async function POST(
   let playlistId = setRes.data.youtube_playlist_id as string | null;
 
   if (playlistId) {
-    await clearPlaylistItems(playlistId, access_token);
-  } else {
+    try {
+      const exists = await clearPlaylistItems(playlistId, access_token);
+      if (!exists) {
+        // Playlist was deleted from YouTube; clear stored ID and create a fresh one
+        await admin.from("sets").update({ youtube_playlist_id: null }).eq("id", setId);
+        playlistId = null;
+      }
+    } catch {
+      return NextResponse.json({ error: "Failed to clear YouTube playlist" }, { status: 502 });
+    }
+  }
+
+  if (!playlistId) {
     const playlistRes = await fetch("https://www.googleapis.com/youtube/v3/playlists?part=snippet,status", {
       method: "POST",
       headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },

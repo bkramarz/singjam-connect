@@ -38,7 +38,11 @@ function Label({ text, required, optional }: { text: string; required?: boolean;
 
 function isoToDate(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toISOString().slice(0, 10);
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function isoToTime(iso: string | null): string {
@@ -75,9 +79,11 @@ export default function EditJamForm({
   const [date, setDate] = useState(isoToDate(jam.starts_at));
   const [startTime, setStartTime] = useState(isoToTime(jam.starts_at));
   const [endTime, setEndTime] = useState(isoToTime(jam.ends_at));
+  const isInitiallyTbd = jam.neighborhood === "TBD" && !jam.full_address;
+  const [locationTbd, setLocationTbd] = useState(isInitiallyTbd);
   const [location, setLocation] = useState<LocationValue>({
-    fullAddress: jam.full_address ?? jam.neighborhood ?? "",
-    neighborhood: jam.neighborhood ?? "",
+    fullAddress: isInitiallyTbd ? "" : (jam.full_address ?? jam.neighborhood ?? ""),
+    neighborhood: isInitiallyTbd ? "" : (jam.neighborhood ?? ""),
   });
   const [capacity, setCapacity] = useState(jam.capacity?.toString() ?? "");
   const [description, setDescription] = useState(jam.notes ?? "");
@@ -128,7 +134,7 @@ export default function EditJamForm({
     const errs: string[] = [];
     if (!date) errs.push("Date is required.");
     if (!startTime) errs.push("Start time is required.");
-    if (!location.fullAddress) errs.push("Location is required.");
+    if (!locationTbd && !location.fullAddress) errs.push("Location is required.");
     return errs;
   }
 
@@ -169,39 +175,34 @@ export default function EditJamForm({
     const defaultName = displayName ? `${displayName}'s jam` : "Community jam";
     const jamName = name.trim() || (isOfficial ? null : defaultName);
 
-    const { error } = await supabase.from("jams").update({
-      name: jamName,
-      starts_at: toIso(date, startTime),
-      ends_at: toIso(date, endTime),
-      neighborhood: location.neighborhood || location.fullAddress || null,
-      full_address: location.fullAddress || null,
-      notes: description || null,
-      visibility,
-      guests_can_invite: visibility === "private" ? guestsCanInvite : false,
-      tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
-      image_url: imageUrl,
-      image_focal_point: newFocalPoint,
-      capacity: capacity ? parseInt(capacity, 10) : null,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }).eq("id", jam.id);
+    const res = await fetch(`/api/jam/${jam.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: jamName,
+        starts_at: toIso(date, startTime),
+        ends_at: toIso(date, endTime),
+        neighborhood: locationTbd ? "TBD" : (location.neighborhood || location.fullAddress || null),
+        full_address: locationTbd ? null : (location.fullAddress || null),
+        notes: description || null,
+        visibility,
+        guests_can_invite: guestsCanInvite,
+        tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
+        image_url: imageUrl,
+        image_focal_point: newFocalPoint,
+        capacity: capacity ? parseInt(capacity, 10) : null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        genre_ids: selectedGenres,
+        theme_ids: selectedThemes,
+      }),
+    });
 
-    if (error) {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
       setBusy(false);
-      setStatus(error.message);
+      setStatus((err as any).error ?? "Something went wrong.");
       return;
     }
-
-    // Sync genres: delete all, re-insert
-    await supabase.from("jam_genres").delete().eq("jam_id", jam.id);
-    await supabase.from("jam_themes").delete().eq("jam_id", jam.id);
-    await Promise.all([
-      selectedGenres.length > 0
-        ? supabase.from("jam_genres").insert(selectedGenres.map((genre_id) => ({ jam_id: jam.id, genre_id })))
-        : Promise.resolve(),
-      selectedThemes.length > 0
-        ? supabase.from("jam_themes").insert(selectedThemes.map((theme_id) => ({ jam_id: jam.id, theme_id })))
-        : Promise.resolve(),
-    ]);
 
     router.push(`/jam/${jam.id}`);
   }
@@ -225,8 +226,8 @@ export default function EditJamForm({
             visibility,
             starts_at: toIso(date, startTime),
             ends_at: toIso(date, endTime),
-            neighborhood: location.neighborhood || location.fullAddress || null,
-            full_address: location.fullAddress || null,
+            neighborhood: locationTbd ? "TBD" : (location.neighborhood || location.fullAddress || null),
+            full_address: locationTbd ? null : (location.fullAddress || null),
             notes: description || null,
             tickets_url: isOfficial && ticketsUrl ? ticketsUrl : null,
             image_url: previewImageUrl,
@@ -335,9 +336,27 @@ export default function EditJamForm({
 
       {/* Location */}
       <div>
-        <Label text={isOfficial ? "Venue / address" : "Location"} required />
-        {!isOfficial && <p className="text-xs text-zinc-400 mt-0.5 mb-1">Exact address only shared with people who RSVP</p>}
-        <LocationAutocomplete value={location.fullAddress} onChange={setLocation} placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Cedar Rose Park, Berkeley"} />
+        <div className="flex items-center justify-between">
+          <Label text={isOfficial ? "Venue / address" : "Location"} required={!locationTbd} />
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={locationTbd}
+              onChange={(e) => {
+                setLocationTbd(e.target.checked);
+                if (e.target.checked) setLocation({ fullAddress: "", neighborhood: "" });
+              }}
+              className="h-4 w-4 rounded"
+            />
+            <span className="text-sm text-zinc-500">TBD</span>
+          </label>
+        </div>
+        {!isOfficial && !locationTbd && (
+          <p className="text-xs text-zinc-400 mt-0.5 mb-1">Exact address only shared with people who RSVP</p>
+        )}
+        {!locationTbd && (
+          <LocationAutocomplete value={location.fullAddress} onChange={setLocation} placeholder={isOfficial ? "e.g. Freight & Salvage, Berkeley" : "e.g. Cedar Rose Park, Berkeley"} />
+        )}
       </div>
 
       {/* Capacity */}

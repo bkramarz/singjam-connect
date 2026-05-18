@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -650,6 +650,9 @@ export default function SetDetail({
   const [savingName, setSavingName] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [setMenuOpen, setSetMenuOpen] = useState(false);
+  const setMenuRef = useRef<HTMLDivElement>(null);
   const [creatingPlaylist, setCreatingPlaylist] = useState<"youtube" | "spotify" | null>(null);
   const [lastSyncedYoutubeFingerprint, setLastSyncedYoutubeFingerprint] = useState<string | null>(set.youtube_playlist_fingerprint ?? null);
   const [lastSyncedSpotifyFingerprint, setLastSyncedSpotifyFingerprint] = useState<string | null>(set.spotify_playlist_fingerprint ?? null);
@@ -691,6 +694,17 @@ export default function SetDetail({
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    function onClickOutside(e: MouseEvent) {
+      if (setMenuRef.current && !setMenuRef.current.contains(e.target as Node)) {
+        setSetMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [isOwner]);
 
   async function handleSelectSong(song: any) {
     const existing = userRepertoire.get(song.song_id);
@@ -940,6 +954,18 @@ export default function SetDetail({
     router.push("/sets");
   }
 
+  async function handleCopySet() {
+    setCopying(true);
+    setSetMenuOpen(false);
+    const res = await fetch(`/api/sets/${set.id}/copy`, { method: "POST" });
+    if (res.ok) {
+      const { id } = await res.json();
+      router.push(`/set/${id}`);
+    } else {
+      setCopying(false);
+    }
+  }
+
   const youtubeFingerprint = songs.map(s => getPrimaryYoutubeId(s.songs)).filter(Boolean).join(",");
   const spotifyFingerprint = songs.map(s => getSpotifyTrackId(getPrimarySpotifyUrl(s.songs))).filter(Boolean).join(",");
   const youtubeOutdated = !!playlistLinks.youtube && lastSyncedYoutubeFingerprint !== youtubeFingerprint;
@@ -1035,16 +1061,67 @@ export default function SetDetail({
           )}
         </div>
 
+        {isPublicViewer && (
+          currentUserId ? (
+            <button
+              onClick={handleCopySet}
+              disabled={copying}
+              className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+            >
+              {copying ? "Copying…" : "Copy to my sets"}
+            </button>
+          ) : (
+            <a
+              href={`/auth?next=/set/${set.id}`}
+              className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+            >
+              Sign in to copy
+            </a>
+          )
+        )}
+
         {isOwner && !editingName && (
-          <button
-            onClick={() => setEditingName(true)}
-            className="shrink-0 text-zinc-400 hover:text-zinc-600 transition-colors"
-            aria-label="Edit set name"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setEditingName(true)}
+              className="text-zinc-400 hover:text-zinc-600 transition-colors"
+              aria-label="Edit set name"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+              </svg>
+            </button>
+            <div className="relative" ref={setMenuRef}>
+              <button
+                onClick={() => setSetMenuOpen((o) => !o)}
+                disabled={copying}
+                className="text-zinc-400 hover:text-zinc-600 transition-colors disabled:opacity-50"
+                aria-label="More options"
+              >
+                {copying ? (
+                  <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                    <path d="M12 2a10 10 0 0 1 0 20" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 20 20" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+                    <circle cx="4" cy="10" r="1.5" />
+                    <circle cx="10" cy="10" r="1.5" />
+                    <circle cx="16" cy="10" r="1.5" />
+                  </svg>
+                )}
+              </button>
+              {setMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-zinc-200 bg-white shadow-lg z-10 overflow-hidden py-1">
+                  <button
+                    onClick={handleCopySet}
+                    className="w-full text-left flex items-center px-4 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  >
+                    Copy set
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
 

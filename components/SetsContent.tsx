@@ -99,7 +99,12 @@ export default function SetsContent() {
           </div>
           <div className="grid grid-cols-1 gap-3">
             {data.owned.map((set) => (
-              <SetCard key={set.id} set={set} isOwner />
+              <SetCard
+                key={set.id}
+                set={set}
+                isOwner
+                onDelete={(id) => setData((d) => d && { ...d, owned: d.owned.filter((s) => s.id !== id) })}
+              />
             ))}
             <Link
               href="/set/new"
