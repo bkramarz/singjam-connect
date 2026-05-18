@@ -27,7 +27,47 @@ type PopularSong = {
   meter: string | null;
   year: number | null;
   popularity: number;
+  youtubeId: string | null;
+  spotifyTrackId: string | null;
 };
+
+function getYoutubeId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0] || null;
+    if (u.hostname.includes("youtube.com")) {
+      return u.searchParams.get("v")
+        ?? u.pathname.match(/\/(?:embed|v|shorts)\/([^/?]+)/)?.[1]
+        ?? null;
+    }
+    return null;
+  } catch { return null; }
+}
+
+function getSpotifyTrackId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const match = new URL(url).pathname.match(/\/track\/([a-zA-Z0-9]+)/);
+    return match?.[1] ?? null;
+  } catch { return null; }
+}
+
+function YoutubeIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+}
+
+function SpotifyIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+    </svg>
+  );
+}
 
 const LEVELS = [
   { key: "lead", label: "Lead" },
@@ -110,9 +150,10 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
           .from("songs")
           .select(`
             id, title, slug, display_artist, year_written, vibe, tonality, meter,
+            youtube_url,
             song_composers(people(name)),
             song_lyricists(people(name)),
-            song_recording_artists(year),
+            song_recording_artists(position, year, youtube_url, spotify_url),
             song_productions(productions(name)),
             song_genres(genres(name)),
             song_languages(languages(name)),
@@ -161,6 +202,14 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             return yearWritten ?? firstRecording ?? null;
           })(),
           popularity: popularityMap.get(s.id) ?? 0,
+          youtubeId: (() => {
+            const artists = [...((s.song_recording_artists ?? []) as any[])].sort((a, b) => a.position - b.position);
+            const fromArtist = artists.find((a) => a.youtube_url)?.youtube_url ?? null;
+            return getYoutubeId(fromArtist) ?? getYoutubeId((s as any).youtube_url ?? null);
+          })(),
+          spotifyTrackId: getSpotifyTrackId(
+            [...((s.song_recording_artists ?? []) as any[])].sort((a, b) => a.position - b.position).find((a) => a.spotify_url)?.spotify_url ?? null
+          ),
         }))
         .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
       setPopularSongs(songs);
@@ -362,6 +411,8 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 genres={r.genres}
                 languages={r.languages ?? []}
                 popularity={songMetaMap.get(r.song_id)?.popularity}
+                youtubeId={songMetaMap.get(r.song_id)?.youtubeId}
+                spotifyTrackId={songMetaMap.get(r.song_id)?.spotifyTrackId}
                 repertoire={repertoire}
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
@@ -407,6 +458,8 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 genres={r.genres}
                 languages={r.languages ?? []}
                 popularity={r.popularity}
+                youtubeId={r.youtubeId}
+                spotifyTrackId={r.spotifyTrackId}
                 repertoire={repertoire}
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
@@ -455,6 +508,8 @@ function SongCard({
   genres,
   languages,
   popularity,
+  youtubeId,
+  spotifyTrackId,
   repertoire,
   pendingAddId,
   singingVoice,
@@ -474,6 +529,8 @@ function SongCard({
   genres: string[];
   languages: string[];
   popularity?: number;
+  youtubeId?: string | null;
+  spotifyTrackId?: string | null;
   repertoire: Map<string, string>;
   pendingAddId: string | null;
   singingVoice: string | null;
@@ -481,6 +538,8 @@ function SongCard({
   onAdd: (id: string, slug?: string | null) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
 }) {
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const [spotifyOpen, setSpotifyOpen] = useState(false);
   const inRepertoire = repertoire.has(songId);
   const confidence = repertoire.get(songId);
   const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
@@ -489,34 +548,78 @@ function SongCard({
 
   return (
     <div className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
-      <div className="min-w-0">
-        <div className="font-medium">
-          <Link href={href} className="hover:text-amber-600">
-            {title}
-          </Link>
-          {composers.length > 0 && (
-            <span className="ml-1 font-normal text-zinc-400">
-              ({formatComposers(composers, cultures ?? [])})
-            </span>
-          )}
-          {productions && productions.length > 0 ? (
-            <span className="text-zinc-500 font-normal"> — <em>{productions.join(", ")}</em></span>
-          ) : displayArtist ? (
-            <span className="text-zinc-500 font-normal"> — {displayArtist}</span>
+      <div className="flex items-start gap-2 min-w-0">
+        <div className="flex-1 min-w-0">
+          <div className="font-medium">
+            <Link href={href} className="hover:text-amber-600">
+              {title}
+            </Link>
+            {composers.length > 0 && (
+              <span className="ml-1 font-normal text-zinc-400">
+                ({formatComposers(composers, cultures ?? [])})
+              </span>
+            )}
+            {productions && productions.length > 0 ? (
+              <span className="text-zinc-500 font-normal"> — <em>{productions.join(", ")}</em></span>
+            ) : displayArtist ? (
+              <span className="text-zinc-500 font-normal"> — {displayArtist}</span>
+            ) : null}
+            {year && (
+              <span className="ml-1 font-normal text-zinc-400">({year})</span>
+            )}
+          </div>
+          {aka && aka.length ? (
+            <div className="text-xs text-zinc-500">aka: {aka.join(" · ")}</div>
           ) : null}
-          {year && (
-            <span className="ml-1 font-normal text-zinc-400">({year})</span>
+          {inRepertoire && (
+            <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+              ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
+            </div>
           )}
         </div>
-        {aka && aka.length ? (
-          <div className="text-xs text-zinc-500">aka: {aka.join(" · ")}</div>
-        ) : null}
-        {inRepertoire && (
-          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
-            ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-          </div>
-        )}
+        <div className="shrink-0 flex items-center gap-0.5">
+          {youtubeId && (
+            <button
+              onClick={() => setYoutubeOpen((o) => !o)}
+              className={`rounded-lg p-1.5 transition-colors text-red-500 ${youtubeOpen ? "bg-red-50" : "hover:bg-red-50"}`}
+              title={youtubeOpen ? "Close video" : "Watch on YouTube"}
+            >
+              <YoutubeIcon />
+            </button>
+          )}
+          {spotifyTrackId && (
+            <button
+              onClick={() => setSpotifyOpen((o) => !o)}
+              className={`rounded-lg p-1.5 transition-colors text-green-500 ${spotifyOpen ? "bg-green-50" : "hover:bg-green-50"}`}
+              title={spotifyOpen ? "Close player" : "Play on Spotify"}
+            >
+              <SpotifyIcon />
+            </button>
+          )}
+        </div>
       </div>
+      {youtubeOpen && youtubeId && (
+        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-200">
+          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+            <iframe
+              className="absolute inset-0 w-full h-full"
+              src={`https://www.youtube.com/embed/${youtubeId}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
+      {spotifyOpen && spotifyTrackId && (
+        <iframe
+          src={`https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator`}
+          width="100%"
+          height="152"
+          className="mt-3 rounded-xl border-0"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+          loading="lazy"
+        />
+      )}
       {(genres.length > 0 || (popularity ?? 0) > 0) && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {[...genres].sort().map((g) => (

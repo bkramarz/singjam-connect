@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import InviteToJamButton from "@/components/InviteToJamButton";
 
@@ -20,6 +21,7 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<any[]>([]);
   const [invitesEnabled, setInvitesEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasRepertoire, setHasRepertoire] = useState(true);
 
   useEffect(() => {
     async function load() {
@@ -31,9 +33,10 @@ export default function MatchesPage() {
         return;
       }
 
-      const [{ data: res, error }, { data: flagData }] = await Promise.all([
+      const [{ data: res, error }, { data: flagData }, { count }] = await Promise.all([
         supabase.rpc("match_jammers", { for_user_id: session.user.id, limit_n: 30 }),
         supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+        supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("user_id", session.user.id),
       ]);
 
       if (error) {
@@ -42,6 +45,7 @@ export default function MatchesPage() {
       }
       setMatches((res as any[]) ?? []);
       setInvitesEnabled((flagData as any)?.enabled ?? true);
+      setHasRepertoire((count ?? 0) > 0);
       setLoading(false);
     }
 
@@ -179,9 +183,21 @@ export default function MatchesPage() {
         })}
       </div>
 
-      {matches.length === 0 && (
-        <div className="text-sm text-zinc-600">
-          No matches yet — add songs to your repertoire to find jammers with shared repertoire.
+      {!hasRepertoire ? (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">Your repertoire is empty</p>
+          <p className="mt-1 text-sm text-zinc-500">Add songs you know and SingJam will match you with musicians who share your repertoire.</p>
+          <Link
+            href="/search"
+            className="mt-4 inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          >
+            Browse songs →
+          </Link>
+        </div>
+      ) : matches.length === 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">No matches yet</p>
+          <p className="mt-1 text-sm text-zinc-500">As more musicians join and add songs, you&apos;ll start seeing matches here.</p>
         </div>
       )}
     </div>

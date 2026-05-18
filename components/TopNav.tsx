@@ -47,7 +47,7 @@ export default function TopNav() {
         </>
       ) : (
         <Link
-          href="/auth"
+          href={pathname === "/" ? "/auth" : `/auth?next=${encodeURIComponent(pathname)}`}
           className="rounded-lg bg-amber-500 px-3 py-1.5 font-medium text-white hover:bg-amber-400 transition-colors"
         >
           Sign in

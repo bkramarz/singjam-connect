@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import SetCard from "@/components/SetCard";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 type SetItem = {
   id: string;
@@ -17,8 +18,10 @@ type SetsData = {
 };
 
 export default function SetsContent() {
+  const supabase = supabaseBrowser();
   const [data, setData] = useState<SetsData | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [hasRepertoire, setHasRepertoire] = useState(true);
 
   useEffect(() => {
     fetch("/api/sets")
@@ -27,7 +30,17 @@ export default function SetsContent() {
         setIsSignedIn(true);
         return r.json();
       })
-      .then((json) => { if (json) setData(json); });
+      .then((json) => {
+        if (!json) return;
+        setData(json);
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (!user) return;
+          supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("user_id", user.id).then(({ count }) => {
+            setHasRepertoire((count ?? 0) > 0);
+          });
+        });
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!data) {
@@ -60,6 +73,19 @@ export default function SetsContent() {
         <h1 className="text-xl font-semibold">Sets</h1>
         <p className="text-sm text-zinc-500">Curate ordered song lists for your performances.</p>
       </div>
+
+      {isSignedIn && !hasRepertoire && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">Your repertoire is empty</p>
+          <p className="mt-1 text-sm text-zinc-500">Add songs you know to build sets for your jams and performances.</p>
+          <Link
+            href="/search"
+            className="mt-4 inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          >
+            Browse songs →
+          </Link>
+        </div>
+      )}
 
       {isSignedIn && (
         <section className="space-y-3">
