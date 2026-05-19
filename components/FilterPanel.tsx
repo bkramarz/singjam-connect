@@ -59,6 +59,14 @@ export function FilterPanel({
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm space-y-4">
+      {activeFilterCount > 0 && (
+        <button
+          onClick={clearFilters}
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+        >
+          ✕ Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
+        </button>
+      )}
       {filterOptions.genres.length > 0 && (
         <div>
           <div className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Genre</div>
