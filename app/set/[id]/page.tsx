@@ -7,8 +7,25 @@ import SetRequestAccess from "@/components/SetRequestAccess";
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const { data } = await supabase.from("sets").select("name").eq("id", id).single();
-  return { title: (data as any)?.name ?? "Set" };
+  const [setRes, countRes] = await Promise.all([
+    supabase.from("sets").select("name, description, profiles(display_name, last_name, username)").eq("id", id).single(),
+    supabase.from("set_songs").select("id", { count: "exact", head: true }).eq("set_id", id),
+  ]);
+  if (!setRes.data) return { title: "Set" };
+  const set = setRes.data as any;
+  const name = set.name ?? "Set";
+  const owner = set.profiles?.display_name ?? set.profiles?.username ?? null;
+  const songCount = countRes.count ?? 0;
+  const description = [
+    set.description || null,
+    owner ? `Curated by ${owner}.` : null,
+    songCount > 0 ? `${songCount} song${songCount === 1 ? "" : "s"} in this set.` : null,
+  ].filter(Boolean).join(" ") || "A collaborative song set on SingJam.";
+  return {
+    title: name,
+    description,
+    openGraph: { title: name, description },
+  };
 }
 
 export default async function SetPage({

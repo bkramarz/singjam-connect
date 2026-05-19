@@ -48,7 +48,7 @@ export default function SetsContent() {
       <div className="space-y-8">
         <div>
           <h1 className="text-xl font-semibold">Sets</h1>
-          <p className="text-sm text-zinc-500">Curate ordered song lists for your performances.</p>
+          <p className="text-sm text-zinc-500">Build song lists for your jams and gigs.</p>
         </div>
         <section className="space-y-3">
           <div className="h-3 w-24 animate-pulse rounded bg-zinc-200" />
@@ -71,7 +71,7 @@ export default function SetsContent() {
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold">Sets</h1>
-        <p className="text-sm text-zinc-500">Curate ordered song lists for your performances.</p>
+        <p className="text-sm text-zinc-500">Build song lists for your jams and gigs.</p>
       </div>
 
       {isSignedIn && !hasRepertoire && (

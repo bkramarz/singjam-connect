@@ -6,7 +6,7 @@ import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import JamCard, { type JamCardData } from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
-import JamInvitePanel from "@/components/JamInvitePanel";
+import JamInvitePanel, { type NewInviteEntry } from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
 import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
@@ -336,6 +336,18 @@ export default function JamContent() {
         <JamInvitePanel
           jamId={id}
           alreadyInvitedIds={alreadyInvitedIds}
+          onInvited={(entry: NewInviteEntry) => {
+            setState((prev) => {
+              if (prev.status !== "ready") return prev;
+              return {
+                ...prev,
+                inviteList: [
+                  ...prev.inviteList,
+                  { id: crypto.randomUUID(), status: "pending", ...entry },
+                ],
+              };
+            });
+          }}
         />
       )}
       {isHost && <JamInviteList invites={inviteList} />}

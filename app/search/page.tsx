@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import SongSearch from "@/components/SongSearch";
 import InfoTooltip from "@/components/InfoTooltip";
 
-export const metadata: Metadata = { title: "Song Search" };
+export const metadata: Metadata = {
+  title: "Song Search",
+  description: "Search thousands of songs to add to your repertoire. Find music you already know and discover new songs to learn.",
+};
 
 export default function SongsPage() {
   return (

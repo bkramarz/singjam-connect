@@ -9,11 +9,21 @@ import MobileHeaderProfile from "@/components/MobileHeaderProfile";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org"),
   title: {
     default: "SingJam",
-    template: "SingJam - %s",
+    template: "%s · SingJam",
   },
-  description: "Find people to sing and jam with based on shared repertoire.",
+  description: "Find your people through shared music. Build your repertoire, discover musicians nearby, and get invited to jams in your community.",
+  openGraph: {
+    siteName: "SingJam",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@singjamorg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -43,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <footer className="mx-auto hidden max-w-4xl px-6 py-10 sm:block">
           <div className="border-t border-slate-200 pt-8 text-xs text-slate-400 flex items-center justify-between gap-4">
-            <span>© {new Date().getFullYear()} SingJam · Community-first matching by repertoire</span>
+            <span>© {new Date().getFullYear()} SingJam · Music. Community. Love.</span>
             <div className="flex gap-4">
               <Link href="/feedback" className="hover:text-slate-600">Report a bug</Link>
               <Link href="/privacy" className="hover:text-slate-600">Privacy Policy</Link>

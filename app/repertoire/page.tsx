@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
@@ -52,11 +51,11 @@ type Item = {
 
 export default function RepertoirePage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
-  const router = useRouter();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
 
   const [items, setItems] = useState<Item[]>([]);
@@ -112,10 +111,11 @@ export default function RepertoirePage() {
         if (sessionError) throw sessionError;
 
         if (!data.session) {
+          setIsSignedIn(false);
           setLoading(false);
-          router.push("/auth");
           return;
         }
+        setIsSignedIn(true);
 
         const uid = data.session.user.id;
         setUserId(uid);
@@ -460,6 +460,26 @@ export default function RepertoirePage() {
         2500
       );
     }
+  }
+
+  if (!loading && isSignedIn === false) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold">My Repertoire</h1>
+          <p className="mt-1 text-sm text-zinc-500">Every song you know or want to learn.</p>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">Track the songs you know</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Add songs to your repertoire — as a lead, support, or something you&apos;re learning — and SingJam will match you with musicians who share your songs.
+          </p>
+          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+            Sign in →
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (loading) {

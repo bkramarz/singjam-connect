@@ -1,3 +1,10 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "How It Works",
+  description: "SingJam connects musicians through shared repertoire. Add your songs, find people who know the same tunes, and start jamming.",
+};
+
 export default function AboutPage() {
   return (
     <div className="space-y-4">

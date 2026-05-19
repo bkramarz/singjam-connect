@@ -11,7 +11,22 @@ type UserResult = {
   avatar_url: string | null;
 };
 
-export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamId: string; alreadyInvitedIds?: string[] }) {
+export type NewInviteEntry = {
+  invited_user_id: string | null;
+  invitee_email: string | null;
+  display_name?: string | null;
+  username?: string | null;
+};
+
+export default function JamInvitePanel({
+  jamId,
+  alreadyInvitedIds = [],
+  onInvited,
+}: {
+  jamId: string;
+  alreadyInvitedIds?: string[];
+  onInvited?: (entry: NewInviteEntry) => void;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserResult[]>([]);
@@ -47,9 +62,10 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
     }, 300);
   }, [query]);
 
-  async function inviteUser(userId: string) {
+  async function inviteUser(userId: string, userHint?: UserResult) {
     setInviting(userId);
     setFeedback(null);
+    const user = userHint ?? results.find((u) => u.id === userId);
     const res = await fetch(`/api/jam/${jamId}/invite`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -58,8 +74,10 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
     const body = await res.json();
     if (res.ok) {
       setSent((prev) => new Set([...prev, userId]));
-      setFeedback({ id: userId, msg: "Invite sent!", ok: true });
-      router.refresh();
+      setQuery("");
+      setResults([]);
+      setFeedback({ id: "search", msg: "Invite sent!", ok: true });
+      onInvited?.({ invited_user_id: userId, invitee_email: null, display_name: user?.display_name, username: user?.username });
     } else {
       setFeedback({ id: userId, msg: body.error ?? "Failed to send invite", ok: false });
     }
@@ -136,7 +154,7 @@ export default function JamInvitePanel({ jamId, alreadyInvitedIds = [] }: { jamI
     } else if (res.ok) {
       setFeedback({ id: "email", msg: `Invite sent to ${email}`, ok: true });
       setEmailInput("");
-      router.refresh();
+      onInvited?.({ invited_user_id: null, invitee_email: email });
     } else {
       setFeedback({ id: "email", msg: body.error ?? "Failed to send invite", ok: false });
     }

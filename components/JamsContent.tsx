@@ -490,11 +490,21 @@ export default function JamsContent() {
         </section>
       )}
 
-      {isEmpty && (
+      {!userId && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-          <p className="text-sm text-zinc-500">
-            {userId ? "No jams yet. Be the first to post one!" : "No upcoming events."}
+          <p className="text-base font-semibold text-zinc-900">Join the session</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Sign in to RSVP to community jams, post your own, and get invited to private sessions by other musicians.
           </p>
+          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+            Sign in →
+          </Link>
+        </div>
+      )}
+
+      {userId && isEmpty && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
+          <p className="text-sm text-zinc-500">No jams yet. Be the first to post one!</p>
         </div>
       )}
     </div>

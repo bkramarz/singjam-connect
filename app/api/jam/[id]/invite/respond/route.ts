@@ -74,6 +74,33 @@ export async function POST(
       await admin.from("jam_rsvps").insert({ jam_id: jamId, user_id: user.id, status: rsvpStatus, waitlist_position: waitlistPosition });
     }
 
+    // Add to linked set list if the jam has one and the RSVP is confirmed
+    if (rsvpStatus === "attending") {
+      const { data: linkedSet } = await admin
+        .from("sets")
+        .select("id, owner_user_id")
+        .eq("jam_id", jamId)
+        .maybeSingle();
+
+      if (linkedSet && linkedSet.owner_user_id !== user.id) {
+        const { data: existingCollab } = await admin
+          .from("set_collaborators")
+          .select("id")
+          .eq("set_id", linkedSet.id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!existingCollab) {
+          await admin.from("set_collaborators").insert({
+            set_id: linkedSet.id,
+            user_id: user.id,
+            invited_by: linkedSet.owner_user_id,
+            status: "accepted",
+          });
+        }
+      }
+    }
+
     const { data: profile } = await admin.from("profiles").select("display_name, username").eq("id", user.id).single();
     const accepterName = (profile as any)?.display_name ?? (profile as any)?.username ?? "Someone";
 
