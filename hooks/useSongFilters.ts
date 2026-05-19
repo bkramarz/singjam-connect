@@ -50,15 +50,36 @@ export function useSongFilters<T extends FilterableSong>(
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
   }, [selectedGenres, selectedLanguages, selectedThemes, selectedCultures, selectedVibe, selectedTonality, selectedMeter, yearMin, yearMax, sortBy, initialSortBy]);
 
-  const filterOptions = useMemo(() => ({
-    genres: Array.from(new Set(songs.flatMap((s) => s.genres))).sort(),
-    languages: Array.from(new Set(songs.flatMap((s) => s.languages))).sort(),
-    themes: Array.from(new Set(songs.flatMap((s) => s.themes))).sort(),
-    cultures: Array.from(new Set(songs.flatMap((s) => s.cultures))).sort(),
-    vibes: Array.from(new Set(songs.map((s) => s.vibe).filter(Boolean) as string[])).sort(),
-    tonalities: Array.from(new Set(songs.flatMap((s) => s.tonality ? s.tonality.split(/,\s*/) : []))).sort(),
-    meters: Array.from(new Set(songs.map((s) => s.meter).filter(Boolean) as string[])).sort(),
-  }), [songs]);
+  const filterOptions = useMemo(() => {
+    // For each dimension, derive available options from songs that pass all OTHER active filters.
+    // This makes the filter pills cascade — selecting "Rock" trims languages/themes to Rock songs only.
+    // Selected values are always included so they remain visible and deselectable.
+    function matchesExcluding(song: FilterableSong, exclude: string): boolean {
+      if (exclude !== "genres" && selectedGenres.size > 0 && !song.genres.some((g) => selectedGenres.has(g))) return false;
+      if (exclude !== "languages" && selectedLanguages.size > 0 && !song.languages.some((l) => selectedLanguages.has(l))) return false;
+      if (exclude !== "themes" && selectedThemes.size > 0 && !song.themes.some((t) => selectedThemes.has(t))) return false;
+      if (exclude !== "cultures" && selectedCultures.size > 0 && !song.cultures.some((c) => selectedCultures.has(c))) return false;
+      if (exclude !== "vibe" && selectedVibe && song.vibe !== selectedVibe) return false;
+      if (exclude !== "tonality" && selectedTonality && !song.tonality?.split(/,\s*/).includes(selectedTonality)) return false;
+      if (exclude !== "meter" && selectedMeter && song.meter !== selectedMeter) return false;
+      if (exclude !== "year" && (yearMin || yearMax)) {
+        if (song.year === null) return false;
+        if (yearMin && song.year < parseInt(yearMin, 10)) return false;
+        if (yearMax && song.year > parseInt(yearMax, 10)) return false;
+      }
+      return true;
+    }
+
+    return {
+      genres: Array.from(new Set([...songs.filter((s) => matchesExcluding(s, "genres")).flatMap((s) => s.genres), ...selectedGenres])).sort(),
+      languages: Array.from(new Set([...songs.filter((s) => matchesExcluding(s, "languages")).flatMap((s) => s.languages), ...selectedLanguages])).sort(),
+      themes: Array.from(new Set([...songs.filter((s) => matchesExcluding(s, "themes")).flatMap((s) => s.themes), ...selectedThemes])).sort(),
+      cultures: Array.from(new Set([...songs.filter((s) => matchesExcluding(s, "cultures")).flatMap((s) => s.cultures), ...selectedCultures])).sort(),
+      vibes: Array.from(new Set(songs.filter((s) => matchesExcluding(s, "vibe")).map((s) => s.vibe).filter(Boolean) as string[])).sort(),
+      tonalities: Array.from(new Set(songs.filter((s) => matchesExcluding(s, "tonality")).flatMap((s) => s.tonality ? s.tonality.split(/,\s*/) : []))).sort(),
+      meters: Array.from(new Set(songs.filter((s) => matchesExcluding(s, "meter")).map((s) => s.meter).filter(Boolean) as string[])).sort(),
+    };
+  }, [songs, selectedGenres, selectedLanguages, selectedThemes, selectedCultures, selectedVibe, selectedTonality, selectedMeter, yearMin, yearMax]);
 
   const yearBounds = useMemo(() => {
     const years = songs.map((s) => s.year).filter((y): y is number => y !== null);
