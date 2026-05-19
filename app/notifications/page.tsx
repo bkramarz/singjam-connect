@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import NotificationsList from "@/components/NotificationsList";
 
-export const metadata: Metadata = { title: "Notifications" };
+export const metadata: Metadata = {
+  title: "Notifications",
+  description: "Stay up to date with jam invites, friend requests, and activity from your musical community.",
+};
 
 export default function NotificationsPage() {
   return (
