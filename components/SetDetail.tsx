@@ -908,16 +908,24 @@ export default function SetDetail({
   }
 
   function handleCSVDownload() {
-    const headers = ["#", "Title", "Artist", "Key", "YouTube", "Spotify", "Chord Chart"];
+    const headers = ["#", "Title", "Artist", "Key", "Leader", "YouTube", "Spotify", "Chord Chart"];
     const rows = songs.map((s, i) => {
       const videoId = getPrimaryYoutubeId(s.songs);
       const ytUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
       const spotifyUrl = getPrimarySpotifyUrl(s.songs) ?? "";
+      const leaderNames = (s.leader_user_ids ?? [])
+        .map((uid) => {
+          const p = participants.find((pt) => pt.user_id === uid);
+          return p?.display_name ?? p?.username ?? "";
+        })
+        .filter(Boolean)
+        .join("; ");
       return [
         i + 1,
         `"${s.songs.title.replace(/"/g, '""')}"`,
         `"${(s.songs.display_artist ?? "").replace(/"/g, '""')}"`,
         s.key_note ?? "",
+        `"${leaderNames.replace(/"/g, '""')}"`,
         ytUrl,
         spotifyUrl,
         s.songs.chord_chart_url ?? "",
