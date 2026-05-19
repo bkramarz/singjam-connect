@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -14,10 +13,10 @@ const SINGING_LABEL: Record<string, string> = {
 };
 
 export default function MatchesPage() {
-  const router = useRouter();
   const supabase = supabaseBrowser();
 
   const [loading, setLoading] = useState(true);
+  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
   const [matches, setMatches] = useState<any[]>([]);
   const [invitesEnabled, setInvitesEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,9 +28,11 @@ export default function MatchesPage() {
       const session = data.session;
 
       if (!session) {
-        router.replace("/auth");
+        setIsSignedIn(false);
+        setLoading(false);
         return;
       }
+      setIsSignedIn(true);
 
       const [{ data: res, error }, { data: flagData }, { count }] = await Promise.all([
         supabase.rpc("match_jammers", { for_user_id: session.user.id, limit_n: 30 }),
@@ -52,6 +53,26 @@ export default function MatchesPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!loading && isSignedIn === false) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold">Find jammers</h1>
+          <p className="mt-1 text-sm text-zinc-500">Matched by shared songs and genre overlap.</p>
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">See who you could jam with</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            SingJam matches you with musicians who know the same songs as you. Add songs to your repertoire and we&apos;ll rank your best potential jam partners.
+          </p>
+          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+            Sign in →
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

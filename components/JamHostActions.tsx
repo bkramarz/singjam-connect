@@ -53,7 +53,7 @@ export default function JamHostActions({ jamId }: { jamId: string }) {
             </svg>
           </button>
           {open && (
-            <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-zinc-200 bg-white shadow-lg z-10 overflow-hidden py-1">
+            <div className="absolute right-0 bottom-full mb-1 w-44 rounded-xl border border-zinc-200 bg-white shadow-lg z-10 overflow-hidden py-1">
               <Link
                 href={`/jam/${jamId}/edit`}
                 onClick={() => setOpen(false)}

@@ -33,7 +33,7 @@ export default function HomeButtons() {
 
   return (
     <Link
-      href="/auth"
+      href="/auth?mode=signup"
       className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-400 transition-colors"
     >
       Join us
