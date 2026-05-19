@@ -17,9 +17,10 @@ export type PDFSong = {
   key: string | null;
   tonality: string | null;
   songwriters: string[];
+  leaders: string[];
 };
 
-type Field = "artist" | "key" | "tonality" | "songwriters";
+type Field = "artist" | "key" | "tonality" | "songwriters" | "leader";
 type Layout = "list" | "twoColumn";
 
 const FIELD_LABELS: Record<Field, string> = {
@@ -27,6 +28,7 @@ const FIELD_LABELS: Record<Field, string> = {
   key: "Key",
   tonality: "Tonality",
   songwriters: "Songwriters",
+  leader: "Leader",
 };
 
 // ── Page layout constants (A4 mm, used for preview page splitting) ─────────────
@@ -46,7 +48,9 @@ function ps(fontSize: number) {
 // ── Page-break helpers ─────────────────────────────────────────────────────────
 
 function listRowH(song: PDFSong, fields: Set<Field>, fs: number): number {
-  return fs * 0.8 + 1 + (fields.has("songwriters") && song.songwriters.length > 0 ? fs * 0.72 : 0);
+  return fs * 0.8 + 1
+    + (fields.has("songwriters") && song.songwriters.length > 0 ? fs * 0.72 : 0)
+    + (fields.has("leader") && song.leaders.length > 0 ? fs * 0.72 : 0);
 }
 
 function splitListPages(songs: PDFSong[], fields: Set<Field>, fs: number): PDFSong[][] {
@@ -72,7 +76,7 @@ function splitListPages(songs: PDFSong[], fields: Set<Field>, fs: number): PDFSo
 }
 
 function splitTwoColPages(songs: PDFSong[], fields: Set<Field>, fs: number): PDFSong[][] {
-  const extraLines = (fields.has("tonality") ? 1 : 0) + (fields.has("songwriters") ? 1 : 0);
+  const extraLines = (fields.has("tonality") ? 1 : 0) + (fields.has("songwriters") ? 1 : 0) + (fields.has("leader") ? 1 : 0);
   const entryH = fs * 1.8 + extraLines * fs * 0.85;
   const startY = MT + fs * 2.5;
   let col = 0, y = startY;
@@ -181,6 +185,12 @@ function ListPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages, 
                 <span className="italic text-zinc-400" style={{ fontSize: p.sub }}>({song.songwriters.join(", ")})</span>
               </div>
             )}
+            {fields.has("leader") && song.leaders.length > 0 && (
+              <div className="flex gap-2 mt-0.5">
+                {includeNumber && <span className="w-5 shrink-0" />}
+                <span className="font-semibold text-zinc-500" style={{ fontSize: p.sub }}>Leader: {song.leaders.join(", ")}</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -226,6 +236,9 @@ function TwoColPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages
             {fields.has("tonality") && song.tonality && (
               <p className="text-zinc-400 mt-0.5" style={{ fontSize: p.sub }}>{song.tonality}</p>
             )}
+            {fields.has("leader") && song.leaders.length > 0 && (
+              <p className="font-semibold text-zinc-500 mt-0.5 truncate" style={{ fontSize: p.sub }}>Leader: {song.leaders.join(", ")}</p>
+            )}
           </div>
         ))}
       </div>
@@ -266,6 +279,7 @@ function SetListDoc({
   const showKey = fields.has("key") || fields.has("tonality");
   const showArtist = fields.has("artist");
   const showSW = fields.has("songwriters");
+  const showLeader = fields.has("leader");
   const keyLabel = fields.has("key") && fields.has("tonality") ? "Key / Tonality"
     : fields.has("key") ? "Key" : "Tonality";
 
@@ -294,6 +308,7 @@ function SetListDoc({
     artistText: { width: 110, fontSize: sub, color: "#555555" },
     keyText: { width: 72, fontSize: body, fontFamily: "Helvetica-Bold" },
     swText: { fontSize: sub, fontFamily: "Helvetica-Oblique", color: "#999999", marginTop: 2 },
+    leaderText: { fontSize: sub, fontFamily: "Helvetica-Bold", color: "#666666", marginTop: 2 },
     // Two-column cards: gap-3=12 between rows/cols, p-3=12 card padding
     cardRow: { flexDirection: "row", marginBottom: 12 },
     cardSpacer: { width: 12 },
@@ -306,6 +321,7 @@ function SetListDoc({
     cardSub: { fontSize: sub, color: "#666666", marginTop: 2 },
     cardSW: { fontSize: sub, fontFamily: "Helvetica-Oblique", color: "#999999", marginTop: 2 },
     cardTonality: { fontSize: sub, color: "#aaaaaa", marginTop: 2 },
+    cardLeader: { fontSize: sub, fontFamily: "Helvetica-Bold", color: "#666666", marginTop: 2 },
     pageNum: { fontSize: lbl, color: "#cccccc", textAlign: "right" },
   });
 
@@ -325,6 +341,7 @@ function SetListDoc({
         {showSW && song.songwriters.length > 0 && <Text style={s.cardSW}>({song.songwriters.join(", ")})</Text>}
         {showArtist && song.artist && <Text style={s.cardSub}>{song.artist}</Text>}
         {fields.has("tonality") && song.tonality && <Text style={s.cardTonality}>{song.tonality}</Text>}
+        {showLeader && song.leaders.length > 0 && <Text style={s.cardLeader}>Leader: {song.leaders.join(", ")}</Text>}
       </View>
     );
   }
@@ -358,6 +375,11 @@ function SetListDoc({
                 {showSW && song.songwriters.length > 0 && (
                   <Text style={{ ...s.swText, marginLeft: includeNumber ? 24 : 0 }}>
                     ({song.songwriters.join(", ")})
+                  </Text>
+                )}
+                {showLeader && song.leaders.length > 0 && (
+                  <Text style={{ ...s.leaderText, marginLeft: includeNumber ? 24 : 0 }}>
+                    Leader: {song.leaders.join(", ")}
                   </Text>
                 )}
               </View>
