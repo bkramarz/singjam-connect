@@ -8,6 +8,7 @@ import { formatComposers } from "@/lib/formatComposers";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
 import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 
@@ -99,11 +100,20 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(() => {
+    if (typeof window === "undefined") return PAGE_SIZE;
+    const saved = Number(sessionStorage.getItem("vc:/search"));
+    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE;
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [hideMySongs, setHideMySongs] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const hasMounted = useRef(false);
+
+  useEffect(() => {
+    sessionStorage.setItem("vc:/search", String(visibleCount));
+  }, [visibleCount]);
   const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
 
   const {
@@ -119,6 +129,11 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
   } = useSongFilters(popularSongs, "popularity");
+
+  const saveScrollPosition = useScrollRestoration(
+    "scroll:/search",
+    !songsLoading && (q.trim() === "" || !loading),
+  );
 
   // Lookup map for filter metadata on search results
   const songMetaMap = useMemo(
@@ -248,8 +263,10 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     });
   }, [filteredResults, sortBy, songMetaMap]);
 
-  // Reset visible count when filters, sort, or hide-my-songs toggle change
+  // Reset visible count when filters, sort, or hide-my-songs toggle change.
+  // Skip the first mount so a restored visibleCount isn't immediately overwritten.
   useEffect(() => {
+    if (!hasMounted.current) { hasMounted.current = true; return; }
     setVisibleCount(PAGE_SIZE);
   }, [matchesFilters, sortBy, hideMySongs]);
 
@@ -419,6 +436,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
+                onNavigate={() => saveScrollPosition()}
               />
             ))}
             {!loading && sortedSearch.length === 0 ? (
@@ -466,6 +484,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
+                onNavigate={() => saveScrollPosition()}
               />
             ))}
 
@@ -516,6 +535,7 @@ function SongCard({
   setPendingAddId,
   onAdd,
   addSong,
+  onNavigate,
 }: {
   songId: string;
   title: string;
@@ -537,6 +557,7 @@ function SongCard({
   setPendingAddId: (id: string | null) => void;
   onAdd: (id: string, slug?: string | null) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
+  onNavigate: () => void;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [spotifyOpen, setSpotifyOpen] = useState(false);
@@ -551,7 +572,7 @@ function SongCard({
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
           <div className="font-medium">
-            <Link href={href} className="hover:text-amber-600">
+            <Link href={href} onClick={onNavigate} className="hover:text-amber-600">
               {title}
             </Link>
             {composers.length > 0 && (
@@ -633,7 +654,7 @@ function SongCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Link href={href} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+        <Link href={href} onClick={onNavigate} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
           View
         </Link>
         {picking ? (

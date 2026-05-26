@@ -7,6 +7,7 @@ import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
@@ -99,6 +100,8 @@ export default function RepertoirePage() {
     toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
   } = useSongFilters(items, "title_asc");
+
+  const saveScrollPosition = useScrollRestoration("scroll:/repertoire", !loading);
 
   useEffect(() => {
     let cancelled = false;
@@ -947,7 +950,7 @@ export default function RepertoirePage() {
                     />
                     <div className="min-w-0">
                     <div className="truncate font-medium">
-                      <Link href={`/songs/${it.slug ?? it.song_id}`} className="hover:text-amber-600">
+                      <Link href={`/songs/${it.slug ?? it.song_id}`} onClick={() => saveScrollPosition()} className="hover:text-amber-600">
                         {it.title}
                       </Link>
                       {it.composers.length > 0 && (
@@ -1058,6 +1061,7 @@ export default function RepertoirePage() {
 
                     <Link
                       href={`/songs/${it.slug ?? it.song_id}`}
+                      onClick={() => saveScrollPosition()}
                       className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
                     >
                       View

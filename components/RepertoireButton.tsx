@@ -16,10 +16,12 @@ export default function RepertoireButton({
   songId,
   initialConfidence,
   singingVoice = null,
+  onConfidenceChange,
 }: {
   songId: string;
   initialConfidence: string | null;
   singingVoice?: string | null;
+  onConfidenceChange?: (level: string | null) => void;
 }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
@@ -56,6 +58,7 @@ export default function RepertoireButton({
     setSaving(false);
     if (!error) {
       setConfidence(level);
+      onConfidenceChange?.(level);
       setPicking(false);
       router.refresh();
     }
@@ -75,11 +78,10 @@ export default function RepertoireButton({
     setSaving(false);
     if (!error) {
       setConfidence(null);
+      onConfidenceChange?.(null);
       router.refresh();
     }
   }
-
-  const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label;
 
   if (picking) {
     return (
@@ -117,16 +119,26 @@ export default function RepertoireButton({
   if (confidence !== null) {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-sm text-amber-700">
-          ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-        </span>
-        <button
-          onClick={() => setPicking(true)}
+        <select
+          value={confidence}
           disabled={saving}
-          className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          onChange={(e) => save(e.target.value as Level)}
+          className={`rounded-xl border px-2 py-1.5 text-sm disabled:opacity-40 ${
+            confidence === "lead"
+              ? "border-amber-400 bg-amber-100 text-amber-800 font-semibold"
+              : "border-slate-300"
+          }`}
+          aria-label="Role"
         >
-          Update
-        </button>
+          {LEVELS.map((l) => {
+            const blocked = l.key === "lead" && (!singingVoice || singingVoice === "none");
+            return (
+              <option key={l.key} value={l.key} disabled={blocked}>
+                {blocked ? "Lead (singers only)" : l.label}
+              </option>
+            );
+          })}
+        </select>
         <button
           onClick={remove}
           disabled={saving}

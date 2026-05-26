@@ -47,6 +47,7 @@ export default function SongPageContent() {
   const router = useRouter();
   const [data, setData] = useState<SongData | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [confidence, setConfidence] = useState<string | null>(null);
   const supabase = supabaseBrowser();
 
   useEffect(() => {
@@ -91,11 +92,13 @@ export default function SongPageContent() {
         supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("song_id", song.id),
       ]);
 
+      const loadedConfidence = (userSongRes.data as any)?.confidence ?? null;
+      setConfidence(loadedConfidence);
       setData({
         song,
         isAdmin: (profileRes.data as any)?.is_admin ?? false,
         singingVoice: (profileRes.data as any)?.singing_voice ?? null,
-        userSongConfidence: (userSongRes.data as any)?.confidence ?? null,
+        userSongConfidence: loadedConfidence,
         popularity: popularityRes.count ?? 0,
       });
     })();
@@ -177,7 +180,7 @@ export default function SongPageContent() {
             <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
+            <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence} />
             {isAdmin && (
               <Link href={`/admin/songs/${song.slug ?? song.id}`}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
@@ -363,7 +366,7 @@ export default function SongPageContent() {
 
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <RepertoireButton songId={song.id} initialConfidence={userSongConfidence} singingVoice={singingVoice} />
+          <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence} />
           {isAdmin && (
             <Link href={`/admin/songs/${song.slug ?? song.id}`}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
@@ -371,9 +374,9 @@ export default function SongPageContent() {
             </Link>
           )}
         </div>
-        <Link href={userSongConfidence ? "/repertoire" : "/search"}
+        <Link href={confidence ? "/repertoire" : "/search"}
           className="mt-2 text-center text-sm text-slate-500 hover:text-slate-700 sm:mt-0 sm:text-left">
-          {userSongConfidence ? "← Back to repertoire" : "← Back to search"}
+          {confidence ? "← Back to repertoire" : "← Back to search"}
         </Link>
       </div>
     </div>

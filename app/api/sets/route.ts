@@ -18,7 +18,7 @@ export async function GET() {
   const [ownedRes, collabRes] = await Promise.all([
     supabase
       .from("sets")
-      .select("id, name, description, created_at, owner_user_id")
+      .select("id, name, description, created_at, owner_user_id, jam_id")
       .eq("owner_user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase
