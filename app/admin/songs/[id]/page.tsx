@@ -9,11 +9,11 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  if (id === "new") return { title: "New Song — SingJam Admin" };
+  if (id === "new") return { title: "New Song | SingJam Admin" };
   const supabase = await supabaseServer();
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
   const { data } = await supabase.from("songs").select("title").eq(isUuid ? "id" : "slug", id).single();
-  return { title: data?.title ? `${data.title} — SingJam Admin` : "Edit Song — SingJam Admin" };
+  return { title: data?.title ? `${data.title} | SingJam Admin` : "Edit Song | SingJam Admin" };
 }
 
 export default async function AdminSongPage({

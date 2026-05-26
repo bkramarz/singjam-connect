@@ -33,10 +33,12 @@ export default function LocationAutocomplete({
   value,
   onChange,
   placeholder,
+  citiesOnly = false,
 }: {
   value: string;
   onChange: (location: LocationValue) => void;
   placeholder?: string;
+  citiesOnly?: boolean;
 }) {
   const [inputValue, setInputValue] = useState(value);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -76,9 +78,7 @@ export default function LocationAutocomplete({
           headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key },
           body: JSON.stringify({
             input: q,
-            locationBias: {
-              circle: { center: { latitude: 37.8044, longitude: -122.2712 }, radius: 50000 },
-            },
+            ...(citiesOnly && { includedPrimaryTypes: ["locality", "sublocality"] }),
           }),
         });
         const json = await res.json();
@@ -95,7 +95,9 @@ export default function LocationAutocomplete({
     const fullAddress = secondaryText
       ? `${mainText.text}, ${secondaryText.text}`
       : mainText.text;
-    const neighborhood = extractNeighborhood(secondaryText?.text, mainText.text);
+    const neighborhood = citiesOnly
+      ? (secondaryText ? `${mainText.text}, ${secondaryText.text.split(", ")[0]}` : mainText.text)
+      : extractNeighborhood(secondaryText?.text, mainText.text);
 
     setInputValue(fullAddress);
     onChange({ fullAddress, neighborhood });
@@ -127,7 +129,7 @@ export default function LocationAutocomplete({
                 >
                   <span className="font-medium">{mainText.text}</span>
                   {secondaryText && (
-                    <span className="text-zinc-400"> — {secondaryText.text}</span>
+                    <span className="text-zinc-400">, {secondaryText.text}</span>
                   )}
                 </button>
               </li>

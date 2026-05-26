@@ -6,7 +6,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const supabase = await supabaseServer();
   const { data } = await supabase.from("sets").select("name").eq("id", id).single();
-  return { title: `${(data as any)?.name ?? "Set"} — PDF Builder` };
+  return { title: `${(data as any)?.name ?? "Set"} | PDF Builder` };
 }
 
 export default async function SetPDFPage({ params }: { params: Promise<{ id: string }> }) {

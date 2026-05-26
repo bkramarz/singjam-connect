@@ -65,7 +65,8 @@ Given the current data for a song, research and suggest corrections or additions
 - music_culture: For traditional songs, the cultural tradition the melody comes from (e.g. "Irish", "Scottish"). Single value or null. Must be from the cultures list.
 - lyric_culture: For traditional songs, the cultural tradition the lyrics come from. Often identical to music_culture but can differ. Single value or null. Must be from the cultures list.
 - languages: Languages the song is sung in, as plain English names (e.g. "English", "French")
-- notes: A concise factual paragraph about the song's history, origin, or cultural significance. Include disputed credits, notable recordings, or anything a musician would find useful. Null if nothing meaningful to add.
+- notes: A concise factual paragraph about the song's history, origin, or cultural significance. Include disputed credits, notable recordings, or anything a musician would find useful. For traditional songs, include Roud Folk Song Index and Child Ballad numbers where known (e.g. "Roud 123" or "Child 10"). Null if nothing meaningful to add.
+- productions: Movies, musicals, TV shows, or other productions this song originally appeared in or is strongly associated with. Return as an array of production names (e.g. "The Sound of Music", "Grease"), or an empty array if none.
 - alternate_titles: Other titles the song is commonly known by (e.g. subtitle variants, translated titles, common misspellings). Do not repeat titles already in the current alternate_titles list.
 - additional_recordings: Up to 2 other significant recordings of this song not already in the recording_artists list. Each entry must have "artist" (canonical artist name) and "year" (recording year — required; only omit if completely unverifiable). Focus on the most historically or culturally notable versions.
 
@@ -98,6 +99,7 @@ Respond with valid JSON only, matching this exact schema:
   "lyric_culture": string | null,
   "languages": string[],
   "notes": string | null,
+  "productions": string[],
   "alternate_titles": string[],
   "additional_recordings": { "artist": string, "year": number | null }[],
   "confidence": "high" | "medium" | "low"
@@ -114,10 +116,10 @@ export async function POST(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile?.is_admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const { id: songId } = await params;

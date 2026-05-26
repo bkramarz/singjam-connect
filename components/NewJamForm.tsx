@@ -79,8 +79,8 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData.user?.id;
       if (uid) {
-        const { data: p } = await supabase.from("profiles").select("is_admin, display_name, username").eq("id", uid).single();
-        setIsAdmin(!!(p as any)?.is_admin);
+        const { data: p } = await supabase.from("profiles").select("role, display_name, username").eq("id", uid).single();
+        setIsAdmin((p as any)?.role === "admin");
         setDisplayName((p as any)?.display_name ?? (p as any)?.username ?? null);
       }
       const [{ data: g }, { data: t }] = await Promise.all([

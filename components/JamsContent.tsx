@@ -236,7 +236,7 @@ export default function JamsContent() {
     const [flagRes, adminRes, jamsRes, rsvpsRes, invitesRes] = await Promise.all([
       supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
       userId
-        ? supabase.from("profiles").select("is_admin").eq("id", userId).single()
+        ? supabase.from("profiles").select("role").eq("id", userId).single()
         : Promise.resolve({ data: null }),
       supabase
         .from("jams")
@@ -295,7 +295,7 @@ export default function JamsContent() {
     setData({
       userId,
       invitesEnabled: flagRes.data?.enabled ?? true,
-      isAdmin: (adminRes.data as any)?.is_admin ?? false,
+      isAdmin: (adminRes.data as any)?.role === "admin",
       allJams,
       rsvpByJam,
       inviteByJam,

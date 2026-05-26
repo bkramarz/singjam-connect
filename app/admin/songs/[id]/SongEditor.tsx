@@ -1,9 +1,26 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { generateSlug } from "@/lib/generateSlug";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Lookup = { id: string; name: string };
 type AltTitle = { id: string; title: string };
@@ -184,6 +201,7 @@ export default function SongEditor({
     lyric_culture: string | null;
     languages: string[];
     notes: string | null;
+    productions: string[];
     alternate_titles: string[];
     additional_recordings: { artist: string; year: number | null }[];
     confidence: "high" | "medium" | "low";
@@ -455,6 +473,7 @@ export default function SongEditor({
       if (s.lyric_culture) initial.add("lyric_culture");
       if (s.languages?.length) initial.add("languages");
       if (s.notes) initial.add("notes");
+      if (s.productions?.length) initial.add("productions");
       if (s.alternate_titles?.length) initial.add("alternate_titles");
       if (s.additional_recordings?.length) initial.add("additional_recordings");
       setAcceptedFields(initial);
@@ -519,6 +538,11 @@ export default function SongEditor({
     }
     if (acceptedFields.has("notes") && aiSuggestions.notes) {
       setNotes(aiSuggestions.notes);
+    }
+    if (acceptedFields.has("productions") && aiSuggestions.productions.length) {
+      const { existingIds, pendingNames } = splitExistingAndPending(aiSuggestions.productions, allProductions);
+      setProductions((prev) => new Set([...prev, ...existingIds]));
+      setPendingProductionNames((prev) => [...prev, ...pendingNames.filter((n) => !prev.includes(n))]);
     }
     if (acceptedFields.has("additional_recordings") && aiSuggestions.additional_recordings.length) {
       const toAdd: { id: string; year: number | null }[] = [];
@@ -1167,6 +1191,9 @@ export default function SongEditor({
               {aiSuggestions.notes && (
                 <SuggestionRow label="Notes" current={notes || "—"} suggested={aiSuggestions.notes} accepted={acceptedFields.has("notes")} onChange={toggleField("notes")} />
               )}
+              {aiSuggestions.productions?.length > 0 && (
+                <SuggestionRow label="Productions" current={[...productions].map((id) => allProductions.find((p) => p.id === id)?.name).filter(Boolean).join(", ") || "—"} suggested={aiSuggestions.productions.join(", ")} accepted={acceptedFields.has("productions")} onChange={toggleField("productions")} />
+              )}
               {aiSuggestions.alternate_titles.length > 0 && (
                 <SuggestionRow label="Alternate titles" current={altTitles.map((t) => t.title).join(", ") || "—"} suggested={aiSuggestions.alternate_titles.join(", ")} accepted={acceptedFields.has("alternate_titles")} onChange={toggleField("alternate_titles")} />
               )}
@@ -1495,6 +1522,155 @@ export default function SongEditor({
 
 type YtResult = { videoId: string; title: string; channel: string; url: string };
 
+function SortableArtistRow({
+  e, artist, isSearchingYt, isSearchingSpotify, resultsOpen, searchResults,
+  pasteSpotifyId, pasteSpotifyValue, spotifyNotFoundIds, songTitle,
+  onRemove, onYearChange, onSpotifyUrlChange, onYoutubeUrlChange,
+  onYoutubeSearch, onSpotifySearch, onTogglePasteSpotify, onPasteSpotifyChange,
+  onPasteSpotifySave, onCloseResults,
+}: {
+  e: { id: string; year: number | null; youtube_url: string | null; spotify_url?: string | null };
+  artist: { id: string; name: string } | undefined;
+  isSearchingYt: boolean;
+  isSearchingSpotify: boolean;
+  resultsOpen: boolean;
+  searchResults: YtResult[];
+  pasteSpotifyId: string | null;
+  pasteSpotifyValue: string;
+  spotifyNotFoundIds: Set<string>;
+  songTitle: string;
+  onRemove: (id: string) => void;
+  onYearChange: (id: string, year: number | null) => void;
+  onSpotifyUrlChange: (id: string, url: string | null) => void;
+  onYoutubeUrlChange: (id: string, url: string | null) => void;
+  onYoutubeSearch: (id: string, artistName: string) => void;
+  onSpotifySearch: (id: string, artistName: string) => void;
+  onTogglePasteSpotify: (id: string) => void;
+  onPasteSpotifyChange: (value: string) => void;
+  onPasteSpotifySave: (id: string, url: string) => void;
+  onCloseResults: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: e.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} className="space-y-1">
+      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <span {...listeners} className="cursor-grab touch-none text-slate-400 text-xs active:cursor-grabbing select-none">⠿</span>
+        <span className="text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{artist?.name}</span>
+        <input
+          type="number"
+          value={e.year ?? ""}
+          onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
+          placeholder="year"
+          className="w-16 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs focus:border-amber-400 focus:outline-none"
+        />
+        {e.spotify_url ? (
+          <>
+            <a href={e.spotify_url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-green-600 hover:text-green-700 shrink-0">🎵 linked</a>
+            <button
+              type="button"
+              onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
+              disabled={isSearchingSpotify || !songTitle.trim()}
+              title="Re-search Spotify"
+              className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-400 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+            >
+              {isSearchingSpotify ? "…" : "↺"}
+            </button>
+          </>
+        ) : spotifyNotFoundIds.has(e.id) ? (
+          <>
+            <span className="text-xs text-slate-400 shrink-0">Not found</span>
+            <button
+              type="button"
+              onClick={() => onTogglePasteSpotify(e.id)}
+              className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600"
+            >
+              Paste URL
+            </button>
+            <button
+              type="button"
+              onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
+              disabled={isSearchingSpotify || !songTitle.trim()}
+              className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+            >
+              {isSearchingSpotify ? "…" : "↺ Retry"}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
+            disabled={isSearchingSpotify || !songTitle.trim()}
+            className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+          >
+            {isSearchingSpotify ? "…" : "🎵 Spotify"}
+          </button>
+        )}
+        {e.youtube_url && (
+          <a href={e.youtube_url} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-green-600 hover:text-green-700 shrink-0">▶ linked</a>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            if (resultsOpen) { onCloseResults(); return; }
+            onYoutubeSearch(e.id, artist?.name ?? "");
+          }}
+          disabled={isSearchingYt || !songTitle.trim()}
+          className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
+        >
+          {isSearchingYt ? "…" : "▶ YouTube"}
+        </button>
+        <button onClick={() => onRemove(e.id)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
+      </div>
+      {pasteSpotifyId === e.id && (
+        <div className="ml-6 flex items-center gap-2 pt-1">
+          <input
+            autoFocus
+            value={pasteSpotifyValue}
+            onChange={(ev) => onPasteSpotifyChange(ev.target.value)}
+            placeholder="https://open.spotify.com/track/…"
+            className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:border-green-400 focus:outline-none"
+          />
+          <button
+            type="button"
+            disabled={!pasteSpotifyValue.trim().startsWith("https://open.spotify.com/")}
+            onClick={() => onPasteSpotifySave(e.id, pasteSpotifyValue.trim())}
+            className="shrink-0 rounded border border-green-400 bg-white px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
+          >
+            Save
+          </button>
+        </div>
+      )}
+      {resultsOpen && searchResults.length > 0 && (
+        <div className="ml-6 space-y-0 rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+          {searchResults.map((r) => (
+            <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
+              <div className="min-w-0">
+                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
+                <div className="text-xs text-slate-400 truncate">{r.channel}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { onYoutubeUrlChange(e.id, r.url); onCloseResults(); }}
+                className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
+              >
+                Select
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecordingArtistField({
   items, allArtists, query, onQueryChange, onAdd, onRemove, onYearChange, onYoutubeUrlChange, onSpotifyUrlChange, onReorder, songTitle,
   onAddNew, pendingItems = [], onRemovePending,
@@ -1514,7 +1690,6 @@ function RecordingArtistField({
   pendingItems?: { name: string; year: number | null }[];
   onRemovePending?: (name: string) => void;
 }) {
-  const dragIndex = useRef<number | null>(null);
   const [searchingId, setSearchingId] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<YtResult[]>([]);
   const [openResultsId, setOpenResultsId] = useState<string | null>(null);
@@ -1523,14 +1698,17 @@ function RecordingArtistField({
   const [pasteSpotifyId, setPasteSpotifyId] = useState<string | null>(null);
   const [pasteSpotifyValue, setPasteSpotifyValue] = useState("");
 
-  function handleDragStart(i: number) { dragIndex.current = i; }
-  function handleDrop(i: number) {
-    if (dragIndex.current === null || dragIndex.current === i) return;
-    const next = [...items];
-    const [moved] = next.splice(dragIndex.current, 1);
-    next.splice(i, 0, moved);
-    onReorder(next);
-    dragIndex.current = null;
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((e) => e.id === active.id);
+    const newIndex = items.findIndex((e) => e.id === over.id);
+    onReorder(arrayMove(items, oldIndex, newIndex));
   }
 
   async function handleYoutubeSearch(id: string, artistName: string) {
@@ -1576,135 +1754,43 @@ function RecordingArtistField({
     <div className="space-y-2">
       <label className="block text-xs font-medium text-slate-600">Recording artists <span className="font-normal text-slate-400">(drag to reorder)</span></label>
       <div className="space-y-1">
-        {items.map((e, i) => {
-          const artist = allArtists.find((a) => a.id === e.id);
-          const isSearchingYt = searchingId === e.id;
-          const isSearchingSpotify = searchingSpotifyId === e.id;
-          const resultsOpen = openResultsId === e.id;
-          return (
-            <div key={e.id} className="space-y-1">
-              <div
-                draggable
-                onDragStart={() => handleDragStart(i)}
-                onDragOver={(ev) => ev.preventDefault()}
-                onDrop={() => handleDrop(i)}
-                className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 cursor-grab active:cursor-grabbing"
-              >
-                <span className="text-slate-400 text-xs">⠿</span>
-                <span className="text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{artist?.name}</span>
-                <input
-                  type="number"
-                  value={e.year ?? ""}
-                  onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
-                  placeholder="year"
-                  className="w-16 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs focus:border-amber-400 focus:outline-none"
-                />
-                {e.spotify_url ? (
-                  <>
-                    <a href={e.spotify_url} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-green-600 hover:text-green-700 shrink-0">🎵 linked</a>
-                    <button
-                      type="button"
-                      onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
-                      disabled={isSearchingSpotify || !songTitle.trim()}
-                      title="Re-search Spotify"
-                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-400 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
-                    >
-                      {isSearchingSpotify ? "…" : "↺"}
-                    </button>
-                  </>
-                ) : spotifyNotFoundIds.has(e.id) ? (
-                  <>
-                    <span className="text-xs text-slate-400 shrink-0">Not found</span>
-                    <button
-                      type="button"
-                      onClick={() => { setPasteSpotifyId(pasteSpotifyId === e.id ? null : e.id); setPasteSpotifyValue(""); }}
-                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600"
-                    >
-                      Paste URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
-                      disabled={isSearchingSpotify || !songTitle.trim()}
-                      className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
-                    >
-                      {isSearchingSpotify ? "…" : "↺ Retry"}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleSpotifySearch(e.id, artist?.name ?? "")}
-                    disabled={isSearchingSpotify || !songTitle.trim()}
-                    className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
-                  >
-                    {isSearchingSpotify ? "…" : "🎵 Spotify"}
-                  </button>
-                )}
-                {e.youtube_url && (
-                  <a href={e.youtube_url} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-green-600 hover:text-green-700 shrink-0">▶ linked</a>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (resultsOpen) { setOpenResultsId(null); setSearchResults([]); return; }
-                    handleYoutubeSearch(e.id, artist?.name ?? "");
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((e) => e.id)} strategy={verticalListSortingStrategy}>
+            {items.map((e) => {
+              const artist = allArtists.find((a) => a.id === e.id);
+              return (
+                <SortableArtistRow
+                  key={e.id}
+                  e={e}
+                  artist={artist}
+                  isSearchingYt={searchingId === e.id}
+                  isSearchingSpotify={searchingSpotifyId === e.id}
+                  resultsOpen={openResultsId === e.id}
+                  searchResults={openResultsId === e.id ? searchResults : []}
+                  pasteSpotifyId={pasteSpotifyId}
+                  pasteSpotifyValue={pasteSpotifyValue}
+                  spotifyNotFoundIds={spotifyNotFoundIds}
+                  songTitle={songTitle}
+                  onRemove={onRemove}
+                  onYearChange={onYearChange}
+                  onSpotifyUrlChange={onSpotifyUrlChange}
+                  onYoutubeUrlChange={onYoutubeUrlChange}
+                  onYoutubeSearch={handleYoutubeSearch}
+                  onSpotifySearch={handleSpotifySearch}
+                  onTogglePasteSpotify={(id) => { setPasteSpotifyId(pasteSpotifyId === id ? null : id); setPasteSpotifyValue(""); }}
+                  onPasteSpotifyChange={setPasteSpotifyValue}
+                  onPasteSpotifySave={(id, url) => {
+                    onSpotifyUrlChange(id, url);
+                    setSpotifyNotFoundIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+                    setPasteSpotifyId(null);
+                    setPasteSpotifyValue("");
                   }}
-                  disabled={isSearchingYt || !songTitle.trim()}
-                  className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
-                >
-                  {isSearchingYt ? "…" : "▶ YouTube"}
-                </button>
-                <button onClick={() => onRemove(e.id)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
-              </div>
-              {pasteSpotifyId === e.id && (
-                <div className="ml-6 flex items-center gap-2 pt-1">
-                  <input
-                    autoFocus
-                    value={pasteSpotifyValue}
-                    onChange={(ev) => setPasteSpotifyValue(ev.target.value)}
-                    placeholder="https://open.spotify.com/track/…"
-                    className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs focus:border-green-400 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    disabled={!pasteSpotifyValue.trim().startsWith("https://open.spotify.com/")}
-                    onClick={() => {
-                      onSpotifyUrlChange(e.id, pasteSpotifyValue.trim());
-                      setSpotifyNotFoundIds((prev) => { const next = new Set(prev); next.delete(e.id); return next; });
-                      setPasteSpotifyId(null);
-                      setPasteSpotifyValue("");
-                    }}
-                    className="shrink-0 rounded border border-green-400 bg-white px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
-                  >
-                    Save
-                  </button>
-                </div>
-              )}
-              {resultsOpen && searchResults.length > 0 && (
-                <div className="ml-6 space-y-0 rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
-                  {searchResults.map((r) => (
-                    <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
-                      <div className="min-w-0">
-                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
-                        <div className="text-xs text-slate-400 truncate">{r.channel}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => { onYoutubeUrlChange(e.id, r.url); setOpenResultsId(null); setSearchResults([]); }}
-                        className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
-                      >
-                        Select
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+                  onCloseResults={() => { setOpenResultsId(null); setSearchResults([]); }}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
         {pendingItems.map(({ name, year }) => (
           <div key={name} className="flex items-center gap-2 rounded-lg border border-amber-400 bg-white px-3 py-2">
             <span className="text-sm font-medium text-amber-700 flex-1 min-w-0 truncate">{name}</span>
