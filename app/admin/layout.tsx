@@ -10,11 +10,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin")
+    .select("role")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.is_admin) redirect("/");
+  if (profile?.role !== "admin") redirect("/");
 
   const { count: reviewCount } = await supabase
     .from("songs")

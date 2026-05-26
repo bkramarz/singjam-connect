@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import LocationAutocomplete from "./LocationAutocomplete";
 
 const SEEDED_INSTRUMENTS = [
   "Guitar", "Electric Bass", "Upright Bass", "Piano/Keys", "Drums", "Percussion", "Violin/Fiddle", "Viola", "Cello",
@@ -206,7 +207,7 @@ export default function AccountPanel() {
       setUserId(data.user.id);
       setEmail(data.user.email ?? null);
       Promise.all([
-        supabase.from("profiles").select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, favorite_genres, is_admin").eq("id", data.user.id).single(),
+        supabase.from("profiles").select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, favorite_genres, role").eq("id", data.user.id).single(),
         supabase.from("song_genres").select("genres(name)"),
       ]).then(([{ data: profile }, { data: genreRows }]) => {
         const favorites: string[] = (profile as any)?.favorite_genres ?? [];
@@ -223,7 +224,7 @@ export default function AccountPanel() {
         setSingingVoice(profile?.singing_voice ? profile.singing_voice.split(",") : []);
         setInstrumentLevels((profile?.instrument_levels as Record<string, string>) ?? {});
         setFavoriteGenres(profile?.favorite_genres ?? []);
-        setIsAdmin(!!(profile as any)?.is_admin);
+        setIsAdmin((profile as any)?.role === "admin");
 
         const savedUsername = profile?.username ?? "";
         if (savedUsername) {
@@ -585,12 +586,14 @@ export default function AccountPanel() {
         {/* Neighborhood */}
         <div>
           <label className="block text-sm font-medium">City</label>
-          <input
-            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
-            value={neighborhood}
-            onChange={(e) => setNeighborhood(e.target.value)}
-            placeholder="City"
-          />
+          <div className="mt-1">
+            <LocationAutocomplete
+              citiesOnly
+              value={neighborhood}
+              onChange={(loc) => setNeighborhood(loc.neighborhood)}
+              placeholder="City"
+            />
+          </div>
           <div className="mt-1 text-xs text-zinc-500">We only show neighborhood-level info until an invite is accepted.</div>
         </div>
 

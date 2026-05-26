@@ -33,12 +33,35 @@ function TagRow({ label, tags }: { label: string; tags: string[] }) {
   );
 }
 
+function JammerRow({ label, jammers }: { label: string; jammers: { name: string; username: string }[] }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-2">
+      <span className="text-xs font-medium text-slate-500 w-16 shrink-0">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {jammers.map((j, i) => (
+          <Link key={i} href={`/u/${j.username}`}
+            className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200">
+            {j.name}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type SongData = {
   song: any;
   isAdmin: boolean;
   singingVoice: string | null;
   userSongConfidence: string | null;
   popularity: number;
+};
+
+type JammerEntry = { name: string; username: string };
+type SongUsers = {
+  lead: JammerEntry[];
+  support: JammerEntry[];
+  learn: JammerEntry[];
 };
 
 export default function SongPageContent() {
@@ -48,11 +71,15 @@ export default function SongPageContent() {
   const [data, setData] = useState<SongData | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [confidence, setConfidence] = useState<string | null>(null);
+  const [songUsers, setSongUsers] = useState<SongUsers | null>(null);
+  const [songUsersLoading, setSongUsersLoading] = useState(false);
   const supabase = supabaseBrowser();
 
   useEffect(() => {
     (async () => {
       setData(null);
+      setSongUsers(null);
+      setSongUsersLoading(false);
       setNotFound(false);
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
@@ -84,7 +111,7 @@ export default function SongPageContent() {
 
       const [profileRes, userSongRes, popularityRes] = await Promise.all([
         user
-          ? supabase.from("profiles").select("is_admin, singing_voice").eq("id", user.id).single()
+          ? supabase.from("profiles").select("role, singing_voice").eq("id", user.id).single()
           : Promise.resolve({ data: null }),
         user
           ? supabase.from("user_songs").select("confidence").eq("user_id", user.id).eq("song_id", song.id).maybeSingle()
@@ -93,14 +120,25 @@ export default function SongPageContent() {
       ]);
 
       const loadedConfidence = (userSongRes.data as any)?.confidence ?? null;
+      const isAdmin = (profileRes.data as any)?.role === "admin";
       setConfidence(loadedConfidence);
       setData({
         song,
-        isAdmin: (profileRes.data as any)?.is_admin ?? false,
+        isAdmin,
         singingVoice: (profileRes.data as any)?.singing_voice ?? null,
         userSongConfidence: loadedConfidence,
         popularity: popularityRes.count ?? 0,
       });
+
+      if (isAdmin) {
+        setSongUsersLoading(true);
+        try {
+          const res = await fetch(`/api/admin/songs/${song.id}/users`);
+          setSongUsers(await res.json());
+        } finally {
+          setSongUsersLoading(false);
+        }
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
@@ -361,6 +399,26 @@ export default function SongPageContent() {
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</h2>
           <p className="text-sm text-slate-700 whitespace-pre-wrap">{song.notes}</p>
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Jammers</h2>
+          {songUsersLoading ? (
+            <div className="space-y-2">
+              <div className="h-4 w-2/3 animate-pulse rounded bg-zinc-100" />
+              <div className="h-4 w-1/2 animate-pulse rounded bg-zinc-100" />
+            </div>
+          ) : songUsers && (songUsers.lead.length > 0 || songUsers.support.length > 0 || songUsers.learn.length > 0) ? (
+            <div className="space-y-2">
+              {songUsers.lead.length > 0 && <JammerRow label="Lead" jammers={songUsers.lead} />}
+              {songUsers.support.length > 0 && <JammerRow label="Support" jammers={songUsers.support} />}
+              {songUsers.learn.length > 0 && <JammerRow label="Learn" jammers={songUsers.learn} />}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">No jammers have added this song yet.</p>
+          )}
         </section>
       )}
 

@@ -20,7 +20,15 @@ export default function MobileHeaderProfile() {
           </svg>
         </Link>
         <NotificationBell />
-        {profile?.is_admin && (
+        {profile?.role === "song_editor" && (
+          <Link
+            href="/song-editor"
+            className="rounded-lg bg-teal-500/20 px-2.5 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/30 transition-colors"
+          >
+            Song Editor
+          </Link>
+        )}
+        {profile?.role === "admin" && (
           <Link
             href="/admin"
             className="rounded-lg bg-amber-500/20 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition-colors"

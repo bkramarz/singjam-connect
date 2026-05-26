@@ -7,7 +7,7 @@ export type UserProfile = {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
-  is_admin: boolean | null;
+  role: string | null;
 };
 
 export function useProfile() {
@@ -18,7 +18,7 @@ export function useProfile() {
   async function loadProfile(userId: string, bust = false) {
     const { data } = await supabase
       .from("profiles")
-      .select("username, display_name, avatar_url, is_admin")
+      .select("username, display_name, avatar_url, role")
       .eq("id", userId)
       .single();
     if (data && bust && data.avatar_url) {

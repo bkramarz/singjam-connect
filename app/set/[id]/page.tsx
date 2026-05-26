@@ -60,7 +60,7 @@ export default async function SetPage({
       .eq("set_id", id)
       .eq("status", "requested"),
     user
-      ? supabase.from("profiles").select("is_admin").eq("id", user.id).single()
+      ? supabase.from("profiles").select("role").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -88,7 +88,7 @@ export default async function SetPage({
   const isOwner = user?.id === set.owner_user_id;
   const isCollaborator = collaborators.some((c: any) => c.user_id === user?.id);
   const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && c.role === "editor");
-  const isAdmin = (profileRes as any)?.data?.is_admin ?? false;
+  const isAdmin = (profileRes as any)?.data?.role === "admin";
   const isPublicViewer = !isOwner && !isCollaborator && !isAdmin && set.link_sharing === "view";
 
   if (!isOwner && !isCollaborator && !isAdmin && set.link_sharing === "disabled") {

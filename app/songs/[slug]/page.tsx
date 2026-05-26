@@ -22,9 +22,9 @@ export async function generateMetadata({
     "Add it to your repertoire and find musicians to jam with on SingJam.",
   ].filter(Boolean).join(" ");
   return {
-    title: artist ? `${title} — ${artist}` : title,
+    title: artist ? `${title} | ${artist}` : title,
     description,
-    openGraph: { title: artist ? `${title} — ${artist}` : title, description },
+    openGraph: { title: artist ? `${title} | ${artist}` : title, description },
   };
 }
 

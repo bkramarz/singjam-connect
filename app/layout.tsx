@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org"),
   title: {
     default: "SingJam",
-    template: "%s · SingJam",
+    template: "%s | SingJam",
   },
   description: "Find your people through shared music. Build your repertoire, discover musicians nearby, and get invited to jams in your community.",
   openGraph: {
