@@ -102,17 +102,18 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
   const [visibleCount, setVisibleCount] = useState(() => {
     if (typeof window === "undefined") return PAGE_SIZE;
-    try {
-      const raw = sessionStorage.getItem("scroll:/search");
-      const saved = raw ? JSON.parse(raw)?.visibleCount : undefined;
-      return typeof saved === "number" ? saved : PAGE_SIZE;
-    } catch { return PAGE_SIZE; }
+    const saved = Number(sessionStorage.getItem("vc:/search"));
+    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE;
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [hideMySongs, setHideMySongs] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useRef(false);
+
+  useEffect(() => {
+    sessionStorage.setItem("vc:/search", String(visibleCount));
+  }, [visibleCount]);
   const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
 
   const {
@@ -435,7 +436,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
-                onNavigate={() => saveScrollPosition({ visibleCount })}
+                onNavigate={() => saveScrollPosition()}
               />
             ))}
             {!loading && sortedSearch.length === 0 ? (
@@ -483,7 +484,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
-                onNavigate={() => saveScrollPosition({ visibleCount })}
+                onNavigate={() => saveScrollPosition()}
               />
             ))}
 
