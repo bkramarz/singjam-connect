@@ -350,8 +350,8 @@ export default function JamContent() {
           }}
         />
       )}
-      {isHost && <JamInviteList invites={inviteList} />}
-      {isHost && <JamHostActions jamId={id} />}
+      {isHost && <JamInviteList jamId={id} invites={inviteList} />}
+      {isHost && <JamHostActions jamId={id} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
   );
 }
