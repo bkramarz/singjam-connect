@@ -101,7 +101,7 @@ export default function RepertoirePage() {
     sortBy, setSortBy,
   } = useSongFilters(items, "title_asc");
 
-  useScrollRestoration("scroll:/repertoire", !loading);
+  const saveScrollPosition = useScrollRestoration("scroll:/repertoire", !loading);
 
   useEffect(() => {
     let cancelled = false;
@@ -950,7 +950,7 @@ export default function RepertoirePage() {
                     />
                     <div className="min-w-0">
                     <div className="truncate font-medium">
-                      <Link href={`/songs/${it.slug ?? it.song_id}`} className="hover:text-amber-600">
+                      <Link href={`/songs/${it.slug ?? it.song_id}`} onClick={() => saveScrollPosition()} className="hover:text-amber-600">
                         {it.title}
                       </Link>
                       {it.composers.length > 0 && (
@@ -1061,6 +1061,7 @@ export default function RepertoirePage() {
 
                     <Link
                       href={`/songs/${it.slug ?? it.song_id}`}
+                      onClick={() => saveScrollPosition()}
                       className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
                     >
                       View

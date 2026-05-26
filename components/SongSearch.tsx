@@ -113,8 +113,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const hasMounted = useRef(false);
-  const visibleCountRef = useRef(visibleCount);
-  useEffect(() => { visibleCountRef.current = visibleCount; }, [visibleCount]);
   const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
 
   const {
@@ -131,10 +129,9 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     sortBy, setSortBy,
   } = useSongFilters(popularSongs, "popularity");
 
-  useScrollRestoration(
+  const saveScrollPosition = useScrollRestoration(
     "scroll:/search",
     !songsLoading && (q.trim() === "" || !loading),
-    () => ({ visibleCount: visibleCountRef.current }),
   );
 
   // Lookup map for filter metadata on search results
@@ -438,6 +435,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
+                onNavigate={() => saveScrollPosition({ visibleCount })}
               />
             ))}
             {!loading && sortedSearch.length === 0 ? (
@@ -485,6 +483,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
+                onNavigate={() => saveScrollPosition({ visibleCount })}
               />
             ))}
 
@@ -535,6 +534,7 @@ function SongCard({
   setPendingAddId,
   onAdd,
   addSong,
+  onNavigate,
 }: {
   songId: string;
   title: string;
@@ -556,6 +556,7 @@ function SongCard({
   setPendingAddId: (id: string | null) => void;
   onAdd: (id: string, slug?: string | null) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
+  onNavigate: () => void;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [spotifyOpen, setSpotifyOpen] = useState(false);
@@ -570,7 +571,7 @@ function SongCard({
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
           <div className="font-medium">
-            <Link href={href} className="hover:text-amber-600">
+            <Link href={href} onClick={onNavigate} className="hover:text-amber-600">
               {title}
             </Link>
             {composers.length > 0 && (
@@ -652,7 +653,7 @@ function SongCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Link href={href} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+        <Link href={href} onClick={onNavigate} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
           View
         </Link>
         {picking ? (

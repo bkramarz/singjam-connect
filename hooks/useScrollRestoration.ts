@@ -1,15 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 
-export function useScrollRestoration(
-  key: string,
-  ready: boolean,
-  getExtras?: () => Record<string, unknown>,
-) {
-  // Keep getExtras current without requiring it as an effect dep
-  const getExtrasRef = useRef(getExtras);
-  useEffect(() => { getExtrasRef.current = getExtras; });
-
-  // Restore scroll position once data is ready
+export function useScrollRestoration(key: string, ready: boolean) {
+  // Restore scroll once data is ready. RAF defers the scroll one frame so it
+  // runs after any same-tick scroll-to-top the router performs on back navigation.
   useEffect(() => {
     if (!ready) return;
     const raw = sessionStorage.getItem(key);
@@ -17,16 +10,17 @@ export function useScrollRestoration(
     sessionStorage.removeItem(key);
     try {
       const { y } = JSON.parse(raw);
-      if (typeof y === "number" && y > 0) window.scrollTo({ top: y, behavior: "instant" });
+      if (typeof y === "number" && y > 0) {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: y, behavior: "instant" });
+        });
+      }
     } catch {}
   }, [key, ready]);
 
-  // Save scroll position on unmount — fires however the user left the page
-  useEffect(() => {
-    return () => {
-      const extras = getExtrasRef.current?.() ?? {};
-      sessionStorage.setItem(key, JSON.stringify({ y: Math.round(window.scrollY), ...extras }));
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Call this on the link click — scroll position is correct at click time,
+  // before the router has a chance to scroll the page.
+  return useCallback((extras: Record<string, unknown> = {}) => {
+    sessionStorage.setItem(key, JSON.stringify({ y: Math.round(window.scrollY), ...extras }));
   }, [key]);
 }
