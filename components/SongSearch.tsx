@@ -8,6 +8,7 @@ import { formatComposers } from "@/lib/formatComposers";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
 import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 
@@ -99,11 +100,21 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(() => {
+    if (typeof window === "undefined") return PAGE_SIZE;
+    try {
+      const raw = sessionStorage.getItem("scroll:/search");
+      const saved = raw ? JSON.parse(raw)?.visibleCount : undefined;
+      return typeof saved === "number" ? saved : PAGE_SIZE;
+    } catch { return PAGE_SIZE; }
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [hideMySongs, setHideMySongs] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const hasMounted = useRef(false);
+  const visibleCountRef = useRef(visibleCount);
+  useEffect(() => { visibleCountRef.current = visibleCount; }, [visibleCount]);
   const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
 
   const {
@@ -119,6 +130,12 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
   } = useSongFilters(popularSongs, "popularity");
+
+  useScrollRestoration(
+    "scroll:/search",
+    !songsLoading && (q.trim() === "" || !loading),
+    () => ({ visibleCount: visibleCountRef.current }),
+  );
 
   // Lookup map for filter metadata on search results
   const songMetaMap = useMemo(
@@ -248,8 +265,10 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     });
   }, [filteredResults, sortBy, songMetaMap]);
 
-  // Reset visible count when filters, sort, or hide-my-songs toggle change
+  // Reset visible count when filters, sort, or hide-my-songs toggle change.
+  // Skip the first mount so a restored visibleCount isn't immediately overwritten.
   useEffect(() => {
+    if (!hasMounted.current) { hasMounted.current = true; return; }
     setVisibleCount(PAGE_SIZE);
   }, [matchesFilters, sortBy, hideMySongs]);
 
