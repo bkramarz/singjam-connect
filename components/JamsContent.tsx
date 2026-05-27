@@ -264,7 +264,7 @@ export default function JamsContent() {
         ? supabase.from("jam_themes").select("jam_id, themes(name)").in("jam_id", jamIds)
         : Promise.resolve({ data: [] }),
       hostIds.length > 0
-        ? supabase.from("profiles").select("id, display_name, username").in("id", hostIds)
+        ? supabase.from("profiles").select("id, display_name, last_name, username").in("id", hostIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -289,7 +289,7 @@ export default function JamsContent() {
       themesByJam.set(row.jam_id, arr);
     }
     for (const p of (profilesRes.data ?? []) as any[]) {
-      profileById.set(p.id, { label: p.display_name ?? p.username ?? null, username: p.username ?? null });
+      profileById.set(p.id, { label: [p.display_name, p.last_name].filter(Boolean).join(" ") || p.username || null, username: p.username ?? null });
     }
 
     setData({

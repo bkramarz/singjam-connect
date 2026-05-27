@@ -13,10 +13,20 @@ type SetCardProps = {
   };
   songCount?: number;
   isOwner?: boolean;
+  ownerName?: string | null;
+  canCopy?: boolean;
+  ownerUsername?: string | null;
+  linkSharing?: "private" | "link" | "public";
   onDelete?: (id: string) => void;
 };
 
-export default function SetCard({ set, songCount, isOwner, onDelete }: SetCardProps) {
+const VISIBILITY_LABELS: Record<string, { label: string; className: string }> = {
+  private: { label: "Private",   className: "bg-zinc-100 text-zinc-500" },
+  link:    { label: "Open join", className: "bg-amber-100 text-amber-700" },
+  public:  { label: "Public",    className: "bg-sky-100 text-sky-700" },
+};
+
+export default function SetCard({ set, songCount, isOwner, ownerName, ownerUsername, canCopy, linkSharing, onDelete }: SetCardProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -64,8 +74,33 @@ export default function SetCard({ set, songCount, isOwner, onDelete }: SetCardPr
         <div className="flex items-center gap-2 mb-0.5">
           {isOwner ? (
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Owner</span>
+          ) : canCopy ? (
+            ownerName && (
+              <span className="text-xs text-zinc-400">
+                by{" "}
+                {ownerUsername ? (
+                  <Link
+                    href={`/u/${ownerUsername}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-medium text-zinc-500 hover:underline"
+                  >
+                    {ownerName}
+                    {ownerName !== ownerUsername && (
+                      <span className="ml-1 font-normal text-zinc-400">@{ownerUsername}</span>
+                    )}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-zinc-500">{ownerName}</span>
+                )}
+              </span>
+            )
           ) : (
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Collaborator</span>
+          )}
+          {!canCopy && linkSharing && VISIBILITY_LABELS[linkSharing] && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${VISIBILITY_LABELS[linkSharing].className}`}>
+              {VISIBILITY_LABELS[linkSharing].label}
+            </span>
           )}
         </div>
         <p className="font-semibold text-zinc-900 truncate">{set.name}</p>
@@ -78,17 +113,32 @@ export default function SetCard({ set, songCount, isOwner, onDelete }: SetCardPr
           </p>
         )}
       </div>
-      {!isOwner && (
+      {!isOwner && !canCopy && (
         <div className="flex items-center pr-4 text-zinc-300">
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
         </div>
       )}
+      {canCopy && (
+        <div className="flex items-center pr-3">
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); copySet(); }}
+            disabled={copying}
+            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+          >
+            {copying ? "Copying…" : "Copy"}
+          </button>
+        </div>
+      )}
     </div>
   );
 
-  if (!isOwner) {
+  if (!isOwner && !canCopy) {
+    return <Link href={`/set/${set.id}`} className="block">{cardBody}</Link>;
+  }
+
+  if (canCopy) {
     return <Link href={`/set/${set.id}`} className="block">{cardBody}</Link>;
   }
 

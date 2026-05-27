@@ -26,7 +26,7 @@ export async function POST(
   const set = setRes.data as any;
   if (!set) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (set.owner_user_id !== user.id && set.link_sharing !== "view") {
+  if (set.owner_user_id !== user.id && set.link_sharing !== "public") {
     const { data: collab } = await supabase
       .from("set_collaborators")
       .select("id")

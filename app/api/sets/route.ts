@@ -15,17 +15,24 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [ownedRes, collabRes] = await Promise.all([
+  const [ownedRes, collabRes, publicRes] = await Promise.all([
     supabase
       .from("sets")
-      .select("id, name, description, created_at, owner_user_id, jam_id")
+      .select("id, name, description, created_at, owner_user_id, jam_id, link_sharing")
       .eq("owner_user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase
       .from("set_collaborators")
-      .select("set_id, sets(id, name, description, created_at, owner_user_id)")
+      .select("set_id, sets(id, name, description, created_at, owner_user_id, link_sharing)")
       .eq("user_id", user.id)
       .eq("status", "accepted"),
+    supabase
+      .from("sets")
+      .select("id, name, description, owner_user_id, profiles(display_name, last_name, username)")
+      .eq("link_sharing", "public")
+      .neq("owner_user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const owned = (ownedRes.data ?? []) as any[];
@@ -34,7 +41,18 @@ export async function GET() {
     .filter(Boolean)
     .filter((s: any) => s.owner_user_id !== user.id);
 
-  return NextResponse.json({ owned, collaborating });
+  const collabSetIds = new Set(collaborating.map((s: any) => s.id));
+  const publicSets = ((publicRes.data ?? []) as any[])
+    .filter((s) => !collabSetIds.has(s.id))
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
+      ownerUsername: s.profiles?.username ?? null,
+    }));
+
+  return NextResponse.json({ owned, collaborating, public: publicSets });
 }
 
 export async function POST(req: Request) {

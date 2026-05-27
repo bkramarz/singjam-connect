@@ -1,8 +1,18 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
 import SetDetail from "@/components/SetDetail";
 import SetRequestAccess from "@/components/SetRequestAccess";
+import SetJoinPrompt from "@/components/SetJoinPrompt";
+
+function supabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -46,7 +56,7 @@ export default async function SetPage({
       .single(),
     supabase
       .from("set_songs")
-      .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, song_recording_artists(position, youtube_url, spotify_url))")
+      .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))")
       .eq("set_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -69,31 +79,84 @@ export default async function SetPage({
   const set = setRes.data as any;
   const songs = (songsRes.data ?? []) as any[];
   const accessRequests = (requestsRes.data ?? []) as any[];
-  const collaborators = (collabRes.data ?? []).sort((a: any, b: any) => {
-    const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
-    const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
-    return nameA.localeCompare(nameB);
-  }) as any[];
+
+  const sortCollaborators = (list: any[]) =>
+    [...list].sort((a, b) => {
+      const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
+      const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
+  let collaborators = sortCollaborators(collabRes.data ?? []);
+
+  const isOwner = user?.id === set.owner_user_id;
+  const isAdmin = (profileRes as any)?.data?.role === "admin";
+
+  // Auto-join for 'link' mode — logged-in users are added as viewers on first visit
+  if (set.link_sharing === "link" && user && !isOwner && !isAdmin) {
+    const alreadyJoined = collaborators.some((c: any) => c.user_id === user.id);
+    if (!alreadyJoined) {
+      const admin = supabaseAdmin();
+      const { data: existing } = await admin
+        .from("set_collaborators")
+        .select("id")
+        .eq("set_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!existing) {
+        const { data: newCollab } = await admin
+          .from("set_collaborators")
+          .insert({ set_id: id, user_id: user.id, invited_by: user.id, status: "accepted", role: "viewer" })
+          .select("id, user_id, status, role, profiles!user_id(display_name, last_name, username, avatar_url)")
+          .single();
+
+        if (newCollab) collaborators = sortCollaborators([...collaborators, newCollab as any]);
+      }
+    }
+  }
+
+  const isCollaborator = collaborators.some((c: any) => c.user_id === user?.id);
+  const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && c.role === "editor");
+
+  // Gate by visibility mode
+  if (!isOwner && !isCollaborator && !isAdmin) {
+    if (set.link_sharing === "private") {
+      return <SetRequestAccess setId={set.id} setName={set.name} isLoggedIn={!!user} />;
+    }
+    if (set.link_sharing === "link" && !user) {
+      // Open-join sets require a SingJam account to auto-join
+      return (
+        <SetJoinPrompt
+          setId={set.id}
+          setName={set.name}
+          ownerName={set.profiles?.display_name ?? set.profiles?.username ?? null}
+          mode="join"
+        />
+      );
+    }
+    // 'public' sets are open to everyone — fall through
+  }
+
+  const isPublicViewer = !isOwner && !isCollaborator && !isAdmin;
 
   const songIds = songs.map((s: any) => s.song_id);
   const participantIds = [set.owner_user_id, ...collaborators.map((c: any) => c.user_id)].filter(Boolean) as string[];
-  const leaderEligible = songIds.length > 0 && participantIds.length > 0
-    ? ((await supabase.from("user_songs").select("user_id, song_id").in("user_id", participantIds).in("song_id", songIds).eq("confidence", "lead")).data ?? []) as { user_id: string; song_id: string }[]
+
+  // Fetch all knowledge levels for every participant × song combination
+  const songKnowledge = songIds.length > 0 && participantIds.length > 0
+    ? ((await supabase
+        .from("user_songs")
+        .select("user_id, song_id, confidence")
+        .in("user_id", participantIds)
+        .in("song_id", songIds)
+        .in("confidence", ["lead", "support", "learn"])
+      ).data ?? []) as { user_id: string; song_id: string; confidence: string }[]
     : [];
 
   const jamSharedSongs = (set.jam_id && user)
     ? ((await supabase.rpc("jam_shared_songs", { jam_id_param: set.jam_id })).data ?? []) as any[]
     : [];
-
-  const isOwner = user?.id === set.owner_user_id;
-  const isCollaborator = collaborators.some((c: any) => c.user_id === user?.id);
-  const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && c.role === "editor");
-  const isAdmin = (profileRes as any)?.data?.role === "admin";
-  const isPublicViewer = !isOwner && !isCollaborator && !isAdmin && set.link_sharing === "view";
-
-  if (!isOwner && !isCollaborator && !isAdmin && set.link_sharing === "disabled") {
-    return <SetRequestAccess setId={set.id} setName={set.name} isLoggedIn={!!user} />;
-  }
 
   return (
     <Suspense>
@@ -108,7 +171,7 @@ export default async function SetPage({
         isAdmin={isAdmin}
         isPublicViewer={isPublicViewer}
         jamSharedSongs={jamSharedSongs}
-        leaderEligible={leaderEligible}
+        songKnowledge={songKnowledge}
       />
     </Suspense>
   );
