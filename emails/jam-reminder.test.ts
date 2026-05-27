@@ -22,7 +22,7 @@ describe("jamReminderHtml", () => {
     expect(html).toContain("https://singjam.org/jam/abc");
   });
 
-  it("includes the address block when address is provided", () => {
+  it("includes the address block with a Google Maps link when address is provided", () => {
     const html = jamReminderHtml({
       jamName: "Tuesday Night Jam",
       jamUrl: "https://singjam.org/jam/1",
@@ -30,6 +30,7 @@ describe("jamReminderHtml", () => {
     });
     expect(html).toContain("123 Main St, Brooklyn, NY");
     expect(html).toContain("Where");
+    expect(html).toContain("https://maps.google.com/?q=123%20Main%20St%2C%20Brooklyn%2C%20NY");
   });
 
   it("omits the address block when address is null", () => {

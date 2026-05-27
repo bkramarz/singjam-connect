@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resend } from "@/lib/resend";
+import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   ].filter(Boolean).join("<br><br>");
 
   await resend.emails.send({
-    from: "SingJam <noreply@singjam.org>",
+    from: FROM_ADDRESS,
     to: "music@singjam.org",
     subject: `Bug report from ${userInfo}`,
     html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6">${lines}</div>`,
