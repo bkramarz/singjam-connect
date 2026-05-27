@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import AdminSongsTable from "./AdminSongsTable";
+
+export const metadata: Metadata = {
+  title: "Songs",
+};
 
 export default function AdminSongsPage() {
   return (

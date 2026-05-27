@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import SongEditorTable from "./SongEditorTable";
+
+export const metadata: Metadata = {
+  title: "Song Links",
+};
 
 export default function SongEditorPage() {
   return (

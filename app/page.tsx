@@ -3,10 +3,9 @@ import HomeButtons from "@/components/HomeButtons";
 import UpcomingJams from "@/components/UpcomingJams";
 
 export const metadata: Metadata = {
-  title: "SingJam | Sing and Jam with Friends",
   description: "Find your people through shared music. Build your repertoire, discover musicians nearby, and get invited to jams in your community.",
   openGraph: {
-    title: "SingJam | Sing and Jam with Friends",
+    title: "SingJam",
     description: "Find your people through shared music. Build your repertoire, discover musicians nearby, and get invited to jams in your community.",
   },
 };

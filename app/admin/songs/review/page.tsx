@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { supabaseServer } from "@/lib/supabase/server";
 import Link from "next/link";
 import type { JSX } from "react";
 import ApproveButton from "./ApproveButton";
+
+export const metadata: Metadata = {
+  title: "Review Songs",
+};
 import { FormattedDate } from "@/components/FormattedTime";
 
 export default async function ReviewSongsPage() {
