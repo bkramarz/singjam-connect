@@ -1559,75 +1559,79 @@ function SortableArtistRow({
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} className="space-y-1">
-      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-        <span {...listeners} className="cursor-grab touch-none text-slate-400 text-xs active:cursor-grabbing select-none">⠿</span>
-        <span className="text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{artist?.name}</span>
-        <input
-          type="number"
-          value={e.year ?? ""}
-          onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
-          placeholder="year"
-          className="w-16 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs focus:border-amber-400 focus:outline-none"
-        />
-        {e.spotify_url ? (
-          <>
-            <a href={e.spotify_url} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-green-600 hover:text-green-700 shrink-0">🎵 linked</a>
-            <button
-              type="button"
-              onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
-              disabled={isSearchingSpotify || !songTitle.trim()}
-              title="Re-search Spotify"
-              className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-400 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
-            >
-              {isSearchingSpotify ? "…" : "↺"}
-            </button>
-          </>
-        ) : spotifyNotFoundIds.has(e.id) ? (
-          <>
-            <span className="text-xs text-slate-400 shrink-0">Not found</span>
-            <button
-              type="button"
-              onClick={() => onTogglePasteSpotify(e.id)}
-              className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600"
-            >
-              Paste URL
-            </button>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span {...listeners} className="cursor-grab touch-none text-slate-400 text-xs active:cursor-grabbing select-none">⠿</span>
+          <span className="text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{artist?.name}</span>
+          <input
+            type="number"
+            value={e.year ?? ""}
+            onChange={(ev) => onYearChange(e.id, ev.target.value ? parseInt(ev.target.value) : null)}
+            placeholder="year"
+            className="w-16 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs focus:border-amber-400 focus:outline-none"
+          />
+          <button onClick={() => onRemove(e.id)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 pl-4">
+          {e.spotify_url ? (
+            <>
+              <a href={e.spotify_url} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-green-600 hover:text-green-700 shrink-0">🎵 linked</a>
+              <button
+                type="button"
+                onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
+                disabled={isSearchingSpotify || !songTitle.trim()}
+                title="Re-search Spotify"
+                className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-400 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+              >
+                {isSearchingSpotify ? "…" : "↺"}
+              </button>
+            </>
+          ) : spotifyNotFoundIds.has(e.id) ? (
+            <>
+              <span className="text-xs text-slate-400 shrink-0">Not found</span>
+              <button
+                type="button"
+                onClick={() => onTogglePasteSpotify(e.id)}
+                className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600"
+              >
+                Paste URL
+              </button>
+              <button
+                type="button"
+                onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
+                disabled={isSearchingSpotify || !songTitle.trim()}
+                className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+              >
+                {isSearchingSpotify ? "…" : "↺ Retry"}
+              </button>
+            </>
+          ) : (
             <button
               type="button"
               onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
               disabled={isSearchingSpotify || !songTitle.trim()}
               className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
             >
-              {isSearchingSpotify ? "…" : "↺ Retry"}
+              {isSearchingSpotify ? "…" : "🎵 Spotify"}
             </button>
-          </>
-        ) : (
+          )}
+          {e.youtube_url && (
+            <a href={e.youtube_url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-green-600 hover:text-green-700 shrink-0">▶ linked</a>
+          )}
           <button
             type="button"
-            onClick={() => onSpotifySearch(e.id, artist?.name ?? "")}
-            disabled={isSearchingSpotify || !songTitle.trim()}
-            className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600 disabled:opacity-40"
+            onClick={() => {
+              if (resultsOpen) { onCloseResults(); return; }
+              onYoutubeSearch(e.id, artist?.name ?? "");
+            }}
+            disabled={isSearchingYt || !songTitle.trim()}
+            className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
           >
-            {isSearchingSpotify ? "…" : "🎵 Spotify"}
+            {isSearchingYt ? "…" : "▶ YouTube"}
           </button>
-        )}
-        {e.youtube_url && (
-          <a href={e.youtube_url} target="_blank" rel="noopener noreferrer"
-            className="text-xs text-green-600 hover:text-green-700 shrink-0">▶ linked</a>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            if (resultsOpen) { onCloseResults(); return; }
-            onYoutubeSearch(e.id, artist?.name ?? "");
-          }}
-          disabled={isSearchingYt || !songTitle.trim()}
-          className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
-        >
-          {isSearchingYt ? "…" : "▶ YouTube"}
-        </button>
-        <button onClick={() => onRemove(e.id)} className="text-slate-400 hover:text-red-500 shrink-0">×</button>
+        </div>
       </div>
       {pasteSpotifyId === e.id && (
         <div className="ml-6 flex items-center gap-2 pt-1">
