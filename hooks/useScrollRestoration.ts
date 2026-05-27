@@ -1,8 +1,9 @@
 import { useCallback, useEffect } from "react";
 
 export function useScrollRestoration(key: string, ready: boolean) {
-  // Restore scroll once data is ready. RAF defers the scroll one frame so it
-  // runs after any same-tick scroll-to-top the router performs on back navigation.
+  // Restore scroll once data is ready. The App Router queues its own scroll-to-top
+  // RAF on navigation; a double RAF ensures ours fires in the *next* frame, after
+  // any same-frame router scroll has already run.
   useEffect(() => {
     if (!ready) return;
     const raw = sessionStorage.getItem(key);
@@ -12,7 +13,9 @@ export function useScrollRestoration(key: string, ready: boolean) {
       const { y } = JSON.parse(raw);
       if (typeof y === "number" && y > 0) {
         requestAnimationFrame(() => {
-          window.scrollTo({ top: y, behavior: "instant" });
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: y, behavior: "instant" });
+          });
         });
       }
     } catch {}

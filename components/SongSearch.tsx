@@ -8,7 +8,6 @@ import { formatComposers } from "@/lib/formatComposers";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
 import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
-import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 
@@ -129,11 +128,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
   } = useSongFilters(popularSongs, "popularity");
-
-  const saveScrollPosition = useScrollRestoration(
-    "scroll:/search",
-    !songsLoading && (q.trim() === "" || !loading),
-  );
 
   // Lookup map for filter metadata on search results
   const songMetaMap = useMemo(
@@ -436,7 +430,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
-                onNavigate={() => saveScrollPosition()}
               />
             ))}
             {!loading && sortedSearch.length === 0 ? (
@@ -484,7 +477,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
-                onNavigate={() => saveScrollPosition()}
               />
             ))}
 
@@ -535,7 +527,6 @@ function SongCard({
   setPendingAddId,
   onAdd,
   addSong,
-  onNavigate,
 }: {
   songId: string;
   title: string;
@@ -557,7 +548,6 @@ function SongCard({
   setPendingAddId: (id: string | null) => void;
   onAdd: (id: string, slug?: string | null) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
-  onNavigate: () => void;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [spotifyOpen, setSpotifyOpen] = useState(false);
@@ -572,7 +562,7 @@ function SongCard({
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
           <div className="font-medium">
-            <Link href={href} onClick={onNavigate} className="hover:text-amber-600">
+            <Link href={href} target="_blank" rel="noopener noreferrer" className="hover:text-amber-600">
               {title}
             </Link>
             {composers.length > 0 && (
@@ -654,7 +644,7 @@ function SongCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Link href={href} onClick={onNavigate} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+        <Link href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
           View
         </Link>
         {picking ? (
