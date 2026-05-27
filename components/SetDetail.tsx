@@ -24,6 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSongSearch } from "@/hooks/useSongSearch";
 import SetInvitePanel from "@/components/SetInvitePanel";
+import { formatComposers } from "@/lib/formatComposers";
 
 const MUSICAL_KEYS = ["A", "Bb", "B", "C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab"];
 
@@ -44,6 +45,7 @@ type Song = {
     meter: string | null;
     song_composers: { people: { name: string } | null }[];
     song_lyricists: { people: { name: string } | null }[];
+    song_cultures: { cultures: { name: string } | null; context: string | null }[];
     song_genres: { genres: { name: string } | null }[];
     song_themes: { themes: { name: string } | null }[];
     song_recording_artists: { position: number; youtube_url: string | null; spotify_url: string | null }[];
@@ -1034,10 +1036,14 @@ export default function SetDetail({
         cols.push(`"${leaderNames.replace(/"/g, '""')}"`);
       }
       if (csvColumns.songwriters) {
-        const composers = (s.songs.song_composers ?? []).map((c) => c.people?.name).filter(Boolean).join("; ");
-        const lyricists = (s.songs.song_lyricists ?? []).map((l) => l.people?.name).filter(Boolean).join("; ");
-        cols.push(`"${composers.replace(/"/g, '""')}"`);
-        cols.push(`"${lyricists.replace(/"/g, '""')}"`);
+        const composerNames = (s.songs.song_composers ?? []).map((c) => c.people?.name).filter(Boolean) as string[];
+        const lyricistNames = (s.songs.song_lyricists ?? []).map((l) => l.people?.name).filter(Boolean) as string[];
+        const musicCultures = (s.songs.song_cultures ?? []).filter((c) => c.context === "music").map((c) => c.cultures?.name).filter(Boolean) as string[];
+        const lyricCultures = (s.songs.song_cultures ?? []).filter((c) => c.context === "lyrics").map((c) => c.cultures?.name).filter(Boolean) as string[];
+        const composerStr = formatComposers(composerNames, musicCultures);
+        const lyricistStr = formatComposers(lyricistNames, lyricCultures);
+        cols.push(`"${composerStr.replace(/"/g, '""')}"`);
+        cols.push(`"${lyricistStr.replace(/"/g, '""')}"`);
       }
       if (csvColumns.genres) {
         const names = (s.songs.song_genres ?? []).map((g) => g.genres?.name).filter(Boolean).join("; ");
