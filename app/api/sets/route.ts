@@ -18,12 +18,12 @@ export async function GET() {
   const [ownedRes, collabRes, publicRes] = await Promise.all([
     supabase
       .from("sets")
-      .select("id, name, description, created_at, owner_user_id, jam_id")
+      .select("id, name, description, created_at, owner_user_id, jam_id, link_sharing")
       .eq("owner_user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase
       .from("set_collaborators")
-      .select("set_id, sets(id, name, description, created_at, owner_user_id)")
+      .select("set_id, sets(id, name, description, created_at, owner_user_id, link_sharing)")
       .eq("user_id", user.id)
       .eq("status", "accepted"),
     supabase
@@ -48,7 +48,8 @@ export async function GET() {
       id: s.id,
       name: s.name,
       description: s.description,
-      ownerName: s.profiles?.display_name ?? s.profiles?.username ?? null,
+      ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
+      ownerUsername: s.profiles?.username ?? null,
     }));
 
   return NextResponse.json({ owned, collaborating, public: publicSets });

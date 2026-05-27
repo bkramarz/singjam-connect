@@ -1112,7 +1112,7 @@ export default function SetDetail({
   const youtubeOutdated = !!playlistLinks.youtube && lastSyncedYoutubeFingerprint !== youtubeFingerprint;
   const spotifyOutdated = !!playlistLinks.spotify && lastSyncedSpotifyFingerprint !== spotifyFingerprint;
 
-  const ownerLabel = set.profiles?.display_name ?? set.profiles?.username ?? "Unknown";
+  const ownerFullName = [set.profiles?.display_name, set.profiles?.last_name].filter(Boolean).join(" ") || set.profiles?.username || "Unknown";
 
   return (
     <div className="space-y-6">
@@ -1197,7 +1197,19 @@ export default function SetDetail({
             <>
               <h1 className="text-xl font-semibold text-zinc-900">{nameValue}</h1>
               {descValue && <p className="text-sm text-zinc-500 mt-0.5">{descValue}</p>}
-              <p className="text-xs text-zinc-400 mt-1">by {ownerLabel}</p>
+              <p className="text-xs text-zinc-400 mt-1">
+                by{" "}
+                {set.profiles?.username ? (
+                  <Link href={`/u/${set.profiles.username}`} className="font-medium text-zinc-500 hover:underline">
+                    {ownerFullName}
+                    {(set.profiles.display_name || set.profiles.last_name) && (
+                      <span className="ml-1 font-normal text-zinc-400">@{set.profiles.username}</span>
+                    )}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-zinc-500">{ownerFullName}</span>
+                )}
+              </p>
             </>
           )}
         </div>
@@ -1313,7 +1325,7 @@ export default function SetDetail({
             </Link>
           ) : (
             <span className="flex-1 min-w-0 text-sm text-zinc-700 truncate">
-              {[set.profiles?.display_name, set.profiles?.last_name].filter(Boolean).join(" ") || ownerLabel}
+              {ownerFullName}
             </span>
           )}
           <span className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700">Owner</span>

@@ -161,7 +161,7 @@ export default function JamContent() {
       const invitesEnabled = flagRes.data?.enabled ?? true;
 
       const [hostRes, rsvpRes, inviteRes] = await Promise.all([
-        supabase.from("profiles").select("display_name, username").eq("id", jam.host_user_id).maybeSingle(),
+        supabase.from("profiles").select("display_name, last_name, username").eq("id", jam.host_user_id).maybeSingle(),
         userId
           ? supabase.from("jam_rsvps").select("status, waitlist_position").eq("jam_id", id).eq("user_id", userId).maybeSingle()
           : Promise.resolve({ data: null }),
@@ -170,7 +170,7 @@ export default function JamContent() {
           : Promise.resolve({ data: null }),
       ]);
 
-      const hostLabel = (hostRes.data as any)?.display_name ?? (hostRes.data as any)?.username ?? null;
+      const hostLabel = [(hostRes.data as any)?.display_name, (hostRes.data as any)?.last_name].filter(Boolean).join(" ") || (hostRes.data as any)?.username || null;
       const hostUsername = (hostRes.data as any)?.username ?? null;
       const rsvpStatus = (rsvpRes.data?.status as any) ?? null;
       const waitlistPosition = rsvpRes.data?.waitlist_position ?? null;

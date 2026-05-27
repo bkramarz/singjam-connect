@@ -15,10 +15,18 @@ type SetCardProps = {
   isOwner?: boolean;
   ownerName?: string | null;
   canCopy?: boolean;
+  ownerUsername?: string | null;
+  linkSharing?: "private" | "link" | "public";
   onDelete?: (id: string) => void;
 };
 
-export default function SetCard({ set, songCount, isOwner, ownerName, canCopy, onDelete }: SetCardProps) {
+const VISIBILITY_LABELS: Record<string, { label: string; className: string }> = {
+  private: { label: "Private",   className: "bg-zinc-100 text-zinc-500" },
+  link:    { label: "Open join", className: "bg-amber-100 text-amber-700" },
+  public:  { label: "Public",    className: "bg-sky-100 text-sky-700" },
+};
+
+export default function SetCard({ set, songCount, isOwner, ownerName, ownerUsername, canCopy, linkSharing, onDelete }: SetCardProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -67,9 +75,32 @@ export default function SetCard({ set, songCount, isOwner, ownerName, canCopy, o
           {isOwner ? (
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Owner</span>
           ) : canCopy ? (
-            ownerName && <span className="text-xs text-zinc-400">by {ownerName}</span>
+            ownerName && (
+              <span className="text-xs text-zinc-400">
+                by{" "}
+                {ownerUsername ? (
+                  <Link
+                    href={`/u/${ownerUsername}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-medium text-zinc-500 hover:underline"
+                  >
+                    {ownerName}
+                    {ownerName !== ownerUsername && (
+                      <span className="ml-1 font-normal text-zinc-400">@{ownerUsername}</span>
+                    )}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-zinc-500">{ownerName}</span>
+                )}
+              </span>
+            )
           ) : (
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Collaborator</span>
+          )}
+          {!canCopy && linkSharing && VISIBILITY_LABELS[linkSharing] && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${VISIBILITY_LABELS[linkSharing].className}`}>
+              {VISIBILITY_LABELS[linkSharing].label}
+            </span>
           )}
         </div>
         <p className="font-semibold text-zinc-900 truncate">{set.name}</p>

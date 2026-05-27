@@ -10,6 +10,7 @@ type SetItem = {
   name: string;
   description: string | null;
   owner_user_id: string;
+  link_sharing?: "private" | "link" | "public";
 };
 
 type PublicSetItem = {
@@ -17,6 +18,7 @@ type PublicSetItem = {
   name: string;
   description: string | null;
   ownerName: string | null;
+  ownerUsername: string | null;
 };
 
 type SetsData = {
@@ -113,6 +115,7 @@ export default function SetsContent() {
                 key={set.id}
                 set={set}
                 isOwner
+                linkSharing={set.link_sharing}
                 onDelete={(id) => setData((d) => d && { ...d, owned: d.owned.filter((s) => s.id !== id) })}
               />
             ))}
@@ -134,7 +137,7 @@ export default function SetsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Collaborating on</h2>
           <div className="grid grid-cols-1 gap-3">
             {data.collaborating.map((set) => (
-              <SetCard key={set.id} set={set} isOwner={false} />
+              <SetCard key={set.id} set={set} isOwner={false} linkSharing={set.link_sharing} />
             ))}
           </div>
         </section>
@@ -149,6 +152,7 @@ export default function SetsContent() {
                 key={set.id}
                 set={{ ...set, owner_user_id: "" }}
                 ownerName={set.ownerName}
+                ownerUsername={set.ownerUsername}
                 canCopy
               />
             ))}
