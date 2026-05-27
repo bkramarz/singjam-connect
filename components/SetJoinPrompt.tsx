@@ -4,11 +4,15 @@ export default function SetJoinPrompt({
   setId,
   setName,
   ownerName,
+  mode = "join",
 }: {
   setId: string;
   setName: string;
   ownerName: string | null;
+  mode?: "join" | "view";
 }) {
+  const isJoin = mode === "join";
+
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="max-w-sm w-full space-y-5 text-center">
@@ -19,17 +23,26 @@ export default function SetJoinPrompt({
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-lg font-semibold text-zinc-900">Join this set list</h1>
+          <h1 className="text-lg font-semibold text-zinc-900">
+            {isJoin ? "Join this set list" : "Sign in to view this set"}
+          </h1>
           <p className="text-sm text-zinc-500 leading-relaxed">
-            {ownerName ? (
+            {isJoin ? (
               <>
-                <span className="font-medium text-zinc-700">{ownerName}</span> has shared{" "}
+                {ownerName ? (
+                  <><span className="font-medium text-zinc-700">{ownerName}</span> has shared{" "}</>
+                ) : (
+                  "You've been invited to join "
+                )}
+                <span className="font-medium text-zinc-700">{setName}</span> with you.
+                {" "}Sign in or create a free account to see the songs and mark which ones you know.
               </>
             ) : (
-              "You've been invited to join "
+              <>
+                <span className="font-medium text-zinc-700">{setName}</span> is only available to SingJam users.
+                {" "}Sign in or create a free account to view it.
+              </>
             )}
-            <span className="font-medium text-zinc-700">{setName}</span> with you.
-            Sign in or create a free account to see the songs and mark which ones you know.
           </p>
         </div>
 

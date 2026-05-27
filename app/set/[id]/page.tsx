@@ -56,7 +56,7 @@ export default async function SetPage({
       .single(),
     supabase
       .from("set_songs")
-      .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, song_recording_artists(position, youtube_url, spotify_url))")
+      .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_recording_artists(position, youtube_url, spotify_url))")
       .eq("set_id", id)
       .order("position", { ascending: true }),
     supabase
@@ -124,11 +124,18 @@ export default async function SetPage({
     if (set.link_sharing === "private") {
       return <SetRequestAccess setId={set.id} setName={set.name} isLoggedIn={!!user} />;
     }
-    if (set.link_sharing === "link") {
-      // Reaches here only when not logged in (auto-join above already handled logged-in case)
-      return <SetJoinPrompt setId={set.id} setName={set.name} ownerName={set.profiles?.display_name ?? set.profiles?.username ?? null} />;
+    if (set.link_sharing === "link" && !user) {
+      // Open-join sets require a SingJam account to auto-join
+      return (
+        <SetJoinPrompt
+          setId={set.id}
+          setName={set.name}
+          ownerName={set.profiles?.display_name ?? set.profiles?.username ?? null}
+          mode="join"
+        />
+      );
     }
-    // 'public' mode falls through — anyone can view without joining
+    // 'public' sets are open to everyone — fall through
   }
 
   const isPublicViewer = !isOwner && !isCollaborator && !isAdmin;

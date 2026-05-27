@@ -12,9 +12,17 @@ type SetItem = {
   owner_user_id: string;
 };
 
+type PublicSetItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  ownerName: string | null;
+};
+
 type SetsData = {
   owned: SetItem[];
   collaborating: SetItem[];
+  public: PublicSetItem[];
 };
 
 export default function SetsContent() {
@@ -26,7 +34,7 @@ export default function SetsContent() {
   useEffect(() => {
     fetch("/api/sets")
       .then((r) => {
-        if (r.status === 401) { setIsSignedIn(false); setData({ owned: [], collaborating: [] }); return null; }
+        if (r.status === 401) { setIsSignedIn(false); setData({ owned: [], collaborating: [], public: [] }); return null; }
         setIsSignedIn(true);
         return r.json();
       })
@@ -64,6 +72,8 @@ export default function SetsContent() {
       </div>
     );
   }
+
+  const publicSets = data.public ?? [];
 
   const isEmpty = data.owned.length === 0 && data.collaborating.length === 0;
 
@@ -125,6 +135,22 @@ export default function SetsContent() {
           <div className="grid grid-cols-1 gap-3">
             {data.collaborating.map((set) => (
               <SetCard key={set.id} set={set} isOwner={false} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isSignedIn && publicSets.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Browse public sets</h2>
+          <div className="grid grid-cols-1 gap-3">
+            {publicSets.map((set) => (
+              <SetCard
+                key={set.id}
+                set={{ ...set, owner_user_id: "" }}
+                ownerName={set.ownerName}
+                canCopy
+              />
             ))}
           </div>
         </section>

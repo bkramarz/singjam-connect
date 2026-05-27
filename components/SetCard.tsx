@@ -13,10 +13,12 @@ type SetCardProps = {
   };
   songCount?: number;
   isOwner?: boolean;
+  ownerName?: string | null;
+  canCopy?: boolean;
   onDelete?: (id: string) => void;
 };
 
-export default function SetCard({ set, songCount, isOwner, onDelete }: SetCardProps) {
+export default function SetCard({ set, songCount, isOwner, ownerName, canCopy, onDelete }: SetCardProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -64,6 +66,8 @@ export default function SetCard({ set, songCount, isOwner, onDelete }: SetCardPr
         <div className="flex items-center gap-2 mb-0.5">
           {isOwner ? (
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Owner</span>
+          ) : canCopy ? (
+            ownerName && <span className="text-xs text-zinc-400">by {ownerName}</span>
           ) : (
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Collaborator</span>
           )}
@@ -78,17 +82,32 @@ export default function SetCard({ set, songCount, isOwner, onDelete }: SetCardPr
           </p>
         )}
       </div>
-      {!isOwner && (
+      {!isOwner && !canCopy && (
         <div className="flex items-center pr-4 text-zinc-300">
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
         </div>
       )}
+      {canCopy && (
+        <div className="flex items-center pr-3">
+          <button
+            onClick={(e) => { e.preventDefault(); copySet(); }}
+            disabled={copying}
+            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+          >
+            {copying ? "Copying…" : "Copy"}
+          </button>
+        </div>
+      )}
     </div>
   );
 
-  if (!isOwner) {
+  if (!isOwner && !canCopy) {
+    return <Link href={`/set/${set.id}`} className="block">{cardBody}</Link>;
+  }
+
+  if (canCopy) {
     return <Link href={`/set/${set.id}`} className="block">{cardBody}</Link>;
   }
 

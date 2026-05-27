@@ -40,6 +40,8 @@ type Song = {
     chord_chart_url: string | null;
     youtube_url: string | null;
     tonality: string | null;
+    year: number | null;
+    meter: string | null;
     song_recording_artists: { position: number; youtube_url: string | null; spotify_url: string | null }[];
   };
 };
@@ -81,6 +83,21 @@ type JamSong = {
   title: string;
   display_artist: string | null;
 };
+
+const CSV_COLUMN_OPTIONS = [
+  { key: "artist",   label: "Artist" },
+  { key: "year",     label: "Year" },
+  { key: "tonality", label: "Tonality" },
+  { key: "meter",    label: "Meter" },
+  { key: "key",      label: "Key (set)" },
+  { key: "leader",   label: "Leader" },
+  { key: "singjam",  label: "SingJam link" },
+  { key: "youtube",  label: "YouTube link" },
+  { key: "spotify",  label: "Spotify link" },
+  { key: "chords",   label: "Chord chart link" },
+] as const;
+
+type CsvColumnKey = typeof CSV_COLUMN_OPTIONS[number]["key"];
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead", style: "bg-amber-100 text-amber-800 font-semibold" },
@@ -712,6 +729,19 @@ export default function SetDetail({
   const [missingSongArtist, setMissingSongArtist] = useState("");
   const [missingSongBusy, setMissingSongBusy] = useState(false);
   const [missingSongError, setMissingSongError] = useState<string | null>(null);
+  const [showCsvOptions, setShowCsvOptions] = useState(false);
+  const [csvColumns, setCsvColumns] = useState<Record<CsvColumnKey, boolean>>({
+    artist: true,
+    year: false,
+    tonality: false,
+    meter: false,
+    key: true,
+    leader: true,
+    singjam: false,
+    youtube: false,
+    spotify: false,
+    chords: false,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -961,29 +991,45 @@ export default function SetDetail({
   }
 
   function handleCSVDownload() {
-    const headers = ["#", "Title", "Artist", "Key", "Leader", "YouTube", "Spotify", "Chord Chart"];
+    const headers: string[] = ["#", "Title"];
+    if (csvColumns.artist)   headers.push("Artist");
+    if (csvColumns.year)     headers.push("Year");
+    if (csvColumns.tonality) headers.push("Tonality");
+    if (csvColumns.meter)    headers.push("Meter");
+    if (csvColumns.key)      headers.push("Key");
+    if (csvColumns.leader)   headers.push("Leader");
+    if (csvColumns.singjam)  headers.push("SingJam link");
+    if (csvColumns.youtube)  headers.push("YouTube");
+    if (csvColumns.spotify)  headers.push("Spotify");
+    if (csvColumns.chords)   headers.push("Chord Chart");
+
     const rows = songs.map((s, i) => {
-      const videoId = getPrimaryYoutubeId(s.songs);
-      const ytUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
-      const spotifyUrl = getPrimarySpotifyUrl(s.songs) ?? "";
-      const leaderNames = (s.leader_user_ids ?? [])
-        .map((uid) => {
-          const p = participants.find((pt) => pt.user_id === uid);
-          return p?.display_name ?? p?.username ?? "";
-        })
-        .filter(Boolean)
-        .join("; ");
-      return [
-        i + 1,
-        `"${s.songs.title.replace(/"/g, '""')}"`,
-        `"${(s.songs.display_artist ?? "").replace(/"/g, '""')}"`,
-        s.key_note ?? "",
-        `"${leaderNames.replace(/"/g, '""')}"`,
-        ytUrl,
-        spotifyUrl,
-        s.songs.chord_chart_url ?? "",
-      ].join(",");
+      const cols: (string | number)[] = [i + 1, `"${s.songs.title.replace(/"/g, '""')}"`];
+      if (csvColumns.artist)   cols.push(`"${(s.songs.display_artist ?? "").replace(/"/g, '""')}"`);
+      if (csvColumns.year)     cols.push(s.songs.year ?? "");
+      if (csvColumns.tonality) cols.push(s.songs.tonality ?? "");
+      if (csvColumns.meter)    cols.push(s.songs.meter ?? "");
+      if (csvColumns.key)      cols.push(s.key_note ?? "");
+      if (csvColumns.leader) {
+        const leaderNames = (s.leader_user_ids ?? [])
+          .map((uid) => {
+            const p = participants.find((pt) => pt.user_id === uid);
+            return p?.display_name ?? p?.username ?? "";
+          })
+          .filter(Boolean)
+          .join("; ");
+        cols.push(`"${leaderNames.replace(/"/g, '""')}"`);
+      }
+      if (csvColumns.singjam) cols.push(s.songs.slug ? `https://singjam.org/songs/${s.songs.slug}` : "");
+      if (csvColumns.youtube) {
+        const videoId = getPrimaryYoutubeId(s.songs);
+        cols.push(videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
+      }
+      if (csvColumns.spotify) cols.push(getPrimarySpotifyUrl(s.songs) ?? "");
+      if (csvColumns.chords)  cols.push(s.songs.chord_chart_url ?? "");
+      return cols.join(",");
     });
+
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -992,6 +1038,7 @@ export default function SetDetail({
     a.download = `${set.name}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setShowCsvOptions(false);
   }
 
   async function handleCreatePlaylist(platform: "youtube" | "spotify") {
@@ -1467,14 +1514,46 @@ export default function SetDetail({
         ) : null}
 
         <button
-          onClick={handleCSVDownload}
-          className="flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+          onClick={() => setShowCsvOptions((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${showCsvOptions ? "border-zinc-400 bg-zinc-50 text-zinc-900" : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"}`}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
           </svg>
           Export CSV
         </button>
+        {showCsvOptions && (
+          <div className="basis-full rounded-xl border border-zinc-200 bg-white px-4 py-3 space-y-3">
+            <p className="text-xs font-medium text-zinc-500">Columns to include</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {CSV_COLUMN_OPTIONS.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-1.5 text-sm text-zinc-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={csvColumns[key]}
+                    onChange={(e) => setCsvColumns((prev) => ({ ...prev, [key]: e.target.checked }))}
+                    className="rounded border-zinc-300 accent-amber-500"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCSVDownload}
+                className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 transition-colors"
+              >
+                Download
+              </button>
+              <button
+                onClick={() => setShowCsvOptions(false)}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         <a
           href={`/set/${set.id}/pdf`}
           target="_blank"
