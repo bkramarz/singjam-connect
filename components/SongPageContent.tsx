@@ -169,8 +169,9 @@ export default function SongPageContent() {
 
   const { song, isAdmin, singingVoice, userSongConfidence, popularity } = data;
 
-  const composers = (song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean) as string[];
-  const lyricists = (song.song_lyricists as any[]).map((x: any) => x.people?.name).filter(Boolean) as string[];
+  const byLastName = (a: string, b: string) => a.split(" ").at(-1)!.localeCompare(b.split(" ").at(-1)!);
+  const composers = (song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean).sort(byLastName) as string[];
+  const lyricists = (song.song_lyricists as any[]).map((x: any) => x.people?.name).filter(Boolean).sort(byLastName) as string[];
   const cultureRows = song.song_cultures as any[];
   const musicSpecificRows = cultureRows.filter((x: any) => x.context === "music");
   const lyricsSpecificRows = cultureRows.filter((x: any) => x.context === "lyrics");
