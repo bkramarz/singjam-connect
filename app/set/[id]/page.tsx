@@ -56,7 +56,7 @@ export default async function SetPage({
       .single(),
     supabase
       .from("set_songs")
-      .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_recording_artists(position, youtube_url, spotify_url))")
+      .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))")
       .eq("set_id", id)
       .order("position", { ascending: true }),
     supabase

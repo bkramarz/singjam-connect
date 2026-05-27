@@ -42,6 +42,10 @@ type Song = {
     tonality: string | null;
     year: number | null;
     meter: string | null;
+    song_composers: { people: { name: string } | null }[];
+    song_lyricists: { people: { name: string } | null }[];
+    song_genres: { genres: { name: string } | null }[];
+    song_themes: { themes: { name: string } | null }[];
     song_recording_artists: { position: number; youtube_url: string | null; spotify_url: string | null }[];
   };
 };
@@ -91,8 +95,11 @@ const CSV_COLUMN_OPTIONS = [
   { key: "meter",    label: "Meter" },
   { key: "key",      label: "Key (set)" },
   { key: "leader",   label: "Leader" },
-  { key: "singjam",  label: "SingJam link" },
-  { key: "youtube",  label: "YouTube link" },
+  { key: "songwriters", label: "Songwriters" },
+  { key: "genres",      label: "Genres" },
+  { key: "themes",      label: "Themes" },
+  { key: "singjam",     label: "SingJam link" },
+  { key: "youtube",     label: "YouTube link" },
   { key: "spotify",  label: "Spotify link" },
   { key: "chords",   label: "Chord chart link" },
 ] as const;
@@ -737,6 +744,9 @@ export default function SetDetail({
     meter: false,
     key: true,
     leader: true,
+    songwriters: false,
+    genres: false,
+    themes: false,
     singjam: false,
     youtube: false,
     spotify: false,
@@ -998,7 +1008,10 @@ export default function SetDetail({
     if (csvColumns.meter)    headers.push("Meter");
     if (csvColumns.key)      headers.push("Key");
     if (csvColumns.leader)   headers.push("Leader");
-    if (csvColumns.singjam)  headers.push("SingJam link");
+    if (csvColumns.songwriters) { headers.push("Composers"); headers.push("Lyricists"); }
+    if (csvColumns.genres)      headers.push("Genres");
+    if (csvColumns.themes)      headers.push("Themes");
+    if (csvColumns.singjam)     headers.push("SingJam link");
     if (csvColumns.youtube)  headers.push("YouTube");
     if (csvColumns.spotify)  headers.push("Spotify");
     if (csvColumns.chords)   headers.push("Chord Chart");
@@ -1019,6 +1032,20 @@ export default function SetDetail({
           .filter(Boolean)
           .join("; ");
         cols.push(`"${leaderNames.replace(/"/g, '""')}"`);
+      }
+      if (csvColumns.songwriters) {
+        const composers = (s.songs.song_composers ?? []).map((c) => c.people?.name).filter(Boolean).join("; ");
+        const lyricists = (s.songs.song_lyricists ?? []).map((l) => l.people?.name).filter(Boolean).join("; ");
+        cols.push(`"${composers.replace(/"/g, '""')}"`);
+        cols.push(`"${lyricists.replace(/"/g, '""')}"`);
+      }
+      if (csvColumns.genres) {
+        const names = (s.songs.song_genres ?? []).map((g) => g.genres?.name).filter(Boolean).join("; ");
+        cols.push(`"${names.replace(/"/g, '""')}"`);
+      }
+      if (csvColumns.themes) {
+        const names = (s.songs.song_themes ?? []).map((t) => t.themes?.name).filter(Boolean).join("; ");
+        cols.push(`"${names.replace(/"/g, '""')}"`);
       }
       if (csvColumns.singjam) cols.push(s.songs.slug ? `https://singjam.org/songs/${s.songs.slug}` : "");
       if (csvColumns.youtube) {
