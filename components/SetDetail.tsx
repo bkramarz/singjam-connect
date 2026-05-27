@@ -68,7 +68,7 @@ type SetData = {
   description: string | null;
   owner_user_id: string;
   jam_id: string | null;
-  link_sharing: "disabled" | "view";
+  link_sharing: "private" | "link" | "public";
   youtube_playlist_id: string | null;
   youtube_playlist_fingerprint: string | null;
   spotify_playlist_id: string | null;
@@ -156,8 +156,10 @@ function SongRowContent({
   canEdit,
   isAdmin,
   isHost,
+  isPublicViewer,
   participants,
   hasEligible,
+  participantKnowledge,
   currentUserId,
   inRepertoire,
   onMediaAdded,
@@ -171,8 +173,10 @@ function SongRowContent({
   canEdit: boolean;
   isAdmin: boolean;
   isHost: boolean;
+  isPublicViewer: boolean;
   participants: Participant[];
   hasEligible: boolean;
+  participantKnowledge: Map<string, string>;
   currentUserId: string | null;
   inRepertoire: boolean;
   onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
@@ -265,9 +269,17 @@ function SongRowContent({
   }
 
   const leaderIds = song.leader_user_ids ?? [];
-  const visibleParticipants = isHost
-    ? participants
-    : participants.filter((p) => leaderIds.includes(p.user_id));
+  // Public viewers only see designated leaders; everyone else sees all knowledge levels
+  const visibleParticipants = isPublicViewer
+    ? participants.filter((p) => leaderIds.includes(p.user_id))
+    : participants;
+
+  // Derive which knowledge levels are actually present for the legend
+  const visibleLevels = new Set(visibleParticipants.map((p) => {
+    if (leaderIds.includes(p.user_id)) return "leader";
+    return participantKnowledge.get(p.user_id) ?? null;
+  }).filter(Boolean) as string[]);
+  const showLegend = !isPublicViewer && (visibleLevels.has("support") || visibleLevels.has("learn"));
 
   return (
     <div className="flex-1 min-w-0 space-y-2">
@@ -310,31 +322,59 @@ function SongRowContent({
             )}
           </div>
           {(visibleParticipants.length > 0 || (isHost && participants.length > 0)) && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {isHost && leaderIds.length === 0 && !hasEligible && (
-                <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
-                  No leader
-                </span>
+            <div className="mt-1.5 space-y-1">
+              <div className="flex flex-wrap gap-1">
+                {isHost && leaderIds.length === 0 && !hasEligible && (
+                  <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
+                    No leader
+                  </span>
+                )}
+                {visibleParticipants.map((p) => {
+                  const isLeader = leaderIds.includes(p.user_id);
+                  const confidence = participantKnowledge.get(p.user_id);
+                  const isLeadEligible = confidence === "lead";
+                  const isClickable = isHost && isLeadEligible;
+                  const firstName = p.display_name ?? p.username ?? "?";
+                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
+                  const pillStyle = isLeader
+                    ? "bg-amber-400 text-white"
+                    : isLeadEligible
+                      ? "bg-amber-100 text-amber-700"
+                      : confidence === "support"
+                        ? "bg-sky-100 text-sky-700"
+                        : "bg-zinc-100 text-zinc-500";
+                  return (
+                    <button
+                      key={p.user_id}
+                      type="button"
+                      onClick={() => isClickable && handleToggleLeader(p.user_id)}
+                      disabled={!isClickable}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all ${pillStyle} ${isClickable ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {showLegend && (
+                <div className="flex flex-wrap gap-2.5">
+                  {(visibleLevels.has("leader") || visibleLevels.has("lead")) && (
+                    <span className="flex items-center gap-1 text-[10px] text-zinc-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />Lead
+                    </span>
+                  )}
+                  {visibleLevels.has("support") && (
+                    <span className="flex items-center gap-1 text-[10px] text-zinc-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-300 inline-block" />Support
+                    </span>
+                  )}
+                  {visibleLevels.has("learn") && (
+                    <span className="flex items-center gap-1 text-[10px] text-zinc-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 inline-block" />Learning
+                    </span>
+                  )}
+                </div>
               )}
-              {visibleParticipants.map((p) => {
-                const isLeader = leaderIds.includes(p.user_id);
-                const firstName = p.display_name ?? p.username ?? "?";
-                const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
-                return (
-                  <button
-                    key={p.user_id}
-                    type="button"
-                    onClick={() => isHost && handleToggleLeader(p.user_id)}
-                    disabled={!isHost}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all
-                      ${isLeader ? "bg-amber-400 text-white" : "bg-zinc-100 text-zinc-500"}
-                      ${isHost ? "cursor-pointer hover:opacity-75" : "cursor-default"}
-                    `}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
             </div>
           )}
           {!inRepertoire && (currentUserId || signInUrl) && (
@@ -525,8 +565,10 @@ function SortableSongItem({
   canEdit,
   isAdmin,
   isHost,
+  isPublicViewer,
   participants,
   hasEligible,
+  participantKnowledge,
   currentUserId,
   inRepertoire,
   onRemove,
@@ -541,8 +583,10 @@ function SortableSongItem({
   canEdit: boolean;
   isAdmin: boolean;
   isHost: boolean;
+  isPublicViewer: boolean;
   participants: Participant[];
   hasEligible: boolean;
+  participantKnowledge: Map<string, string>;
   currentUserId: string | null;
   inRepertoire: boolean;
   onRemove: (songId: string) => void;
@@ -580,8 +624,10 @@ function SortableSongItem({
         canEdit={canEdit}
         isAdmin={isAdmin}
         isHost={isHost}
+        isPublicViewer={isPublicViewer}
         participants={participants}
         hasEligible={hasEligible}
+        participantKnowledge={participantKnowledge}
         currentUserId={currentUserId}
         inRepertoire={inRepertoire}
         onMediaAdded={onMediaAdded}
@@ -615,7 +661,7 @@ export default function SetDetail({
   isAdmin,
   isPublicViewer = false,
   jamSharedSongs = [],
-  leaderEligible = [],
+  songKnowledge = [],
 }: {
   set: SetData;
   initialSongs: Song[];
@@ -627,7 +673,7 @@ export default function SetDetail({
   isAdmin: boolean;
   isPublicViewer?: boolean;
   jamSharedSongs?: JamSong[];
-  leaderEligible?: { user_id: string; song_id: string }[];
+  songKnowledge?: { user_id: string; song_id: string; confidence: string }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -646,7 +692,7 @@ export default function SetDetail({
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
   const [showInvitePanel, setShowInvitePanel] = useState(false);
   const [showAllCollaborators, setShowAllCollaborators] = useState(false);
-  const [linkSharing, setLinkSharing] = useState<"disabled" | "view">(set.link_sharing ?? "disabled");
+  const [linkSharing, setLinkSharing] = useState<"private" | "link" | "public">(set.link_sharing ?? "private");
   const [savingName, setSavingName] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -813,6 +859,13 @@ export default function SetDetail({
     })),
   ];
 
+  // Build a per-song lookup: songId → Map<userId, confidence>
+  const songKnowledgeMap = new Map<string, Map<string, string>>();
+  for (const k of songKnowledge) {
+    if (!songKnowledgeMap.has(k.song_id)) songKnowledgeMap.set(k.song_id, new Map());
+    songKnowledgeMap.get(k.song_id)!.set(k.user_id, k.confidence);
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -896,15 +949,15 @@ export default function SetDetail({
     });
   }
 
-  async function handleToggleLinkSharing() {
-    const next = linkSharing === "disabled" ? "view" : "disabled";
-    setLinkSharing(next);
+  async function handleSetLinkSharing(value: "private" | "link" | "public") {
+    const prev = linkSharing;
+    setLinkSharing(value);
     const res = await fetch(`/api/sets/${set.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ link_sharing: next }),
+      body: JSON.stringify({ link_sharing: value }),
     });
-    if (!res.ok) setLinkSharing(linkSharing);
+    if (!res.ok) setLinkSharing(prev);
   }
 
   function handleCSVDownload() {
@@ -1133,27 +1186,34 @@ export default function SetDetail({
         )}
       </div>
 
-      {/* Link sharing toggle — owner only */}
+      {/* Visibility selector — owner only */}
       {isOwner && (
-        <div className="flex items-center justify-between rounded-xl border border-zinc-100 bg-white px-3 py-2">
-          <div className="flex items-center gap-1.5 text-sm text-zinc-600">
-            {linkSharing === "view" ? (
-              <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-              </svg>
-            ) : (
-              <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-              </svg>
-            )}
-            {linkSharing === "view" ? "Anyone with link can view" : "Invite only"}
+        <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5 space-y-2">
+          <p className="text-xs font-medium text-zinc-500">Visibility</p>
+          <div className="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5">
+            {([
+              { value: "private", label: "Private" },
+              { value: "link",    label: "Open join" },
+              { value: "public",  label: "Public" },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => handleSetLinkSharing(value)}
+                className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  linkSharing === value
+                    ? "bg-white text-zinc-900 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <button
-            onClick={handleToggleLinkSharing}
-            className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
-          >
-            {linkSharing === "view" ? "Make private" : "Allow link viewing"}
-          </button>
+          <p className="text-xs text-zinc-400">
+            {linkSharing === "private" && "Only invited collaborators can access this set."}
+            {linkSharing === "link"    && "Logged-in users who visit are automatically joined as viewers."}
+            {linkSharing === "public"  && "Anyone with the link can view without signing in."}
+          </p>
         </div>
       )}
 
@@ -1441,16 +1501,12 @@ export default function SetDetail({
             <DndContext id={set.id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={songs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                 {songs.map((song, i) => {
-                  const eligibleForSong = participants.filter((p) =>
-                    leaderEligible.some((e) => e.user_id === p.user_id && e.song_id === song.song_id)
+                  const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
+                  const knowledgeUserIds = new Set(knowledgeForSong.keys());
+                  const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
+                  const rowParticipants = participants.filter((p) =>
+                    knowledgeUserIds.has(p.user_id) || (song.leader_user_ids ?? []).includes(p.user_id)
                   );
-                  const hasEligible = eligibleForSong.length > 0;
-                  const rowParticipants = hasEligible
-                    ? participants.filter((p) =>
-                        eligibleForSong.some((e) => e.user_id === p.user_id) ||
-                        (song.leader_user_ids ?? []).includes(p.user_id)
-                      )
-                    : participants;
                   return (
                     <SortableSongItem
                       key={song.id}
@@ -1459,8 +1515,10 @@ export default function SetDetail({
                       canEdit={canEdit}
                       isAdmin={isAdmin}
                       isHost={isOwner}
+                      isPublicViewer={isPublicViewer}
                       participants={rowParticipants}
                       hasEligible={hasEligible}
+                      participantKnowledge={knowledgeForSong}
                       currentUserId={currentUserId}
                       inRepertoire={userRepertoire.has(song.song_id)}
                       onRemove={handleRemoveSong}
@@ -1476,9 +1534,14 @@ export default function SetDetail({
             </DndContext>
           ) : (
             songs.map((song, i) => {
-              const rowParticipants = isPublicViewer ? [] : participants.filter((p) =>
-                (song.leader_user_ids ?? []).includes(p.user_id)
-              );
+              const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
+              const knowledgeUserIds = new Set(knowledgeForSong.keys());
+              const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
+              const rowParticipants = isPublicViewer
+                ? participants.filter((p) => (song.leader_user_ids ?? []).includes(p.user_id))
+                : participants.filter((p) =>
+                    knowledgeUserIds.has(p.user_id) || (song.leader_user_ids ?? []).includes(p.user_id)
+                  );
               return (
                 <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
                   <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{i + 1}</span>
@@ -1488,8 +1551,10 @@ export default function SetDetail({
                     canEdit={false}
                     isAdmin={false}
                     isHost={false}
+                    isPublicViewer={isPublicViewer}
                     participants={rowParticipants}
-                    hasEligible={false}
+                    hasEligible={hasEligible}
+                    participantKnowledge={knowledgeForSong}
                     currentUserId={currentUserId}
                     inRepertoire={userRepertoire.has(song.song_id)}
                     onMediaAdded={() => {}}

@@ -14,7 +14,7 @@ export async function PATCH(
   const { name, description, link_sharing } = body;
 
   if (link_sharing !== undefined) {
-    if (!["disabled", "view"].includes(link_sharing)) {
+    if (!["private", "link", "public"].includes(link_sharing)) {
       return NextResponse.json({ error: "Invalid link_sharing value" }, { status: 400 });
     }
     const { error } = await supabase
