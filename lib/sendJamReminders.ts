@@ -10,7 +10,7 @@ export async function sendJamReminders(admin: SupabaseClient, resend: Resend): P
 
   const { data: jams, error } = await admin
     .from("jams")
-    .select("id, name, starts_at, timezone, full_address, neighborhood")
+    .select("id, name, starts_at, timezone, full_address, neighborhood, host_user_id")
     .gte("starts_at", windowStart)
     .lte("starts_at", windowEnd)
     .not("id", "in", `(select jam_id from jam_reminders_sent where reminder_type = '24h')`);
@@ -27,20 +27,37 @@ export async function sendJamReminders(admin: SupabaseClient, resend: Resend): P
   for (const jam of jams) {
     const address = jam.full_address ?? jam.neighborhood ?? null;
     const jamUrl = `https://singjam.org/jam/${jam.id}`;
+    const jamDay = jam.starts_at
+      ? new Date(jam.starts_at).toLocaleString("en-US", {
+          timeZone: jam.timezone ?? undefined,
+          weekday: "long",
+        })
+      : null;
 
-    const { data: rsvps } = await admin
-      .from("jam_rsvps")
-      .select("user_id")
-      .eq("jam_id", jam.id)
-      .eq("status", "attending");
+    const [{ data: rsvps }, { data: pendingInvites }] = await Promise.all([
+      admin
+        .from("jam_rsvps")
+        .select("user_id")
+        .eq("jam_id", jam.id)
+        .eq("status", "attending"),
+      admin
+        .from("jam_invites")
+        .select("invited_user_id")
+        .eq("jam_id", jam.id)
+        .eq("status", "pending"),
+    ]);
 
     // Record before emailing so a transient email error doesn't trigger a re-send
     await admin.from("jam_reminders_sent").insert({ jam_id: jam.id, reminder_type: "24h" });
 
-    if (!rsvps || rsvps.length === 0) continue;
+    // Collect unique user_ids: host + attending RSVPs + pending invites
+    const userIdSet = new Set<string>();
+    userIdSet.add(jam.host_user_id);
+    for (const r of rsvps ?? []) userIdSet.add(r.user_id);
+    for (const i of pendingInvites ?? []) userIdSet.add(i.invited_user_id);
 
     const profilesAndEmails = await Promise.all(
-      rsvps.map(async ({ user_id }: { user_id: string }) => {
+      [...userIdSet].map(async (user_id) => {
         const [{ data: profile }, { data: authData }] = await Promise.all([
           admin.from("profiles").select("display_name, username").eq("id", user_id).single(),
           (admin.auth as any).admin.getUserById(user_id),
@@ -59,7 +76,7 @@ export async function sendJamReminders(admin: SupabaseClient, resend: Resend): P
         resend.emails.send({
           from: FROM_ADDRESS,
           to: r.email,
-          subject: `Reminder: ${jam.name ?? "Your jam"} is tomorrow`,
+          subject: `Reminder: ${jam.name ?? "Your jam"} is tomorrow${jamDay ? ` (${jamDay})` : ""}`,
           html: jamReminderHtml({
             name: r.name,
             jamName: jam.name ?? "Your jam",

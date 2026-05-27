@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamWaitlistPromotedHtml } from "@/emails/jam-waitlist-promoted";
+import { jamRsvpConfirmedHtml } from "@/emails/jam-rsvp-confirmed";
 import { createNotification } from "@/lib/notifications";
 
 function supabaseAdmin() {
@@ -25,7 +26,7 @@ export async function POST(
   const admin = supabaseAdmin();
 
   // Get jam details including host
-  const { data: jam } = await admin.from("jams").select("capacity, name, starts_at, visibility, host_user_id").eq("id", jamId).single();
+  const { data: jam } = await admin.from("jams").select("capacity, name, starts_at, ends_at, timezone, full_address, neighborhood, visibility, host_user_id").eq("id", jamId).single();
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
   if (jam.visibility === "official") return NextResponse.json({ error: "Official events use external ticketing" }, { status: 400 });
 
@@ -88,6 +89,33 @@ export async function POST(
           status: "accepted",
         });
       }
+    }
+  }
+
+  // Send RSVP confirmation email (only when newly confirmed, not if already attending)
+  if (newStatus === "attending" && existing?.status !== "attending") {
+    const [{ data: profile }, { data: authData }] = await Promise.all([
+      admin.from("profiles").select("display_name, username").eq("id", user.id).single(),
+      admin.auth.admin.getUserById(user.id),
+    ]);
+    const email = authData.user?.email;
+    if (email) {
+      const address = jam.full_address ?? jam.neighborhood ?? null;
+      await resend.emails.send({
+        from: FROM_ADDRESS,
+        to: email,
+        subject: `You're going to ${jam.name ?? "the jam"}!`,
+        html: jamRsvpConfirmedHtml({
+          name: (profile as any)?.display_name ?? (profile as any)?.username,
+          jamName: jam.name ?? "the jam",
+          jamId,
+          jamUrl: `https://singjam.org/jam/${jamId}`,
+          startsAt: jam.starts_at,
+          endsAt: (jam as any).ends_at ?? null,
+          timezone: (jam as any).timezone,
+          address,
+        }),
+      });
     }
   }
 

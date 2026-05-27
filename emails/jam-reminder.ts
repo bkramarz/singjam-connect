@@ -33,7 +33,8 @@ export function jamReminderHtml({
   ${address ? `
   <div style="margin-top:12px;padding:16px;background:#f4f4f5;border-radius:10px">
     <p style="font-size:13px;font-weight:600;color:#71717a;margin:0 0 4px">Where</p>
-    <p style="font-size:15px;font-weight:500;color:#18181b;margin:0">${address}</p>
+    <a href="https://maps.google.com/?q=${encodeURIComponent(address)}"
+       style="font-size:15px;font-weight:500;color:#18181b;margin:0;text-decoration:underline">${address}</a>
   </div>` : ""}
   <a href="${jamUrl}"
      style="display:inline-block;margin-top:24px;background-color:#f59e0b;color:#fff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;text-decoration:none">
