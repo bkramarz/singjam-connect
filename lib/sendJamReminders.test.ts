@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { sendJamReminders } from "./sendJamReminders";
 
 function makeAdmin({
   jams = [] as any[],
   rsvps = [] as any[],
   invites = [] as any[],
+  alreadySentIds = [] as string[],
   profile = { display_name: "Alice", username: null },
   insertError = null as any,
 } = {}) {
@@ -13,12 +14,13 @@ function makeAdmin({
   const admin = {
     from: vi.fn((table: string) => {
       if (table === "jams") {
+        // Simulate DB-level filtering: exclude jams already in the sent log
+        const filteredJams = jams.filter((j) => !alreadySentIds.includes(j.id));
+        const result = { data: filteredJams, error: null };
         return {
           select: () => ({
             gte: () => ({
-              lte: () => ({
-                not: () => ({ data: jams, error: null }),
-              }),
+              lte: () => ({ ...result, not: () => result }),
             }),
           }),
         };
@@ -42,7 +44,10 @@ function makeAdmin({
         };
       }
       if (table === "jam_reminders_sent") {
-        return { insert: mockInsert };
+        return {
+          insert: mockInsert,
+          select: () => ({ eq: () => ({ data: alreadySentIds.map((id) => ({ jam_id: id })) }) }),
+        };
       }
       if (table === "profiles") {
         return {
@@ -70,6 +75,9 @@ function makeResend() {
   return { emails: { send: vi.fn().mockResolvedValue({ id: "email-id" }) } } as any;
 }
 
+// BASE_JAM starts at 3 PM EDT on 2026-06-10.
+// Tests lock "now" to 2026-06-09T12:00:00Z = 8 AM EDT, so the 8 AM / tomorrow
+// checks both pass and all behaviour tests can run without time-related filtering.
 const BASE_JAM = {
   id: "jam-1",
   name: "Friday Jam",
@@ -81,12 +89,41 @@ const BASE_JAM = {
 };
 
 beforeEach(() => {
+  // 2026-06-09T12:00:00Z = 8 AM EDT — satisfies the 8 AM / tomorrow filter for BASE_JAM
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-06-09T12:00:00Z"));
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("sendJamReminders", () => {
   it("returns 0 and sends nothing when no jams are in the window", async () => {
     const admin = makeAdmin({ jams: [] });
+    const resend = makeResend();
+
+    const sent = await sendJamReminders(admin, resend);
+
+    expect(sent).toBe(0);
+    expect(resend.emails.send).not.toHaveBeenCalled();
+  });
+
+  it("skips jams when it is not yet 8 AM in the jam's timezone", async () => {
+    vi.setSystemTime(new Date("2026-06-09T11:00:00Z")); // 7 AM EDT
+    const admin = makeAdmin({ jams: [BASE_JAM] });
+    const resend = makeResend();
+
+    const sent = await sendJamReminders(admin, resend);
+
+    expect(sent).toBe(0);
+    expect(resend.emails.send).not.toHaveBeenCalled();
+  });
+
+  it("skips jams when the jam is not tomorrow in the jam's timezone", async () => {
+    const jam = { ...BASE_JAM, starts_at: "2026-06-11T19:00:00Z" }; // two days away
+    const admin = makeAdmin({ jams: [jam] });
     const resend = makeResend();
 
     const sent = await sendJamReminders(admin, resend);
@@ -193,7 +230,7 @@ describe("sendJamReminders", () => {
   });
 
   it("includes the day name in the subject", async () => {
-    // starts_at is a Wednesday in UTC
+    // starts_at is a Wednesday in New York (EDT)
     const jams = [{ ...BASE_JAM, starts_at: "2026-06-10T19:00:00Z", timezone: "America/New_York" }];
     const admin = makeAdmin({ jams });
     const resend = makeResend();
@@ -204,28 +241,31 @@ describe("sendJamReminders", () => {
     expect(subject).toMatch(/is tomorrow \(Wednesday\)/);
   });
 
-  it("omits the day name when starts_at is null", async () => {
-    const jams = [{ ...BASE_JAM, starts_at: null }];
-    const admin = makeAdmin({ jams });
+  it("skips a jam that already has a reminder sent", async () => {
+    const admin = makeAdmin({ jams: [BASE_JAM], alreadySentIds: [BASE_JAM.id] });
     const resend = makeResend();
 
-    await sendJamReminders(admin, resend);
+    const sent = await sendJamReminders(admin, resend);
 
-    const subject = resend.emails.send.mock.calls[0][0].subject as string;
-    expect(subject).toMatch(/is tomorrow$/);
+    expect(sent).toBe(0);
+    expect(resend.emails.send).not.toHaveBeenCalled();
   });
 
   it("throws when the jams query fails", async () => {
     const admin = {
-      from: vi.fn(() => ({
-        select: () => ({
-          gte: () => ({
-            lte: () => ({
-              not: () => ({ data: null, error: new Error("DB error") }),
+      from: vi.fn((table: string) => {
+        if (table === "jam_reminders_sent") {
+          return { select: () => ({ eq: () => ({ data: [] }) }), insert: vi.fn() };
+        }
+        const errResult = { data: null, error: new Error("DB error") };
+        return {
+          select: () => ({
+            gte: () => ({
+              lte: () => ({ ...errResult, not: () => errResult }),
             }),
           }),
-        }),
-      })),
+        };
+      }),
       auth: { admin: { getUserById: vi.fn() } },
     } as any;
 

@@ -84,6 +84,7 @@ export default function JamContent() {
           visibility: jam.visibility,
           starts_at: jam.starts_at,
           ends_at: jam.ends_at,
+          timezone: jam.timezone,
           neighborhood: jam.neighborhood,
           full_address: jam.full_address,
           notes: jam.notes,
@@ -138,7 +139,7 @@ export default function JamContent() {
         supabase.auth.getUser(),
         supabase
           .from("jams")
-          .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
+          .select("id, name, visibility, starts_at, ends_at, timezone, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
           .eq("id", id)
           .maybeSingle(),
         supabase.from("jam_genres").select("genres(name)").eq("jam_id", id),
@@ -226,6 +227,7 @@ export default function JamContent() {
         visibility: jam.visibility as any,
         starts_at: jam.starts_at,
         ends_at: jam.ends_at,
+        timezone: jam.timezone,
         neighborhood: jam.neighborhood,
         full_address: jam.full_address,
         notes: jam.notes,

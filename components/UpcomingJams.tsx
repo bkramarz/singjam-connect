@@ -10,7 +10,7 @@ export default function UpcomingJams() {
   useEffect(() => {
     supabaseBrowser()
       .from("jams")
-      .select("id, name, starts_at, ends_at, neighborhood, tickets_url, image_url")
+      .select("id, name, starts_at, ends_at, timezone, neighborhood, tickets_url, image_url")
       .eq("visibility", "official")
       .gte("starts_at", new Date().toISOString())
       .order("starts_at", { ascending: true })

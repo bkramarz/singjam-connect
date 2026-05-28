@@ -8,6 +8,7 @@ type UserResult = {
   id: string;
   username: string | null;
   display_name: string | null;
+  last_name: string | null;
   avatar_url: string | null;
 };
 
@@ -15,6 +16,7 @@ export type NewInviteEntry = {
   invited_user_id: string | null;
   invitee_email: string | null;
   display_name?: string | null;
+  last_name?: string | null;
   username?: string | null;
 };
 
@@ -77,7 +79,7 @@ export default function JamInvitePanel({
       setQuery("");
       setResults([]);
       setFeedback({ id: "search", msg: "Invite sent!", ok: true });
-      onInvited?.({ invited_user_id: userId, invitee_email: null, display_name: user?.display_name, username: user?.username });
+      onInvited?.({ invited_user_id: userId, invitee_email: null, display_name: user?.display_name, last_name: user?.last_name, username: user?.username });
     } else {
       setFeedback({ id: userId, msg: body.error ?? "Failed to send invite", ok: false });
     }
@@ -178,7 +180,7 @@ export default function JamInvitePanel({
         {results.length > 0 && (
           <ul className="mt-2 divide-y divide-zinc-100 rounded-xl border border-zinc-200 overflow-hidden">
             {results.map((u) => {
-              const name = u.display_name ?? u.username ?? "Unknown";
+              const name = [u.display_name, u.last_name].filter(Boolean).join(" ") || u.username || "Unknown";
               const initial = name[0].toUpperCase();
               const isSent = sent.has(u.id);
               return (
