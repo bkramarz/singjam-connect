@@ -94,8 +94,9 @@ export interface ContactProfile {
 
 // Upserts the contact, subscribes to all lists, applies the SingJam App User tag,
 // and syncs any profile fields provided. Safe to call on every signup and profile save.
-export async function syncContact(email: string, profile: ContactProfile = {}) {
-  if (!AC_API_URL || !AC_API_KEY) return;
+// Returns an array of failure descriptions — empty means fully successful.
+export async function syncContact(email: string, profile: ContactProfile = {}): Promise<string[]> {
+  if (!AC_API_URL || !AC_API_KEY) return [];
 
   const fieldValues: { field: string; value: string }[] = [];
 
@@ -150,9 +151,10 @@ export async function syncContact(email: string, profile: ContactProfile = {}) {
 
   const contactId: string | undefined = contactData?.contact?.id;
   if (!contactId) {
+    const failures = ["contact upsert returned no ID"];
     console.error(`[ActiveCampaign] contact upsert returned no ID for ${email}`);
-    notifyAdminOfSyncFailure(email, ["contact upsert returned no ID"]).catch(() => {});
-    return;
+    notifyAdminOfSyncFailure(email, failures).catch(() => {});
+    return failures;
   }
 
   const [r1, r4, r9, rtag] = await Promise.all([
@@ -172,11 +174,12 @@ export async function syncContact(email: string, profile: ContactProfile = {}) {
   if (failed.length > 0) {
     notifyAdminOfSyncFailure(email, failed).catch(() => {});
   }
+
+  return failed;
 }
 
 async function notifyAdminOfSyncFailure(userEmail: string, failures: string[]) {
-  const adminEmail = process.env.ADMIN_EMAIL;
-  if (!adminEmail) return;
+  const adminEmail = process.env.ADMIN_EMAIL ?? "benkramarz@gmail.com";
   await resend.emails.send({
     from: FROM_ADDRESS,
     to: adminEmail,
