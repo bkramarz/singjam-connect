@@ -35,11 +35,12 @@ export const handler = schedule("0 3 * * *", async () => {
       instrumentLevels: (p.instrument_levels as Record<string, string>) || undefined,
       favoriteGenres: (p.favorite_genres as string[]) || undefined,
     };
-    try {
-      await syncContact(user.email, profile);
-      synced++;
-    } catch {
+    const failures = await syncContact(user.email, profile);
+    if (failures.length > 0) {
       failed++;
+      console.error(`[ac-sync] failed for ${user.email}: ${failures.join(", ")}`);
+    } else {
+      synced++;
     }
   }
 
