@@ -622,7 +622,10 @@ export default function SongEditor({
         ...[...lyricists].map((id) => allPeople.find((p) => p.id === id)?.name).filter((n): n is string => !!n),
         ...pendingLyricistNames,
       ];
-      const resolvedSlug = slug.trim() || generateSlug(finalTitle, [...composerNamesForSlug, ...lyricistNamesForSlug], composerTraditionalCulture || undefined);
+      const traditionalId = allPeople.find((p) => p.name === "Traditional")?.id;
+      const isTraditionalComposer = (traditionalId && composers.has(traditionalId)) || pendingComposerNames.some((n) => n.toLowerCase() === "traditional");
+      const isTraditionalLyricist = (traditionalId && lyricists.has(traditionalId)) || pendingLyricistNames.some((n) => n.toLowerCase() === "traditional");
+      const resolvedSlug = slug.trim() || generateSlug(finalTitle, [...composerNamesForSlug, ...lyricistNamesForSlug], (isTraditionalComposer && composerTraditionalCulture) || undefined);
       const originalRecordingArtistIds = song?.song_recording_artists.map((x) => x.artist_id) ?? [];
 
       const payload = {
@@ -759,13 +762,12 @@ export default function SongEditor({
       ]);
 
       // Sync traditional cultures with context
-      const traditionalId = allPeople.find((p) => p.name === "Traditional")?.id;
       await supabase.from("song_cultures").delete().eq("song_id", songId!).in("context", ["music", "lyrics"]);
       const tCultures: { name: string; context: string }[] = [];
-      if (traditionalId && composers.has(traditionalId) && composerTraditionalCulture) {
+      if (isTraditionalComposer && composerTraditionalCulture) {
         tCultures.push({ name: composerTraditionalCulture, context: "music" });
       }
-      if (traditionalId && lyricists.has(traditionalId) && lyricistTraditionalCulture) {
+      if (isTraditionalLyricist && lyricistTraditionalCulture) {
         tCultures.push({ name: lyricistTraditionalCulture, context: "lyrics" });
       }
       for (const { name: cultureName, context } of tCultures) {
