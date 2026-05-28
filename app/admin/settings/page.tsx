@@ -29,6 +29,9 @@ export default function AdminSettingsPage() {
   const [acLoading, setAcLoading] = useState(false);
   const [resyncing, setResyncing] = useState<Set<string>>(new Set());
 
+  const [reminderSending, setReminderSending] = useState(false);
+  const [reminderResult, setReminderResult] = useState<number | null>(null);
+
   useEffect(() => {
     supabase
       .from("feature_flags")
@@ -50,6 +53,15 @@ export default function AdminSettingsPage() {
     });
     setValues((prev) => ({ ...prev, [key]: enabled }));
     setSaving(null);
+  }
+
+  async function sendReminders() {
+    setReminderSending(true);
+    setReminderResult(null);
+    const res = await fetch("/api/admin/trigger-jam-reminders", { method: "POST" });
+    const data = await res.json();
+    setReminderResult(data.sent ?? 0);
+    setReminderSending(false);
   }
 
   async function checkACStatus() {
@@ -104,6 +116,27 @@ export default function AdminSettingsPage() {
             );
           })}
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Jam reminders</h2>
+            <p className="text-sm text-zinc-400 mt-0.5">Sends 8 AM reminder emails for jams happening tomorrow. Runs automatically every hour.</p>
+          </div>
+          <button
+            onClick={sendReminders}
+            disabled={reminderSending}
+            className="text-sm px-3 py-1.5 rounded-lg bg-zinc-900 text-white font-medium hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {reminderSending ? "Sending…" : "Send now"}
+          </button>
+        </div>
+        {reminderResult !== null && (
+          <p className="text-sm text-zinc-500">
+            {reminderResult === 0 ? "No eligible jams found." : `Sent ${reminderResult} reminder email${reminderResult === 1 ? "" : "s"}.`}
+          </p>
+        )}
       </div>
 
       <div className="space-y-4">
