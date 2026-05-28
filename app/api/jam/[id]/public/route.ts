@@ -32,7 +32,7 @@ export async function GET(
   const [jamRes, genresRes, themesRes, countRes, flagRes] = await Promise.all([
     admin
       .from("jams")
-      .select("id, name, visibility, starts_at, ends_at, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
+      .select("id, name, visibility, starts_at, ends_at, timezone, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
       .eq("id", jamId)
       .maybeSingle(),
     admin.from("jam_genres").select("genres(name)").eq("jam_id", jamId),

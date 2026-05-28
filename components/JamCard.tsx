@@ -10,6 +10,7 @@ export type JamCardData = {
   visibility: "official" | "community" | "private";
   starts_at: string | null;
   ends_at: string | null;
+  timezone?: string | null;
   neighborhood: string | null;
   full_address: string | null;
   notes: string | null;
@@ -114,22 +115,22 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
             <div className="flex items-start gap-4 px-5 py-4">
               <div className="shrink-0 w-10 text-center">
                 <div className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  <FormattedDate iso={jam.starts_at} options={{ weekday: "short" }} />
+                  <FormattedDate iso={jam.starts_at} timezone={jam.timezone} options={{ weekday: "short" }} />
                 </div>
                 <div className="text-2xl font-bold text-zinc-900 leading-none">
-                  <FormattedDate iso={jam.starts_at} options={{ day: "numeric" }} />
+                  <FormattedDate iso={jam.starts_at} timezone={jam.timezone} options={{ day: "numeric" }} />
                 </div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                  <FormattedDate iso={jam.starts_at} options={{ month: "short" }} />
+                  <FormattedDate iso={jam.starts_at} timezone={jam.timezone} options={{ month: "short" }} />
                 </div>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-zinc-800">
-                  <FormattedDate iso={jam.starts_at} options={{ weekday: "long", month: "long", day: "numeric", year: "numeric" }} />
+                  <FormattedDate iso={jam.starts_at} timezone={jam.timezone} options={{ weekday: "long", month: "long", day: "numeric", year: "numeric" }} />
                 </p>
                 <p className="text-sm text-zinc-500">
-                  <FormattedTime iso={jam.starts_at} />
-                  {jam.ends_at && <> – <FormattedTime iso={jam.ends_at} /></>}
+                  <FormattedTime iso={jam.starts_at} timezone={jam.timezone} />
+                  {jam.ends_at && <> – <FormattedTime iso={jam.ends_at} timezone={jam.timezone} /></>}
                 </p>
               </div>
             </div>
