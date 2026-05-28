@@ -10,3 +10,9 @@ supabase/.temp/
 
 # Local account notes — never commit
 ACCOUNTS.md
+
+# Claude Code memory files
+memory/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
