@@ -146,16 +146,22 @@ export default function ImportCSVPage() {
         // Primary display_artist: first topArtist name, or passed-in artist
         const primaryArtistName = mb?.display_artist ?? artist ?? null;
 
-        // Post-enrichment check using canonical values from MusicBrainz
-        const canonNormArtist = primaryArtistName ?? "";
-        let postQuery = supabase.from("songs").select("id").ilike("title", finalTitle);
-        postQuery = canonNormArtist
-          ? postQuery.ilike("display_artist", canonNormArtist)
-          : postQuery.is("display_artist", null);
-        const { data: postExisting } = await postQuery.limit(1).maybeSingle();
+        // Post-enrichment check: match on title_normalized (punctuation-stripped) so that
+        // "Johnny B. Goode" matches "Johnny B Goode", "Don't Think Twice, It's Alright" matches
+        // "Don't Think Twice It's Alright", etc.
+        const normalizedTitle = finalTitle.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+        const { data: postExisting } = await supabase
+          .from("songs")
+          .select("id, title, display_artist")
+          .eq("title_normalized", normalizedTitle)
+          .limit(1)
+          .maybeSingle();
 
         if (postExisting) {
-          current[i] = { status: "skipped", reason: "Already in database" };
+          const matchDesc = postExisting.display_artist
+            ? `"${postExisting.title}" — ${postExisting.display_artist}`
+            : `"${postExisting.title}"`;
+          current[i] = { status: "skipped", reason: `Possible duplicate of ${matchDesc}` };
           setResults([...current]);
           setProgress(i + 1);
           continue;

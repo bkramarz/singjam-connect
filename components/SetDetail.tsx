@@ -25,6 +25,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSongSearch } from "@/hooks/useSongSearch";
 import SetInvitePanel from "@/components/SetInvitePanel";
 import { formatComposers } from "@/lib/formatComposers";
+import ConfidencePicker from "@/components/ConfidencePicker";
 
 const MUSICAL_KEYS = ["A", "Bb", "B", "C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab"];
 
@@ -108,12 +109,6 @@ const CSV_COLUMN_OPTIONS = [
 
 type CsvColumnKey = typeof CSV_COLUMN_OPTIONS[number]["key"];
 
-const CONFIDENCE_LEVELS = [
-  { key: "lead", label: "Lead", style: "bg-amber-100 text-amber-800 font-semibold" },
-  { key: "support", label: "Support", style: "bg-zinc-100 text-zinc-700" },
-  { key: "learn", label: "Learn", style: "bg-zinc-100 text-zinc-500" },
-] as const;
-
 function getYoutubeId(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
@@ -187,11 +182,13 @@ function SongRowContent({
   hasEligible,
   participantKnowledge,
   currentUserId,
+  currentUserSingingVoice,
   inRepertoire,
   onMediaAdded,
   onKeyChanged,
   onLeadersChanged,
   onAddToRepertoire,
+  onVoiceUpdated,
   signInUrl,
 }: {
   song: Song;
@@ -204,11 +201,13 @@ function SongRowContent({
   hasEligible: boolean;
   participantKnowledge: Map<string, string>;
   currentUserId: string | null;
+  currentUserSingingVoice: string | null;
   inRepertoire: boolean;
   onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
   onKeyChanged: (id: string, key: string | null) => void;
   onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
   onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
+  onVoiceUpdated: (voice: string) => void;
   signInUrl?: string;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
@@ -329,7 +328,7 @@ function SongRowContent({
                   const val = e.target.value || null;
                   if (val !== song.key_note) onKeyChanged(song.id, val);
                 }}
-                className="text-xs rounded border border-zinc-300 pl-1.5 pr-5 py-0.5 w-16 focus:border-amber-400 focus:outline-none"
+                className={`text-xs rounded border border-zinc-300 px-1.5 py-0.5 focus:border-amber-400 focus:outline-none ${song.key_note ? "w-14" : "w-20"}`}
               >
                 <option value="">key</option>
                 {MUSICAL_KEYS.map((k) => (
@@ -344,7 +343,7 @@ function SongRowContent({
               )
             )}
             {song.songs.tonality && (
-              <span className="text-xs text-zinc-400">{song.songs.tonality}</span>
+              <span className="text-xs font-semibold text-zinc-900">{song.songs.tonality}</span>
             )}
           </div>
           {!inRepertoire && (currentUserId || signInUrl) && (
@@ -356,20 +355,14 @@ function SongRowContent({
                 + Add to my repertoire
               </a>
             ) : pickingRepertoire ? (
-              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <span className="text-xs text-zinc-500 font-medium">I know this:</span>
-                {CONFIDENCE_LEVELS.map(({ key, label, style }) => (
-                  <button
-                    key={key}
-                    onClick={async () => { await onAddToRepertoire(song.song_id, key); setPickingRepertoire(false); }}
-                    className={`rounded-full px-2 py-0.5 text-xs ${style} hover:opacity-80 transition-opacity`}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <button onClick={() => setPickingRepertoire(false)} className="text-xs text-zinc-400 hover:text-zinc-600">
-                  Cancel
-                </button>
+              <div className="mt-1.5">
+                <ConfidencePicker
+                  variant="compact"
+                  singingVoice={currentUserSingingVoice}
+                  onSave={async (level) => { await onAddToRepertoire(song.song_id, level); setPickingRepertoire(false); }}
+                  onCancel={() => setPickingRepertoire(false)}
+                  onVoiceUpdated={onVoiceUpdated}
+                />
               </div>
             ) : (
               <button
@@ -594,12 +587,14 @@ function SortableSongItem({
   hasEligible,
   participantKnowledge,
   currentUserId,
+  currentUserSingingVoice,
   inRepertoire,
   onRemove,
   onMediaAdded,
   onKeyChanged,
   onLeadersChanged,
   onAddToRepertoire,
+  onVoiceUpdated,
   signInUrl,
 }: {
   song: Song;
@@ -612,12 +607,14 @@ function SortableSongItem({
   hasEligible: boolean;
   participantKnowledge: Map<string, string>;
   currentUserId: string | null;
+  currentUserSingingVoice: string | null;
   inRepertoire: boolean;
   onRemove: (songId: string) => void;
   onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
   onKeyChanged: (id: string, key: string | null) => void;
   onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
   onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
+  onVoiceUpdated: (voice: string) => void;
   signInUrl?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
@@ -653,11 +650,13 @@ function SortableSongItem({
         hasEligible={hasEligible}
         participantKnowledge={participantKnowledge}
         currentUserId={currentUserId}
+        currentUserSingingVoice={currentUserSingingVoice}
         inRepertoire={inRepertoire}
         onMediaAdded={onMediaAdded}
         onKeyChanged={onKeyChanged}
         onLeadersChanged={onLeadersChanged}
         onAddToRepertoire={onAddToRepertoire}
+        onVoiceUpdated={onVoiceUpdated}
         signInUrl={signInUrl}
       />
 
@@ -680,6 +679,7 @@ export default function SetDetail({
   collaborators: initialCollaborators,
   accessRequests: initialAccessRequests = [],
   currentUserId,
+  currentUserSingingVoice = null,
   canEdit,
   isOwner,
   isAdmin,
@@ -692,6 +692,7 @@ export default function SetDetail({
   collaborators: Collaborator[];
   accessRequests?: Collaborator[];
   currentUserId: string | null;
+  currentUserSingingVoice?: string | null;
   canEdit: boolean;
   isOwner: boolean;
   isAdmin: boolean;
@@ -705,6 +706,7 @@ export default function SetDetail({
 
   const [songs, setSongs] = useState(initialSongs);
   const [songKnowledge, setSongKnowledge] = useState(initialSongKnowledge);
+  const [userSingingVoice, setUserSingingVoice] = useState(currentUserSingingVoice ?? null);
   const [collaborators, setCollaborators] = useState(initialCollaborators);
   const [accessRequests, setAccessRequests] = useState(initialAccessRequests);
   const [editingName, setEditingName] = useState(false);
@@ -857,6 +859,7 @@ export default function SetDetail({
       { user_id: currentUserId!, song_id: songId, confidence },
     ]);
   }
+
 
   async function handleRemoveSong(songId: string) {
     const removed = songs.find((s) => s.song_id === songId);
@@ -1659,12 +1662,14 @@ export default function SetDetail({
                       hasEligible={hasEligible}
                       participantKnowledge={knowledgeForSong}
                       currentUserId={currentUserId}
+                      currentUserSingingVoice={userSingingVoice}
                       inRepertoire={userRepertoire.has(song.song_id)}
                       onRemove={handleRemoveSong}
                       onMediaAdded={handleMediaAdded}
                       onKeyChanged={handleKeyChanged}
                       onLeadersChanged={handleLeadersChanged}
                       onAddToRepertoire={handleAddToRepertoire}
+                      onVoiceUpdated={setUserSingingVoice}
                       signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
                     />
                   );
@@ -1695,11 +1700,13 @@ export default function SetDetail({
                     hasEligible={hasEligible}
                     participantKnowledge={knowledgeForSong}
                     currentUserId={currentUserId}
+                    currentUserSingingVoice={userSingingVoice}
                     inRepertoire={userRepertoire.has(song.song_id)}
                     onMediaAdded={() => {}}
                     onKeyChanged={() => {}}
                     onLeadersChanged={() => {}}
                     onAddToRepertoire={handleAddToRepertoire}
+                    onVoiceUpdated={setUserSingingVoice}
                     signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
                   />
                 </div>
@@ -1728,23 +1735,13 @@ export default function SetDetail({
                   <p className="text-sm text-zinc-700">
                     How well do you know <span className="font-semibold">{pendingSong.title}</span>?
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {CONFIDENCE_LEVELS.map(({ key, label, style }) => (
-                      <button
-                        key={key}
-                        onClick={() => submitAddSong(pendingSong.song_id, key)}
-                        className={`rounded-full px-3 py-1 text-sm ${style} hover:opacity-80 transition-opacity`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setPendingSong(null)}
-                    className="text-xs text-zinc-400 hover:text-zinc-600"
-                  >
-                    ← Back to search
-                  </button>
+                  <ConfidencePicker
+                    variant="compact"
+                    singingVoice={userSingingVoice}
+                    onSave={(level) => submitAddSong(pendingSong.song_id, level)}
+                    onCancel={() => setPendingSong(null)}
+                    onVoiceUpdated={setUserSingingVoice}
+                  />
                 </div>
               ) : (
                 <>

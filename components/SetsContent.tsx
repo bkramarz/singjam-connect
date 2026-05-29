@@ -160,6 +160,22 @@ export default function SetsContent() {
         </section>
       )}
 
+      {isSignedIn && publicSets.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Browse public sets</h2>
+          <div className="grid grid-cols-1 gap-3">
+            {publicSets.map((set) => (
+              <SetCard
+                key={set.id}
+                set={{ ...set, owner_user_id: "" }}
+                ownerName={set.ownerName}
+                canCopy
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {!isSignedIn && isEmpty && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
           <p className="text-sm text-zinc-500">Sign in to create and manage sets.</p>

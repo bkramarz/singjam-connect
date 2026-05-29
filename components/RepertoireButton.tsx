@@ -3,14 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import ConfidencePicker from "@/components/ConfidencePicker";
 
-const LEVELS = [
+type Level = "lead" | "support" | "learn";
+
+const LEVELS: { key: Level; label: string }[] = [
   { key: "lead", label: "Lead" },
   { key: "support", label: "Support" },
   { key: "learn", label: "Learn" },
-] as const;
-
-type Level = (typeof LEVELS)[number]["key"];
+];
 
 export default function RepertoireButton({
   songId,
@@ -85,34 +86,12 @@ export default function RepertoireButton({
 
   if (picking) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-slate-500">Add as:</span>
-        {LEVELS.map((l) => {
-          const blocked = l.key === "lead" && (!singingVoice || singingVoice === "none");
-          return (
-            <span key={l.key} className="relative group">
-              <button
-                disabled={saving || blocked}
-                onClick={() => !blocked && save(l.key)}
-                className={`rounded-xl border px-3 py-1.5 text-sm ${blocked ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed" : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 transition-colors delay-150"}`}
-              >
-                {l.label}
-              </button>
-              {blocked && (
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
-                  Only available for singers
-                </span>
-              )}
-            </span>
-          );
-        })}
-        <button
-          onClick={() => setPicking(false)}
-          className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50"
-        >
-          ✕
-        </button>
-      </div>
+      <ConfidencePicker
+        singingVoice={singingVoice}
+        saving={saving}
+        onSave={save}
+        onCancel={() => setPicking(false)}
+      />
     );
   }
 
@@ -131,7 +110,7 @@ export default function RepertoireButton({
           aria-label="Role"
         >
           {LEVELS.map((l) => {
-            const blocked = l.key === "lead" && (!singingVoice || singingVoice === "none");
+            const blocked = l.key === "lead" && !singingVoice?.split(",").includes("lead");
             return (
               <option key={l.key} value={l.key} disabled={blocked}>
                 {blocked ? "Lead (singers only)" : l.label}

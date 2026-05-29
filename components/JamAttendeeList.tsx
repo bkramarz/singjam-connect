@@ -17,24 +17,24 @@ type AttendeeData = {
   totalGoing: number;
 };
 
-function renderTags(profile: any): string[] {
-  const tags: string[] = [];
+function parseTags(profile: any): { label: string; isSinging: boolean }[] {
+  const tags: { label: string; isSinging: boolean }[] = [];
   const voices: string[] = (profile?.singing_voice ?? "")
     .split(",")
     .filter((v: string) => v && v !== "none");
   for (const v of voices) {
-    if (SINGING_LABEL[v]) tags.push(SINGING_LABEL[v]);
+    if (SINGING_LABEL[v]) tags.push({ label: SINGING_LABEL[v], isSinging: v === "lead" });
   }
   const instruments: Record<string, string> = profile?.instrument_levels ?? {};
   for (const [name, level] of Object.entries(instruments)) {
-    tags.push(`${name} · ${level}`);
+    tags.push({ label: `${name} · ${level}`, isSinging: false });
   }
   return tags;
 }
 
 function AttendeeRow({ profile, badge }: { profile: any; badge: ReactNode }) {
   const fullName = [profile?.display_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "Unknown";
-  const tags = renderTags(profile);
+  const tags = parseTags(profile);
   return (
     <li className="py-3">
       <div className="flex items-center justify-between gap-3">
@@ -50,9 +50,14 @@ function AttendeeRow({ profile, badge }: { profile: any; badge: ReactNode }) {
       </div>
       {tags.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {tags.map((t) => (
-            <span key={t} className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-xs text-zinc-600">
-              {t}
+          {tags.map(({ label, isSinging }) => (
+            <span
+              key={label}
+              className={isSinging
+                ? "rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700"
+                : "rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-xs text-zinc-600"}
+            >
+              {label}
             </span>
           ))}
         </div>
