@@ -10,6 +10,7 @@ import { useSongFilters } from "@/hooks/useSongFilters";
 import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
+import ConfidencePicker from "@/components/ConfidencePicker";
 
 type PopularSong = {
   song_id: string;
@@ -235,11 +236,14 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     });
   }, [popularSongs, repertoire, matchesFilters, hideMySongs]);
 
-  // Search results: apply active filters using the metadata map
+  // Search results: apply active filters and hide-my-songs using the metadata map
   const filteredResults = useMemo(() => {
-    if (activeFilterCount === 0) return results;
-    return results.filter((r) => matchesFilters(songMetaMap.get(r.song_id)));
-  }, [results, songMetaMap, activeFilterCount, matchesFilters]);
+    return results.filter((r) => {
+      if (hideMySongs && repertoire.has(r.song_id)) return false;
+      if (activeFilterCount === 0) return true;
+      return matchesFilters(songMetaMap.get(r.song_id));
+    });
+  }, [results, songMetaMap, activeFilterCount, matchesFilters, hideMySongs, repertoire]);
 
   const sortedBrowse = useMemo(() => {
     if (sortBy === "title_asc") return [...filteredSongs].sort((a, b) => a.title.localeCompare(b.title));
@@ -360,7 +364,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
               </svg>
               Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
             </button>
-            {currentUser && repertoire.size > 0 && !searching && (
+            {currentUser && repertoire.size > 0 && (
               <label className="h-7 flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-xs font-medium text-zinc-500 cursor-pointer select-none hover:bg-zinc-50 transition-colors whitespace-nowrap">
                 <input
                   type="checkbox"
@@ -430,6 +434,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
+                onVoiceUpdated={(v) => setSingingVoice(v)}
               />
             ))}
             {!loading && sortedSearch.length === 0 ? (
@@ -477,6 +482,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 setPendingAddId={setPendingAddId}
                 onAdd={handlePendingAdd}
                 addSong={addSong}
+                onVoiceUpdated={(v) => setSingingVoice(v)}
               />
             ))}
 
@@ -527,6 +533,7 @@ function SongCard({
   setPendingAddId,
   onAdd,
   addSong,
+  onVoiceUpdated,
 }: {
   songId: string;
   title: string;
@@ -548,6 +555,7 @@ function SongCard({
   setPendingAddId: (id: string | null) => void;
   onAdd: (id: string, slug?: string | null) => void | Promise<void>;
   addSong: (songId: string, level: string) => void;
+  onVoiceUpdated: (voice: string) => void;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [spotifyOpen, setSpotifyOpen] = useState(false);
@@ -648,37 +656,12 @@ function SongCard({
           View
         </Link>
         {picking ? (
-          <>
-            {LEVELS.map((l) => {
-              const blocked = l.key === "lead" && (!singingVoice || singingVoice === "none");
-              return (
-                <span key={l.key} className="relative group">
-                  <button
-                    disabled={blocked}
-                    className={`rounded-xl border px-3 py-1.5 text-sm ${
-                      blocked
-                        ? "border-zinc-200 bg-zinc-100 text-zinc-400 cursor-not-allowed"
-                        : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors delay-150"
-                    }`}
-                    onClick={() => !blocked && addSong(songId, l.key)}
-                  >
-                    {l.label}
-                  </button>
-                  {blocked && (
-                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block whitespace-nowrap rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white z-10">
-                      Only available for singers
-                    </span>
-                  )}
-                </span>
-              );
-            })}
-            <button
-              className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-              onClick={() => setPendingAddId(null)}
-            >
-              ✕
-            </button>
-          </>
+          <ConfidencePicker
+            singingVoice={singingVoice}
+            onSave={(level) => addSong(songId, level)}
+            onCancel={() => setPendingAddId(null)}
+            onVoiceUpdated={onVoiceUpdated}
+          />
         ) : (
           <button
             className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"

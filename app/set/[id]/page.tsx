@@ -70,7 +70,7 @@ export default async function SetPage({
       .eq("set_id", id)
       .eq("status", "requested"),
     user
-      ? supabase.from("profiles").select("role").eq("id", user.id).single()
+      ? supabase.from("profiles").select("role, singing_voice").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -91,6 +91,7 @@ export default async function SetPage({
 
   const isOwner = user?.id === set.owner_user_id;
   const isAdmin = (profileRes as any)?.data?.role === "admin";
+  const currentUserSingingVoice: string | null = (profileRes as any)?.data?.singing_voice ?? null;
 
   // Auto-join for 'link' mode — logged-in users are added as viewers on first visit
   if (set.link_sharing === "link" && user && !isOwner && !isAdmin) {
@@ -166,6 +167,7 @@ export default async function SetPage({
         collaborators={collaborators}
         accessRequests={accessRequests}
         currentUserId={user?.id ?? null}
+        currentUserSingingVoice={currentUserSingingVoice}
         canEdit={isOwner || isEditorCollaborator}
         isOwner={isOwner}
         isAdmin={isAdmin}
