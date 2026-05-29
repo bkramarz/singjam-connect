@@ -429,18 +429,24 @@ export default function SetInvitePanel({
 
       {qrDataUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 md:p-0"
           onClick={() => setQrDataUrl(null)}
         >
           <div
-            className="bg-white rounded-2xl p-6 flex flex-col items-center gap-4 shadow-xl max-w-xs w-full"
+            className="bg-amber-50 rounded-2xl p-6 flex flex-col items-center gap-4 shadow-xl max-w-xs w-full md:max-w-none md:w-full md:h-full md:rounded-none md:justify-center md:gap-6 md:p-16"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-sm font-medium text-zinc-700">Scan to join this set</p>
-            <img src={qrDataUrl} alt="QR code invite link" className="w-64 h-64 rounded-lg" />
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 md:text-sm">Welcome to the jam</p>
+            <h2 className="text-base font-bold text-zinc-800 text-center md:text-4xl md:font-extrabold">
+              Scan to see the set<br className="hidden md:block" /> and mark what you know
+            </h2>
+            <p className="text-xs text-zinc-500 text-center md:text-lg">
+              Help the group find the songs everyone can play
+            </p>
+            <img src={qrDataUrl} alt="QR code invite link" className="w-64 h-64 rounded-xl md:w-[360px] md:h-[360px]" />
             <button
               onClick={() => setQrDataUrl(null)}
-              className="w-full rounded-xl bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 transition-colors"
+              className="w-full rounded-xl bg-amber-100 px-4 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-200 transition-colors md:max-w-sm md:py-3 md:text-base"
             >
               Done
             </button>
