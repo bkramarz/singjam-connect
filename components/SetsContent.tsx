@@ -21,13 +21,6 @@ type PublicSetItem = {
   ownerUsername: string | null;
 };
 
-type PublicSetItem = {
-  id: string;
-  name: string;
-  description: string | null;
-  ownerName: string | null;
-};
-
 type SetsData = {
   owned: SetItem[];
   collaborating: SetItem[];
