@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type LinkedSet = { id: string; name: string };
 type OwnedSet = { id: string; name: string; jam_id: string | null };
 
-export default function JamSetList({ jamId, jamName }: { jamId: string; jamName: string | null }) {
+export default function JamSetList({ jamId, jamName, isHost }: { jamId: string; jamName: string | null; isHost: boolean }) {
   const router = useRouter();
   const [set, setSet] = useState<LinkedSet | null | undefined>(undefined);
   const [creating, setCreating] = useState(false);
@@ -44,10 +44,10 @@ export default function JamSetList({ jamId, jamName }: { jamId: string; jamName:
   }
 
   async function handleUnlink() {
-    setUnlinking(true);
+    const prev = set;
+    setSet(null);
     const res = await fetch(`/api/jam/${jamId}/set`, { method: "DELETE" });
-    if (res.ok) setSet(null);
-    setUnlinking(false);
+    if (!res.ok) setSet(prev);
   }
 
   async function handleLink() {
@@ -67,6 +67,7 @@ export default function JamSetList({ jamId, jamName }: { jamId: string; jamName:
   }
 
   if (set === undefined) return null;
+  if (!isHost && !set) return null;
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
@@ -82,13 +83,15 @@ export default function JamSetList({ jamId, jamName }: { jamId: string; jamName:
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
             </svg>
           </a>
-          <button
-            onClick={handleUnlink}
-            disabled={unlinking}
-            className="inline-flex items-center rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
-          >
-            {unlinking ? "Unlinking…" : "Unlink"}
-          </button>
+          {isHost && (
+            <button
+              onClick={handleUnlink}
+              disabled={unlinking}
+              className="inline-flex items-center rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+            >
+              {unlinking ? "Unlinking…" : "Unlink"}
+            </button>
+          )}
         </div>
       ) : linking ? (
         <div className="space-y-2">

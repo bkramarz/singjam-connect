@@ -10,12 +10,14 @@ export default function JamRsvpButton({
   initialWaitlistPosition,
   attendingCount,
   capacity,
+  onStatusChange,
 }: {
   jamId: string;
   initialStatus: RsvpStatus;
   initialWaitlistPosition: number | null;
   attendingCount: number;
   capacity: number | null;
+  onStatusChange?: (status: RsvpStatus) => void;
 }) {
   const [status, setStatus] = useState<RsvpStatus>(initialStatus);
   const [waitlistPosition, setWaitlistPosition] = useState<number | null>(initialWaitlistPosition);
@@ -33,6 +35,7 @@ export default function JamRsvpButton({
     if (json.status === "attending") setCount((c) => c + 1);
     setStatus(json.status);
     setWaitlistPosition(json.waitlist_position ?? null);
+    onStatusChange?.(json.status);
     setBusy(false);
   }
 

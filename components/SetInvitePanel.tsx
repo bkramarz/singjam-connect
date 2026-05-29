@@ -8,6 +8,7 @@ type UserResult = {
   id: string;
   username: string | null;
   display_name: string | null;
+  last_name: string | null;
   avatar_url: string | null;
 };
 
@@ -234,7 +235,7 @@ export default function SetInvitePanel({
             {results.length > 0 && (
               <ul className="mt-2 divide-y divide-zinc-100 rounded-xl border border-zinc-200 overflow-hidden">
                 {results.map((u) => {
-                  const name = u.display_name ?? u.username ?? "Unknown";
+                  const name = [u.display_name, u.last_name].filter(Boolean).join(" ") || u.username || "Unknown";
                   const initial = name[0].toUpperCase();
                   const isAdded = added.has(u.id);
                   return (
