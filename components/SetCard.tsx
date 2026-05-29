@@ -79,16 +79,15 @@ export default function SetCard({ set, songCount, isOwner, ownerName, ownerUsern
               <span className="text-xs text-zinc-400">
                 by{" "}
                 {ownerUsername ? (
-                  <Link
-                    href={`/u/${ownerUsername}`}
-                    onClick={(e) => e.stopPropagation()}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); router.push(`/u/${ownerUsername}`); }}
                     className="font-medium text-zinc-500 hover:underline"
                   >
                     {ownerName}
                     {ownerName !== ownerUsername && (
                       <span className="ml-1 font-normal text-zinc-400">@{ownerUsername}</span>
                     )}
-                  </Link>
+                  </button>
                 ) : (
                   <span className="font-medium text-zinc-500">{ownerName}</span>
                 )}

@@ -297,6 +297,7 @@ export default function JamContent() {
     pendingInvite,
     isOfficial,
     isHost,
+    hasFullAccess,
     showRsvp,
     canInvite,
     invitesEnabled,
@@ -318,6 +319,13 @@ export default function JamContent() {
                 initialWaitlistPosition={waitlistPosition}
                 attendingCount={attendingCount}
                 capacity={jam.capacity}
+                onStatusChange={(newStatus) => {
+                  setState((prev) => {
+                    if (prev.status !== "ready") return prev;
+                    const isAttending = newStatus === "attending";
+                    return { ...prev, rsvpStatus: newStatus, hasFullAccess: prev.isOfficial || isAttending || prev.isHost };
+                  });
+                }}
               />
             )}
             {!userId && !isOfficial && (
@@ -332,7 +340,7 @@ export default function JamContent() {
         }
       />
       {userId && <JamSharedSongs jamId={id} />}
-      {isHost && <JamSetList jamId={id} jamName={jam.name} />}
+      {hasFullAccess && <JamSetList jamId={id} jamName={jam.name} isHost={isHost} />}
       {!isOfficial && <JamAttendeeList jamId={id} hostId={jam.host_user_id} />}
       {canInvite && invitesEnabled && (
         <JamInvitePanel

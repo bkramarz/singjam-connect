@@ -300,12 +300,12 @@ function SongRowContent({
     ? participants.filter((p) => leaderIds.includes(p.user_id))
     : participants;
 
-  // Derive which knowledge levels are actually present for the legend
-  const visibleLevels = new Set(visibleParticipants.map((p) => {
-    if (leaderIds.includes(p.user_id)) return "leader";
-    return participantKnowledge.get(p.user_id) ?? null;
-  }).filter(Boolean) as string[]);
-  const showLegend = !isPublicViewer && (visibleLevels.has("support") || visibleLevels.has("learn"));
+  const leadParticipants = visibleParticipants.filter(
+    (p) => leaderIds.includes(p.user_id) || participantKnowledge.get(p.user_id) === "lead"
+  );
+  const supportParticipants = visibleParticipants.filter(
+    (p) => !leaderIds.includes(p.user_id) && participantKnowledge.get(p.user_id) === "support"
+  );
 
   return (
     <div className="flex-1 min-w-0 space-y-2">
@@ -329,7 +329,7 @@ function SongRowContent({
                   const val = e.target.value || null;
                   if (val !== song.key_note) onKeyChanged(song.id, val);
                 }}
-                className="text-xs rounded border border-zinc-300 pl-1.5 pr-0.5 py-0.5 w-12 focus:border-amber-400 focus:outline-none"
+                className="text-xs rounded border border-zinc-300 pl-1.5 pr-5 py-0.5 w-16 focus:border-amber-400 focus:outline-none"
               >
                 <option value="">key</option>
                 {MUSICAL_KEYS.map((k) => (
@@ -347,73 +347,17 @@ function SongRowContent({
               <span className="text-xs text-zinc-400">{song.songs.tonality}</span>
             )}
           </div>
-          {(visibleParticipants.length > 0 || (isHost && participants.length > 0)) && (
-            <div className="mt-1.5 space-y-1">
-              <div className="flex flex-wrap gap-1">
-                {isHost && leaderIds.length === 0 && !hasEligible && (
-                  <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
-                    No leader
-                  </span>
-                )}
-                {visibleParticipants.map((p) => {
-                  const isLeader = leaderIds.includes(p.user_id);
-                  const confidence = participantKnowledge.get(p.user_id);
-                  const isLeadEligible = confidence === "lead";
-                  const isClickable = isHost && isLeadEligible;
-                  const firstName = p.display_name ?? p.username ?? "?";
-                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
-                  const pillStyle = isLeader
-                    ? "bg-amber-400 text-white"
-                    : isLeadEligible
-                      ? "bg-amber-100 text-amber-700"
-                      : confidence === "support"
-                        ? "bg-sky-100 text-sky-700"
-                        : "bg-zinc-100 text-zinc-500";
-                  return (
-                    <button
-                      key={p.user_id}
-                      type="button"
-                      onClick={() => isClickable && handleToggleLeader(p.user_id)}
-                      disabled={!isClickable}
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all ${pillStyle} ${isClickable ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-              {showLegend && (
-                <div className="flex flex-wrap gap-2.5">
-                  {(visibleLevels.has("leader") || visibleLevels.has("lead")) && (
-                    <span className="flex items-center gap-1 text-[10px] text-zinc-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />Lead
-                    </span>
-                  )}
-                  {visibleLevels.has("support") && (
-                    <span className="flex items-center gap-1 text-[10px] text-zinc-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-sky-300 inline-block" />Support
-                    </span>
-                  )}
-                  {visibleLevels.has("learn") && (
-                    <span className="flex items-center gap-1 text-[10px] text-zinc-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 inline-block" />Learning
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
           {!inRepertoire && (currentUserId || signInUrl) && (
             !currentUserId ? (
               <a
                 href={signInUrl}
-                className="mt-1.5 text-xs text-zinc-400 hover:text-amber-600 transition-colors"
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors"
               >
                 + Add to my repertoire
               </a>
             ) : pickingRepertoire ? (
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <span className="text-xs text-zinc-400">Add to my repertoire:</span>
+                <span className="text-xs text-zinc-500 font-medium">I know this:</span>
                 {CONFIDENCE_LEVELS.map(({ key, label, style }) => (
                   <button
                     key={key}
@@ -430,7 +374,7 @@ function SongRowContent({
             ) : (
               <button
                 onClick={() => setPickingRepertoire(true)}
-                className="mt-1.5 text-xs text-zinc-400 hover:text-amber-600 transition-colors"
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors"
               >
                 + Add to my repertoire
               </button>
@@ -499,6 +443,60 @@ function SongRowContent({
           ) : null}
         </div>
       </div>
+
+      {(leadParticipants.length > 0 || supportParticipants.length > 0 || (isHost && participants.length > 0)) && (
+        <div className="space-y-1">
+          {(leadParticipants.length > 0 || (isHost && participants.length > 0)) && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 text-[10px] text-amber-500 font-medium pt-0.5">Lead</span>
+              <div className="flex flex-wrap gap-1 flex-1">
+                {isHost && leaderIds.length === 0 && !hasEligible && (
+                  <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
+                    No leader
+                  </span>
+                )}
+                {leadParticipants.map((p) => {
+                  const isLeader = leaderIds.includes(p.user_id);
+                  const isClickable = isHost && participantKnowledge.get(p.user_id) === "lead";
+                  const firstName = p.display_name ?? p.username ?? "?";
+                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
+                  const pillStyle = isLeader ? "bg-amber-400 text-white" : "bg-amber-100 text-amber-700";
+                  return (
+                    <button
+                      key={p.user_id}
+                      type="button"
+                      onClick={() => isClickable && handleToggleLeader(p.user_id)}
+                      disabled={!isClickable}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all ${pillStyle} ${isClickable ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {supportParticipants.length > 0 && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 text-[10px] text-sky-500 font-medium pt-0.5">Support</span>
+              <div className="flex flex-wrap gap-1 flex-1">
+                {supportParticipants.map((p) => {
+                  const firstName = p.display_name ?? p.username ?? "?";
+                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
+                  return (
+                    <span
+                      key={p.user_id}
+                      className="rounded-full px-2 py-0.5 text-xs font-medium bg-sky-100 text-sky-700"
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {youtubeOpen && videoId && (
         <div className="rounded-xl overflow-hidden border border-zinc-200">
@@ -687,7 +685,7 @@ export default function SetDetail({
   isAdmin,
   isPublicViewer = false,
   jamSharedSongs = [],
-  songKnowledge = [],
+  songKnowledge: initialSongKnowledge = [],
 }: {
   set: SetData;
   initialSongs: Song[];
@@ -706,6 +704,7 @@ export default function SetDetail({
   const supabase = supabaseBrowser();
 
   const [songs, setSongs] = useState(initialSongs);
+  const [songKnowledge, setSongKnowledge] = useState(initialSongKnowledge);
   const [collaborators, setCollaborators] = useState(initialCollaborators);
   const [accessRequests, setAccessRequests] = useState(initialAccessRequests);
   const [editingName, setEditingName] = useState(false);
@@ -814,8 +813,11 @@ export default function SetDetail({
     });
 
     if (res.ok) {
-      const { song } = await res.json();
+      const { song, knowledge } = await res.json();
       setSongs((prev) => [...prev, song]);
+      if (knowledge?.length) {
+        setSongKnowledge((prev) => [...prev, ...knowledge]);
+      }
       if (confidence) {
         setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
       }
@@ -850,11 +852,24 @@ export default function SetDetail({
       .from("user_songs")
       .upsert({ user_id: currentUserId!, song_id: songId, confidence }, { onConflict: "user_id,song_id" });
     setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
+    setSongKnowledge((prev) => [
+      ...prev.filter((k) => !(k.user_id === currentUserId! && k.song_id === songId)),
+      { user_id: currentUserId!, song_id: songId, confidence },
+    ]);
   }
 
   async function handleRemoveSong(songId: string) {
-    await fetch(`/api/sets/${set.id}/songs/${songId}`, { method: "DELETE" });
+    const removed = songs.find((s) => s.song_id === songId);
     setSongs((prev) => prev.filter((s) => s.song_id !== songId));
+    const res = await fetch(`/api/sets/${set.id}/songs/${songId}`, { method: "DELETE" });
+    if (!res.ok && removed) {
+      setSongs((prev) => {
+        const idx = prev.findIndex((s) => s.position >= removed.position);
+        const next = [...prev];
+        next.splice(idx === -1 ? next.length : idx, 0, removed);
+        return next;
+      });
+    }
   }
 
   function handleMediaAdded(songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) {

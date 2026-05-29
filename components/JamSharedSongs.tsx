@@ -12,6 +12,7 @@ type SharedSong = {
   viewer_leads: boolean;
   who_else: string[];
   who_else_leads: string[];
+  in_set: boolean;
 };
 
 type SortMode = "popular" | "alpha" | "leader";
@@ -45,25 +46,20 @@ export default function JamSharedSongs({ jamId }: { jamId: string }) {
 
   useEffect(() => {
     supabase.rpc("jam_shared_songs", { jam_id_param: jamId }).then(({ data }) => {
-      setSongs((data as SharedSong[] | null) ?? []);
+      const list = (data as SharedSong[] | null) ?? [];
+      setSongs(list);
+      setInSetSongIds(new Set(list.filter((s) => s.in_set).map((s) => s.song_id)));
     });
 
     fetch(`/api/jam/${jamId}/set`)
       .then((r) => r.json())
-      .then(({ set }) => {
-        if (!set) { setLinkedSetId(null); return; }
-        setLinkedSetId(set.id);
-        fetch(`/api/sets/${set.id}/songs`)
-          .then((r) => r.json())
-          .then(({ songs: setSongs }) => {
-            setInSetSongIds(new Set((setSongs ?? []).map((s: any) => s.song_id as string)));
-          });
-      });
+      .then(({ set }) => setLinkedSetId(set ? set.id : null));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jamId]);
 
   async function addToSet(songId: string) {
     if (!linkedSetId || addingId) return;
+    setInSetSongIds((prev) => new Set(prev).add(songId));
     setAddingId(songId);
     const res = await fetch(`/api/sets/${linkedSetId}/songs`, {
       method: "POST",
@@ -71,8 +67,8 @@ export default function JamSharedSongs({ jamId }: { jamId: string }) {
       body: JSON.stringify({ songId }),
     });
     setAddingId(null);
-    if (res.ok || res.status === 409) {
-      setInSetSongIds((prev) => new Set(prev).add(songId));
+    if (!res.ok && res.status !== 409) {
+      setInSetSongIds((prev) => { const next = new Set(prev); next.delete(songId); return next; });
     }
   }
 
@@ -151,51 +147,49 @@ export default function JamSharedSongs({ jamId }: { jamId: string }) {
           const inSet = inSetSongIds.has(s.song_id);
           const isAdding = addingId === s.song_id;
           return (
-            <li key={s.song_id} className="flex items-center justify-between gap-4 py-2.5">
-              <div className={`min-w-0 ${inSet ? "opacity-40" : ""}`}>
-                {s.slug ? (
-                  <a
-                    href={`/songs/${s.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-zinc-900 hover:underline"
-                  >
-                    {s.title}
-                  </a>
-                ) : (
-                  <span className="text-sm font-medium text-zinc-900">{s.title}</span>
-                )}
-                {s.display_artist && (
-                  <span className="ml-1.5 text-xs text-zinc-400">{s.display_artist}</span>
-                )}
+            <li key={s.song_id} className="flex items-start justify-between gap-3 py-2.5">
+              <div className={`min-w-0 flex-1 ${inSet ? "opacity-40" : ""}`}>
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  {s.slug ? (
+                    <a
+                      href={`/songs/${s.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-zinc-900 hover:underline"
+                    >
+                      {s.title}
+                    </a>
+                  ) : (
+                    <span className="text-sm font-medium text-zinc-900">{s.title}</span>
+                  )}
+                  {s.display_artist && (
+                    <span className="text-xs text-zinc-400">{s.display_artist}</span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-500 mt-0.5">({nameNodes})</p>
               </div>
-              <div className="shrink-0 flex items-center gap-2">
-                <span className={`text-xs text-zinc-500 ${inSet ? "opacity-40" : ""}`}>
-                  ({nameNodes})
-                </span>
-                {linkedSetId && (
-                  <button
-                    onClick={() => addToSet(s.song_id)}
-                    disabled={inSet || isAdding}
-                    title={inSet ? "Already in set" : "Add to set list"}
-                    className={`flex items-center justify-center w-5 h-5 rounded-full border transition-colors shrink-0 ${
-                      inSet
-                        ? "border-green-300 text-green-500"
-                        : "border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-zinc-700"
-                    } disabled:cursor-default`}
-                  >
-                    {inSet ? (
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                      </svg>
-                    ) : (
-                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                      </svg>
-                    )}
-                  </button>
-                )}
-              </div>
+              {linkedSetId && (
+                <button
+                  onClick={() => addToSet(s.song_id)}
+                  disabled={inSet || isAdding}
+                  title={inSet ? "Already in set" : "Add to set list"}
+                  className={`mt-0.5 flex items-center justify-center w-5 h-5 rounded-full border transition-colors shrink-0 ${
+                    inSet
+                      ? "border-green-300 text-green-500"
+                      : "border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-zinc-700"
+                  } disabled:cursor-default`}
+                >
+                  {inSet ? (
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                  )}
+                </button>
+              )}
             </li>
           );
         })}

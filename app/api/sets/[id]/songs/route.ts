@@ -77,5 +77,10 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ song: data });
+  const { data: knowledge } = await admin
+    .from("user_songs")
+    .select("user_id, song_id, confidence")
+    .eq("song_id", songId);
+
+  return NextResponse.json({ song: data, knowledge: knowledge ?? [] });
 }
