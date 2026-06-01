@@ -686,6 +686,7 @@ export default function SetDetail({
   isPublicViewer = false,
   jamSharedSongs = [],
   songKnowledge: initialSongKnowledge = [],
+  canAccessJam = false,
 }: {
   set: SetData;
   initialSongs: Song[];
@@ -699,6 +700,7 @@ export default function SetDetail({
   isPublicViewer?: boolean;
   jamSharedSongs?: JamSong[];
   songKnowledge?: { user_id: string; song_id: string; confidence: string }[];
+  canAccessJam?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1299,7 +1301,7 @@ export default function SetDetail({
         </div>
       )}
 
-      {set.jam_id && (
+      {set.jam_id && canAccessJam && (
         <a
           href={`/jam/${set.jam_id}`}
           className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600 transition-colors"

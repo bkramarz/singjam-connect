@@ -155,9 +155,14 @@ export default async function SetPage({
       ).data ?? []) as { user_id: string; song_id: string; confidence: string }[]
     : [];
 
-  const jamSharedSongs = (set.jam_id && user)
-    ? ((await supabase.rpc("jam_shared_songs", { jam_id_param: set.jam_id })).data ?? []) as any[]
-    : [];
+  const [jamSharedSongs, canAccessJam] = await Promise.all([
+    set.jam_id && user
+      ? supabase.rpc("jam_shared_songs", { jam_id_param: set.jam_id }).then(r => (r.data ?? []) as any[])
+      : Promise.resolve([] as any[]),
+    set.jam_id
+      ? supabase.from("jams").select("id").eq("id", set.jam_id).maybeSingle().then(r => r.data !== null)
+      : Promise.resolve(false),
+  ]);
 
   return (
     <Suspense>
@@ -174,6 +179,7 @@ export default async function SetPage({
         isPublicViewer={isPublicViewer}
         jamSharedSongs={jamSharedSongs}
         songKnowledge={songKnowledge}
+        canAccessJam={canAccessJam}
       />
     </Suspense>
   );
