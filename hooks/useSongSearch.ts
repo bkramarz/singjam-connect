@@ -15,6 +15,8 @@ export type SongSearchResult = {
   languages: string[] | null;
   year: number | null;
   slug: string | null;
+  youtube_id: string | null;
+  spotify_track_id: string | null;
 };
 
 export function useSongSearch(

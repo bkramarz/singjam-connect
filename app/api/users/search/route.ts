@@ -12,19 +12,10 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // When the query has multiple words, also match display_name + last_name together
-  const parts = q.split(/\s+/);
-  let filter = `username.ilike.%${q}%,display_name.ilike.%${q}%,last_name.ilike.%${q}%`;
-  if (parts.length >= 2) {
-    filter += `,and(display_name.ilike.%${parts[0]}%,last_name.ilike.%${parts.slice(1).join(" ")}%)`;
-  }
-
-  const { data } = await supabase
-    .from("profiles")
-    .select("id, username, display_name, last_name, avatar_url")
-    .or(filter)
-    .neq("id", user.id)
-    .limit(10);
+  const { data } = await supabase.rpc("search_users", {
+    search_query: q,
+    exclude_user_id: user.id,
+  });
 
   return NextResponse.json(data ?? []);
 }
