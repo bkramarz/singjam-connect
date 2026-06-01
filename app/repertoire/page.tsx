@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
@@ -9,8 +9,10 @@ import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
+import { sortRepertoireSearchResults } from "@/lib/sortRepertoireSearchResults";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
+import SongCard from "@/components/SongCard";
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
@@ -18,13 +20,13 @@ const CONFIDENCE_LEVELS = [
   { key: "learn", label: "Learn" },
 ] as const;
 
+type ConfidenceKey = (typeof CONFIDENCE_LEVELS)[number]["key"];
+
 const SORT_OPTIONS = [
   { value: "title_asc" as const, label: "A → Z" },
   { value: "title_desc" as const, label: "Z → A" },
   { value: "popularity" as const, label: "Popular" },
 ];
-
-type ConfidenceKey = (typeof CONFIDENCE_LEVELS)[number]["key"];
 
 type Item = {
   song_id: string;
@@ -49,6 +51,109 @@ type Item = {
   popularity?: number;
 };
 
+type SuggestionResult = {
+  song_id: string;
+  title: string;
+  display_artist: string | null;
+  first_line: string | null;
+  slug: string | null;
+  composers: string[];
+  cultures: string[];
+  productions: string[];
+  genres: string[];
+  languages: string[];
+  year: number | null;
+  popularity: number;
+  youtube_id: string | null;
+  spotify_track_id: string | null;
+};
+
+type AddableSong = {
+  slug: string | null;
+  title: string;
+  display_artist: string | null;
+  first_line: string | null;
+  composers: string[];
+  cultures: string[];
+  productions: string[];
+  genres: string[];
+  languages: string[] | null;
+};
+
+
+function SuggestionsPanel({
+  suggestions,
+  pendingAddId,
+  setPendingAddId,
+  singingVoice,
+  onAddSong,
+  onVoiceUpdated,
+  onLoadMore,
+  hasMore,
+  loadingMore,
+}: {
+  suggestions: SuggestionResult[];
+  pendingAddId: string | null;
+  setPendingAddId: (id: string | null) => void;
+  singingVoice: string | null;
+  onAddSong: (songId: string, level: string, suggestion: SuggestionResult) => void;
+  onVoiceUpdated: (voice: string) => void;
+  onLoadMore: () => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+}) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) onLoadMore(); },
+      { threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onLoadMore, hasMore]);
+
+  return (
+    <div>
+      <p className="px-1 text-sm font-medium text-zinc-500">Songs you might know</p>
+      <div className="mt-2 grid gap-2">
+        {suggestions.map((s) => (
+          <SongCard
+            key={s.song_id}
+            songId={s.song_id}
+            slug={s.slug}
+            title={s.title}
+            displayArtist={s.display_artist}
+            composers={s.composers}
+            cultures={s.cultures}
+            productions={s.productions}
+            year={s.year}
+            aka={null}
+            genres={s.genres}
+            languages={s.languages}
+            popularity={s.popularity}
+            youtubeId={s.youtube_id}
+            spotifyTrackId={s.spotify_track_id}
+            repertoire={new Map()}
+            pendingAddId={pendingAddId}
+            singingVoice={singingVoice}
+            setPendingAddId={setPendingAddId}
+            onAdd={(songId) => setPendingAddId(songId)}
+            addSong={(songId, level) => onAddSong(songId, level, s)}
+            onVoiceUpdated={onVoiceUpdated}
+          />
+        ))}
+        {hasMore && (
+          <div ref={sentinelRef} className="p-3 text-center text-xs text-zinc-400">
+            {loadingMore ? "Loading…" : ""}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function RepertoirePage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -60,6 +165,10 @@ export default function RepertoirePage() {
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
 
   const [items, setItems] = useState<Item[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionResult[]>([]);
+  const [suggestionsOffset, setSuggestionsOffset] = useState(0);
+  const [suggestionsHasMore, setSuggestionsHasMore] = useState(true);
+  const [suggestionsLoadingMore, setSuggestionsLoadingMore] = useState(false);
   const [query, setQuery] = useState(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("q") ?? "";
@@ -83,6 +192,7 @@ export default function RepertoirePage() {
   const [newSetForSongId, setNewSetForSongId] = useState<string | null>(null);
   const [bulkCreatingSet, setBulkCreatingSet] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const loadingMoreRef = useRef(false);
   const { results: searchResults, loading: searchLoading } = useSongSearch(query);
 
   const [isPending, startTransition] = useTransition();
@@ -169,15 +279,20 @@ export default function RepertoirePage() {
           return all;
         }
 
-        const [{ data: p }, rows, popularityRes, setsJson] = await Promise.all([
+        const [{ data: p }, rows, popularityRes, setsJson, suggestionsRes] = await Promise.all([
           supabase.from("profiles").select("singing_voice").eq("id", uid).single(),
           fetchAllUserSongs(),
           supabase.rpc("song_popularity_counts"),
           fetch("/api/sets").then((r) => (r.ok ? r.json() : { owned: [], collaborating: [] })),
+          supabase.rpc("suggest_songs_for_user", { p_user_id: uid, p_limit: 20 }),
         ]);
 
         setSingingVoice((p as any)?.singing_voice ?? null);
         setUserSets([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]);
+        const initialSuggestions = (suggestionsRes.data ?? []) as SuggestionResult[];
+        setSuggestions(initialSuggestions);
+        setSuggestionsOffset(initialSuggestions.length);
+        setSuggestionsHasMore(initialSuggestions.length === 20);
 
         if (cancelled) return;
 
@@ -252,6 +367,13 @@ export default function RepertoirePage() {
 
   const repertoireMap = useMemo(() => new Map(items.map((it) => [it.song_id, it])), [items]);
   const searching = query.trim().length > 0;
+
+  const sortedSearchResults = useMemo(
+    () => searching
+      ? sortRepertoireSearchResults(searchResults, new Set(repertoireMap.keys()))
+      : searchResults,
+    [searchResults, repertoireMap, searching]
+  );
 
   const filtered = useMemo(() => {
     return items.filter((it) => {
@@ -404,7 +526,7 @@ export default function RepertoirePage() {
     });
   };
 
-  const addSong = (songId: string, confidence: string, result: SongSearchResult) => {
+  const addSong = (songId: string, confidence: string, result: AddableSong) => {
     if (!userId) return;
     setPendingAddId(null);
     startTransition(async () => {
@@ -413,6 +535,7 @@ export default function RepertoirePage() {
         { onConflict: "user_id,song_id" }
       );
       if (error) { alert(error.message); return; }
+      setSuggestions((prev) => prev.filter((s) => s.song_id !== songId));
       setItems((prev) => {
         if (prev.find((x) => x.song_id === songId)) {
           return prev.map((x) => x.song_id === songId ? { ...x, confidence } : x);
@@ -431,7 +554,7 @@ export default function RepertoirePage() {
           cultures: result.cultures ?? [],
           productions: result.productions ?? [],
           genres: result.genres ?? [],
-          languages: result.languages ?? [],
+          languages: result.languages ?? [] as string[],
           themes: [],
           vibe: null,
           tonality: null,
@@ -464,6 +587,28 @@ export default function RepertoirePage() {
       );
     }
   }
+
+  const loadMoreSuggestions = useCallback(async () => {
+    if (!suggestionsHasMore || loadingMoreRef.current || !userId) return;
+    loadingMoreRef.current = true;
+    setSuggestionsLoadingMore(true);
+    const { data } = await supabase.rpc("suggest_songs_for_user", {
+      p_user_id: userId,
+      p_limit: 20,
+      p_offset: suggestionsOffset,
+    });
+    if (data) {
+      const page = data as SuggestionResult[];
+      setSuggestions((prev) => {
+        const seen = new Set(prev.map((s) => s.song_id));
+        return [...prev, ...page.filter((s) => !seen.has(s.song_id))];
+      });
+      setSuggestionsOffset((prev) => prev + page.length);
+      setSuggestionsHasMore(page.length === 20);
+    }
+    loadingMoreRef.current = false;
+    setSuggestionsLoadingMore(false);
+  }, [suggestionsHasMore, userId, suggestionsOffset, supabase]);
 
   if (!loading && isSignedIn === false) {
     return (
@@ -557,18 +702,47 @@ export default function RepertoirePage() {
       {searching ? (
         <>
           <div className="text-sm text-muted-foreground px-1">
-            {searchLoading ? "Searching…" : `${searchResults.length} result${searchResults.length === 1 ? "" : "s"}`}
+            {searchLoading ? "Searching…" : `${sortedSearchResults.length} result${sortedSearchResults.length === 1 ? "" : "s"}`}
           </div>
-          <div className="divide-y rounded-md border">
-            {!searchLoading && searchResults.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No songs found.</div>
+          <div className="grid gap-2">
+            {!searchLoading && sortedSearchResults.length === 0 ? (
+              <div className="rounded-md border p-4 text-sm text-muted-foreground">No songs found.</div>
             ) : (
-              searchResults.map((result) => {
+              sortedSearchResults.map((result) => {
                 const inRep = repertoireMap.get(result.song_id);
                 const isPicking = pendingAddId === result.song_id;
                 const href = `/songs/${result.slug ?? result.song_id}`;
+
+                if (!inRep) {
+                  return (
+                    <SongCard
+                      key={result.song_id}
+                      songId={result.song_id}
+                      slug={result.slug}
+                      title={result.title}
+                      displayArtist={result.display_artist}
+                      composers={result.composers}
+                      cultures={result.cultures ?? []}
+                      productions={result.productions}
+                      year={result.year}
+                      aka={result.aka}
+                      genres={result.genres}
+                      languages={result.languages ?? []}
+                      youtubeId={result.youtube_id}
+                      spotifyTrackId={result.spotify_track_id}
+                      repertoire={new Map()}
+                      pendingAddId={pendingAddId}
+                      singingVoice={singingVoice}
+                      setPendingAddId={setPendingAddId}
+                      onAdd={(songId) => setPendingAddId(songId)}
+                      addSong={(songId, level) => addSong(songId, level, result)}
+                      onVoiceUpdated={(voice) => setSingingVoice(voice)}
+                    />
+                  );
+                }
+
                 return (
-                  <div key={result.song_id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div key={result.song_id} className="rounded-md border flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="truncate font-medium">
                         <Link href={href} className="hover:text-amber-600">
@@ -676,10 +850,7 @@ export default function RepertoirePage() {
                               </button>
                             )
                           )}
-                          <Link
-                            href={href}
-                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                          >
+                          <Link href={href} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors">
                             View
                           </Link>
                           <button
@@ -723,10 +894,7 @@ export default function RepertoirePage() {
                         </>
                       ) : (
                         <>
-                          <Link
-                            href={href}
-                            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                          >
+                          <Link href={href} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors">
                             View
                           </Link>
                           <button
@@ -746,17 +914,26 @@ export default function RepertoirePage() {
           <SubmitSongForm />
         </>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
-          <p className="text-base font-semibold text-zinc-900">Your repertoire is empty</p>
-          <p className="mt-1 text-sm text-zinc-500">Add songs you know and SingJam will match you with musicians who share your repertoire.</p>
-          <p className="mt-3 text-sm text-zinc-400">Search for a song above, or browse the full catalog below.</p>
-          <Link
-            href="/search"
-            className="mt-4 inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
-          >
-            Browse songs →
-          </Link>
-        </div>
+        <>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+            <p className="text-base font-semibold text-zinc-900">Your repertoire is empty</p>
+            <p className="mt-1 text-sm text-zinc-500">Add songs you know and SingJam will match you with musicians who share your repertoire.</p>
+            <p className="mt-3 text-sm text-zinc-400">Search for a song above, or pick one from the suggestions below.</p>
+          </div>
+          {suggestions.length > 0 && (
+            <SuggestionsPanel
+              suggestions={suggestions}
+              pendingAddId={pendingAddId}
+              setPendingAddId={setPendingAddId}
+              singingVoice={singingVoice}
+              onAddSong={(songId, level, suggestion) => addSong(songId, level, suggestion)}
+              onVoiceUpdated={(voice) => setSingingVoice(voice)}
+              onLoadMore={loadMoreSuggestions}
+              hasMore={suggestionsHasMore}
+              loadingMore={suggestionsLoadingMore}
+            />
+          )}
+        </>
       ) : (
         <>
           {/* Filter bar */}
@@ -1079,6 +1256,20 @@ export default function RepertoirePage() {
               </>
             )}
           </div>
+
+          {suggestions.length > 0 && (
+            <SuggestionsPanel
+              suggestions={suggestions}
+              pendingAddId={pendingAddId}
+              setPendingAddId={setPendingAddId}
+              singingVoice={singingVoice}
+              onAddSong={(songId, level, suggestion) => addSong(songId, level, suggestion)}
+              onVoiceUpdated={(voice) => setSingingVoice(voice)}
+              onLoadMore={loadMoreSuggestions}
+              hasMore={suggestionsHasMore}
+              loadingMore={suggestionsLoadingMore}
+            />
+          )}
         </>
       )}
     </div>
