@@ -15,6 +15,7 @@ type Suggestion = {
 export type LocationValue = {
   fullAddress: string;
   neighborhood: string;
+  confirmed?: boolean;
 };
 
 function extractNeighborhood(secondaryText: string | undefined, mainText: string): string {
@@ -64,7 +65,7 @@ export default function LocationAutocomplete({
     const q = e.target.value;
     setInputValue(q);
     // Propagate raw text too so the input stays controlled
-    onChange({ fullAddress: q, neighborhood: q });
+    onChange({ fullAddress: q, neighborhood: q, confirmed: false });
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
@@ -100,7 +101,7 @@ export default function LocationAutocomplete({
       : extractNeighborhood(secondaryText?.text, mainText.text);
 
     setInputValue(fullAddress);
-    onChange({ fullAddress, neighborhood });
+    onChange({ fullAddress, neighborhood, confirmed: true });
     setSuggestions([]);
     setOpen(false);
   }

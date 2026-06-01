@@ -145,7 +145,7 @@ export default function SetsContent() {
 
       {isSignedIn && publicSets.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Browse public sets</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Public sets</h2>
           <div className="grid grid-cols-1 gap-3">
             {publicSets.map((set) => (
               <SetCard
@@ -153,22 +153,6 @@ export default function SetsContent() {
                 set={{ ...set, owner_user_id: "" }}
                 ownerName={set.ownerName}
                 ownerUsername={set.ownerUsername}
-                canCopy
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {isSignedIn && publicSets.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Browse public sets</h2>
-          <div className="grid grid-cols-1 gap-3">
-            {publicSets.map((set) => (
-              <SetCard
-                key={set.id}
-                set={{ ...set, owner_user_id: "" }}
-                ownerName={set.ownerName}
                 canCopy
               />
             ))}
