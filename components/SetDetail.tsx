@@ -686,6 +686,7 @@ export default function SetDetail({
   isPublicViewer = false,
   jamSharedSongs = [],
   songKnowledge: initialSongKnowledge = [],
+  canAccessJam = false,
 }: {
   set: SetData;
   initialSongs: Song[];
@@ -699,6 +700,7 @@ export default function SetDetail({
   isPublicViewer?: boolean;
   jamSharedSongs?: JamSong[];
   songKnowledge?: { user_id: string; song_id: string; confidence: string }[];
+  canAccessJam?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -726,6 +728,10 @@ export default function SetDetail({
   const [copying, setCopying] = useState(false);
   const [setMenuOpen, setSetMenuOpen] = useState(false);
   const setMenuRef = useRef<HTMLDivElement>(null);
+  const participantIdsRef = useRef<Set<string>>(
+    new Set([set.owner_user_id, ...initialCollaborators.map((c) => c.user_id).filter((id): id is string => Boolean(id))])
+  );
+  const songIdsRef = useRef<Set<string>>(new Set(initialSongs.map((s) => s.song_id)));
   const [creatingPlaylist, setCreatingPlaylist] = useState<"youtube" | "spotify" | null>(null);
   const [lastSyncedYoutubeFingerprint, setLastSyncedYoutubeFingerprint] = useState<string | null>(set.youtube_playlist_fingerprint ?? null);
   const [lastSyncedSpotifyFingerprint, setLastSyncedSpotifyFingerprint] = useState<string | null>(set.spotify_playlist_fingerprint ?? null);
@@ -794,6 +800,137 @@ export default function SetDetail({
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [isOwner]);
+
+  useEffect(() => {
+    participantIdsRef.current = new Set([
+      set.owner_user_id,
+      ...collaborators.map((c) => c.user_id).filter((id): id is string => Boolean(id)),
+    ]);
+  }, [collaborators, set.owner_user_id]);
+
+  useEffect(() => {
+    songIdsRef.current = new Set(songs.map((s) => s.song_id));
+  }, [songs]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`set-detail-${set.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "set_collaborators", filter: `set_id=eq.${set.id}` },
+        async (payload) => {
+          const row = payload.new as any;
+          if (row.status !== "accepted") return;
+          const currentSongIds = Array.from(songIdsRef.current);
+          const [profileRes, knowledgeRes] = await Promise.all([
+            supabase.from("profiles").select("display_name, last_name, username, avatar_url").eq("id", row.user_id).single(),
+            currentSongIds.length > 0
+              ? supabase.from("user_songs").select("user_id, song_id, confidence").eq("user_id", row.user_id).in("song_id", currentSongIds).in("confidence", ["lead", "support", "learn"])
+              : Promise.resolve({ data: [] as any[] }),
+          ]);
+          const newCollab: Collaborator = {
+            id: row.id,
+            user_id: row.user_id,
+            status: "accepted",
+            role: row.role,
+            profiles: (profileRes.data as any) ?? null,
+          };
+          setCollaborators((prev) => {
+            if (prev.some((c) => c.id === row.id)) return prev;
+            return [...prev, newCollab].sort((a, b) => {
+              const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
+              const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
+              return nameA.localeCompare(nameB);
+            });
+          });
+          if (knowledgeRes.data?.length) {
+            setSongKnowledge((prev) => [
+              ...prev.filter((k) => k.user_id !== row.user_id),
+              ...(knowledgeRes.data as { user_id: string; song_id: string; confidence: string }[]),
+            ]);
+          }
+          participantIdsRef.current.add(row.user_id);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "set_collaborators", filter: `set_id=eq.${set.id}` },
+        async (payload) => {
+          const row = payload.new as any;
+          const old = payload.old as any;
+          if (row.status === "accepted" && old.status !== "accepted") {
+            // Request approved — fetch profile and knowledge, add as collaborator
+            const currentSongIds = Array.from(songIdsRef.current);
+            const [profileRes, knowledgeRes] = await Promise.all([
+              supabase.from("profiles").select("display_name, last_name, username, avatar_url").eq("id", row.user_id).single(),
+              currentSongIds.length > 0
+                ? supabase.from("user_songs").select("user_id, song_id, confidence").eq("user_id", row.user_id).in("song_id", currentSongIds).in("confidence", ["lead", "support", "learn"])
+                : Promise.resolve({ data: [] as any[] }),
+            ]);
+            const newCollab: Collaborator = {
+              id: row.id,
+              user_id: row.user_id,
+              status: "accepted",
+              role: row.role,
+              profiles: (profileRes.data as any) ?? null,
+            };
+            setCollaborators((prev) => {
+              if (prev.some((c) => c.id === row.id)) return prev;
+              return [...prev, newCollab].sort((a, b) => {
+                const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
+                const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
+                return nameA.localeCompare(nameB);
+              });
+            });
+            if (knowledgeRes.data?.length) {
+              setSongKnowledge((prev) => [
+                ...prev.filter((k) => k.user_id !== row.user_id),
+                ...(knowledgeRes.data as { user_id: string; song_id: string; confidence: string }[]),
+              ]);
+            }
+            participantIdsRef.current.add(row.user_id);
+          } else if (row.status === "accepted") {
+            // Role changed for existing collaborator
+            setCollaborators((prev) => prev.map((c) => c.id === row.id ? { ...c, role: row.role } : c));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "set_collaborators", filter: `set_id=eq.${set.id}` },
+        (payload) => {
+          const row = payload.old as any;
+          setCollaborators((prev) => prev.filter((c) => c.id !== row.id));
+          if (row.user_id) {
+            participantIdsRef.current.delete(row.user_id);
+            setSongKnowledge((prev) => prev.filter((k) => k.user_id !== row.user_id));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_songs" },
+        (payload) => {
+          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as any;
+          if (!participantIdsRef.current.has(row.user_id) || !songIdsRef.current.has(row.song_id)) return;
+          if (payload.eventType === "DELETE") {
+            setSongKnowledge((prev) =>
+              prev.filter((k) => !(k.user_id === row.user_id && k.song_id === row.song_id))
+            );
+          } else {
+            if (!["lead", "support", "learn"].includes(row.confidence)) return;
+            setSongKnowledge((prev) => [
+              ...prev.filter((k) => !(k.user_id === row.user_id && k.song_id === row.song_id)),
+              { user_id: row.user_id, song_id: row.song_id, confidence: row.confidence },
+            ]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [set.id]);
 
   async function handleSelectSong(song: any) {
     const existing = userRepertoire.get(song.song_id);
@@ -1164,7 +1301,7 @@ export default function SetDetail({
         </div>
       )}
 
-      {set.jam_id && (
+      {set.jam_id && canAccessJam && (
         <a
           href={`/jam/${set.jam_id}`}
           className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600 transition-colors"

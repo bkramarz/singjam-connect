@@ -177,6 +177,7 @@ export default function AccountPanel() {
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
+  const [locationConfirmed, setLocationConfirmed] = useState(true);
   const [singingVoice, setSingingVoice] = useState<SingingVoice>([]);
   const [instrumentLevels, setInstrumentLevels] = useState<Record<string, string>>({});
   const [pendingInstrument, setPendingInstrument] = useState<string | null>(null);
@@ -221,6 +222,7 @@ export default function AccountPanel() {
         setLastName(profile?.last_name ?? metaLast);
         setAvatarUrl(profile?.avatar_url ?? meta.avatar_url ?? null);
         setNeighborhood(profile?.neighborhood ?? "");
+        setLocationConfirmed(true);
         setSingingVoice(profile?.singing_voice ? profile.singing_voice.split(",") : []);
         setInstrumentLevels((profile?.instrument_levels as Record<string, string>) ?? {});
         setFavoriteGenres(profile?.favorite_genres ?? []);
@@ -352,12 +354,59 @@ export default function AccountPanel() {
       body: JSON.stringify({ name: [name, lastName].filter(Boolean).join(" ") || null }),
     });
 
+    let resolvedNeighborhood = neighborhood || null;
+    if (neighborhood && locationConfirmed === false) {
+      const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
+      if (key) {
+        try {
+          let locationBias: object | undefined;
+          const coords = await new Promise<GeolocationCoordinates | null>((resolve) => {
+            if (!navigator.geolocation) { resolve(null); return; }
+            const timer = setTimeout(() => resolve(null), 3000);
+            navigator.geolocation.getCurrentPosition(
+              (pos) => { clearTimeout(timer); resolve(pos.coords); },
+              () => { clearTimeout(timer); resolve(null); },
+            );
+          });
+          if (coords) {
+            locationBias = {
+              circle: {
+                center: { latitude: coords.latitude, longitude: coords.longitude },
+                radius: 150000,
+              },
+            };
+          }
+
+          const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key },
+            body: JSON.stringify({
+              input: neighborhood,
+              includedPrimaryTypes: ["locality", "sublocality"],
+              ...(locationBias && { locationBias }),
+            }),
+          });
+          const json = await res.json();
+          const top = json.suggestions?.[0]?.placePrediction?.structuredFormat;
+          if (top) {
+            const main = top.mainText.text as string;
+            const secondary = top.secondaryText?.text as string | undefined;
+            resolvedNeighborhood = secondary ? `${main}, ${secondary.split(", ")[0]}` : main;
+            setNeighborhood(resolvedNeighborhood);
+            setLocationConfirmed(true);
+          }
+        } catch {
+          // fall through with raw value
+        }
+      }
+    }
+
     const { error } = await supabase.from("profiles").upsert({
       id: uid,
       display_name: name || null,
       last_name: lastName || null,
       username: username || null,
-      neighborhood: neighborhood || null,
+      neighborhood: resolvedNeighborhood,
       singing_voice: singingVoice.length ? singingVoice.join(",") : null,
       instrument_levels: instrumentLevels,
       favorite_genres: favoriteGenres.length ? favoriteGenres : null,
@@ -375,7 +424,7 @@ export default function AccountPanel() {
         body: JSON.stringify({
           firstName: name || undefined,
           lastName: lastName || undefined,
-          neighborhood: neighborhood || undefined,
+          neighborhood: resolvedNeighborhood || undefined,
           singingVoice,
           instrumentLevels,
           favoriteGenres,
@@ -590,7 +639,7 @@ export default function AccountPanel() {
             <LocationAutocomplete
               citiesOnly
               value={neighborhood}
-              onChange={(loc) => setNeighborhood(loc.neighborhood)}
+              onChange={(loc) => { setNeighborhood(loc.neighborhood); setLocationConfirmed(loc.confirmed ?? true); }}
               placeholder="City"
             />
           </div>
