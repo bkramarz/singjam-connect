@@ -52,16 +52,19 @@ export default function JamSetList({ jamId, jamName, isHost }: { jamId: string; 
 
   async function handleLink() {
     if (!selectedSetId) return;
+    const linked = availableSets?.find((s) => s.id === selectedSetId);
+    if (!linked) return;
+    setSet({ id: linked.id, name: linked.name });
+    setLinking(false);
     setLinkingInProgress(true);
     const res = await fetch(`/api/jam/${jamId}/set`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ setId: selectedSetId }),
     });
-    if (res.ok) {
-      const linked = availableSets?.find((s) => s.id === selectedSetId);
-      if (linked) setSet({ id: linked.id, name: linked.name });
-      setLinking(false);
+    if (!res.ok) {
+      setSet(null);
+      setLinking(true);
     }
     setLinkingInProgress(false);
   }

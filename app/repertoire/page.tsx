@@ -456,15 +456,16 @@ export default function RepertoirePage() {
   function bulkRemove() {
     if (!userId) return;
     const ids = Array.from(selectedIds);
+    const prevItems = items;
+    setItems((prev) => prev.filter((x) => !ids.includes(x.song_id)));
+    setBulkRemoveConfirm(false);
     startTransition(async () => {
       const { error } = await supabase
         .from("user_songs")
         .delete()
         .eq("user_id", userId)
         .in("song_id", ids);
-      if (error) { alert(error.message); return; }
-      setItems((prev) => prev.filter((x) => !ids.includes(x.song_id)));
-      setBulkRemoveConfirm(false);
+      if (error) { alert(error.message); setItems(prevItems); }
     });
   }
 
@@ -515,54 +516,61 @@ export default function RepertoirePage() {
 
   const removeFromRepertoire = (song_id: string) => {
     if (!userId) return;
+    const prevItems = items;
+    setItems((prev) => prev.filter((x) => x.song_id !== song_id));
     startTransition(async () => {
       const { error } = await supabase
         .from("user_songs")
         .delete()
         .eq("user_id", userId)
         .eq("song_id", song_id);
-      if (error) { alert(error.message); return; }
-      setItems((prev) => prev.filter((x) => x.song_id !== song_id));
+      if (error) { alert(error.message); setItems(prevItems); }
     });
   };
 
   const addSong = (songId: string, confidence: string, result: AddableSong) => {
     if (!userId) return;
+    const prevItems = items;
+    const prevSuggestions = suggestions;
     setPendingAddId(null);
+    setSuggestions((prev) => prev.filter((s) => s.song_id !== songId));
+    setItems((prev) => {
+      if (prev.find((x) => x.song_id === songId)) {
+        return prev.map((x) => x.song_id === songId ? { ...x, confidence } : x);
+      }
+      const newItem: Item = {
+        song_id: songId,
+        slug: result.slug ?? null,
+        confidence,
+        updated_at: new Date().toISOString(),
+        title: result.title,
+        display_artist: result.display_artist ?? null,
+        first_line: result.first_line ?? null,
+        hook: null,
+        notes: null,
+        composers: result.composers ?? [],
+        cultures: result.cultures ?? [],
+        productions: result.productions ?? [],
+        genres: result.genres ?? [],
+        languages: result.languages ?? [] as string[],
+        themes: [],
+        vibe: null,
+        tonality: null,
+        meter: null,
+        year: null,
+      };
+      return [...prev, newItem].sort((a, b) => a.title.localeCompare(b.title));
+    });
     startTransition(async () => {
       const { error } = await supabase.from("user_songs").upsert(
         { user_id: userId, song_id: songId, confidence, updated_at: new Date().toISOString() },
         { onConflict: "user_id,song_id" }
       );
-      if (error) { alert(error.message); return; }
-      setSuggestions((prev) => prev.filter((s) => s.song_id !== songId));
-      setItems((prev) => {
-        if (prev.find((x) => x.song_id === songId)) {
-          return prev.map((x) => x.song_id === songId ? { ...x, confidence } : x);
-        }
-        const newItem: Item = {
-          song_id: songId,
-          slug: result.slug ?? null,
-          confidence,
-          updated_at: new Date().toISOString(),
-          title: result.title,
-          display_artist: result.display_artist ?? null,
-          first_line: result.first_line ?? null,
-          hook: null,
-          notes: null,
-          composers: result.composers ?? [],
-          cultures: result.cultures ?? [],
-          productions: result.productions ?? [],
-          genres: result.genres ?? [],
-          languages: result.languages ?? [] as string[],
-          themes: [],
-          vibe: null,
-          tonality: null,
-          meter: null,
-          year: null,
-        };
-        return [...prev, newItem].sort((a, b) => a.title.localeCompare(b.title));
-      });
+      if (error) {
+        alert(error.message);
+        setItems(prevItems);
+        setSuggestions(prevSuggestions);
+      }
     });
   };
 
