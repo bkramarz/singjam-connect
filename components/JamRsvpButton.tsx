@@ -29,23 +29,35 @@ export default function JamRsvpButton({
   const isFull = capacity !== null && spotsLeft !== null && spotsLeft <= 0;
 
   async function rsvp() {
+    const optimisticStatus = isFull ? "waitlist" : "attending";
+    if (!isFull) setCount((c) => c + 1);
+    setStatus(optimisticStatus);
     setBusy(true);
     const res = await fetch(`/api/jam/${jamId}/rsvp`, { method: "POST" });
     const json = await res.json();
-    if (json.status === "attending") setCount((c) => c + 1);
     setStatus(json.status);
     setWaitlistPosition(json.waitlist_position ?? null);
     onStatusChange?.(json.status);
+    if (json.status !== "attending" && optimisticStatus === "attending") setCount((c) => c - 1);
+    else if (json.status === "attending" && optimisticStatus !== "attending") setCount((c) => c + 1);
     setBusy(false);
   }
 
   async function cancel() {
-    setBusy(true);
-    await fetch(`/api/jam/${jamId}/rsvp`, { method: "DELETE" });
+    const prevStatus = status;
+    const prevCount = count;
+    const prevWaitlistPosition = waitlistPosition;
     if (status === "attending") setCount((c) => Math.max(0, c - 1));
     setStatus("cancelled");
     setWaitlistPosition(null);
+    setBusy(true);
+    const res = await fetch(`/api/jam/${jamId}/rsvp`, { method: "DELETE" });
     setBusy(false);
+    if (!res.ok) {
+      setStatus(prevStatus);
+      setCount(prevCount);
+      setWaitlistPosition(prevWaitlistPosition);
+    }
   }
 
   return (

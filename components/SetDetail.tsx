@@ -935,15 +935,48 @@ export default function SetDetail({
   async function handleSelectSong(song: any) {
     const existing = userRepertoire.get(song.song_id);
     if (existing) {
-      await submitAddSong(song.song_id, null);
+      await submitAddSong(song.song_id, null, song);
     } else {
       setPendingSong(song);
     }
   }
 
-  async function submitAddSong(songId: string, confidence: string | null) {
+  async function submitAddSong(songId: string, confidence: string | null, songHint?: { title: string; display_artist: string | null; slug?: string | null; year?: number | null }) {
     const body: any = { songId };
     if (confidence) body.confidence = confidence;
+
+    const optimisticId = `optimistic-${songId}`;
+
+    if (songHint) {
+      const optimistic: Song = {
+        id: optimisticId,
+        song_id: songId,
+        position: songs.length,
+        key_note: null,
+        leader_user_ids: [],
+        songs: {
+          title: songHint.title,
+          display_artist: songHint.display_artist,
+          slug: songHint.slug ?? null,
+          chord_chart_url: null,
+          youtube_url: null,
+          tonality: null,
+          year: songHint.year ?? null,
+          meter: null,
+          song_composers: [],
+          song_lyricists: [],
+          song_cultures: [],
+          song_genres: [],
+          song_themes: [],
+          song_recording_artists: [],
+        },
+      };
+      setSongs((prev) => [...prev, optimistic]);
+    }
+
+    setPendingSong(null);
+    setSearchQuery("");
+    setShowAddSong(false);
 
     const res = await fetch(`/api/sets/${set.id}/songs`, {
       method: "POST",
@@ -953,18 +986,19 @@ export default function SetDetail({
 
     if (res.ok) {
       const { song, knowledge } = await res.json();
-      setSongs((prev) => [...prev, song]);
+      setSongs((prev) => {
+        const without = prev.filter((s) => s.id !== optimisticId);
+        return [...without, song];
+      });
       if (knowledge?.length) {
         setSongKnowledge((prev) => [...prev, ...knowledge]);
       }
       if (confidence) {
         setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
       }
+    } else if (songHint) {
+      setSongs((prev) => prev.filter((s) => s.id !== optimisticId));
     }
-
-    setPendingSong(null);
-    setSearchQuery("");
-    setShowAddSong(false);
   }
 
   async function submitMissingSong() {
@@ -1875,7 +1909,7 @@ export default function SetDetail({
                   <ConfidencePicker
                     variant="compact"
                     singingVoice={userSingingVoice}
-                    onSave={(level) => submitAddSong(pendingSong.song_id, level)}
+                    onSave={(level) => submitAddSong(pendingSong.song_id, level, pendingSong)}
                     onCancel={() => setPendingSong(null)}
                     onVoiceUpdated={setUserSingingVoice}
                   />
