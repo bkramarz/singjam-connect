@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
+import { resend, FROM_ADDRESS } from "@/lib/resend";
+import { createNotification } from "@/lib/notifications";
+import { setAccessGrantedHtml } from "@/emails/set-access-granted";
 
 function supabaseAdmin() {
   return createClient(
@@ -39,6 +42,13 @@ export async function PATCH(
     return NextResponse.json({ error: "Only the set owner can change roles" }, { status: 403 });
   }
 
+  const { data: existing } = await admin
+    .from("set_collaborators")
+    .select("user_id, status")
+    .eq("id", collaboratorId)
+    .eq("set_id", setId)
+    .maybeSingle();
+
   const { error } = await admin
     .from("set_collaborators")
     .update({ role, status: "accepted" })
@@ -46,6 +56,37 @@ export async function PATCH(
     .eq("set_id", setId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Notify requester only when approving a pending request (not a role change on an existing collaborator)
+  if (existing?.user_id && (existing as any).status !== "accepted") {
+    const { data: setData } = await admin
+      .from("sets")
+      .select("name")
+      .eq("id", setId)
+      .maybeSingle();
+
+    const setName = (setData as any)?.name ?? "a set list";
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org";
+    const setUrl = `${baseUrl}/set/${setId}`;
+
+    await createNotification({
+      userId: existing.user_id,
+      type: "set_access_granted",
+      title: `You've been granted access to "${setName}"`,
+      link: `/set/${setId}`,
+    });
+
+    const { data: requesterAuth } = await admin.auth.admin.getUserById(existing.user_id);
+    const requesterEmail = requesterAuth.user?.email;
+    if (requesterEmail) {
+      await resend.emails.send({
+        from: FROM_ADDRESS,
+        to: requesterEmail,
+        subject: `You've been granted access to "${setName}"`,
+        html: setAccessGrantedHtml({ setName, setUrl }),
+      });
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }
