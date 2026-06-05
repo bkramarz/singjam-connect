@@ -84,12 +84,13 @@ export async function POST(
 
   if (inviteeUserId) {
     // Member invite — check not already invited
-    const { data: existing } = await admin
+    const { data: existingRows } = await admin
       .from("jam_invites")
       .select("id, status")
       .eq("jam_id", jamId)
       .eq("invited_user_id", inviteeUserId)
-      .maybeSingle();
+      .limit(1);
+    const existing = existingRows?.[0] ?? null;
 
     if (existing && existing.status !== "declined") {
       return NextResponse.json({ error: "Already invited" }, { status: 409 });
@@ -151,6 +152,17 @@ export async function POST(
     if (match) {
       // Redirect caller to use the member flow
       return NextResponse.json({ existingMemberId: match.id }, { status: 200 });
+    }
+
+    // Check not already invited by email
+    const { data: existingEmail } = await admin
+      .from("jam_invites")
+      .select("id")
+      .eq("jam_id", jamId)
+      .eq("invitee_email", inviteeEmail)
+      .limit(1);
+    if (existingEmail && existingEmail.length > 0) {
+      return NextResponse.json({ error: "Already invited" }, { status: 409 });
     }
 
     // Insert invite with no user_id but with email
