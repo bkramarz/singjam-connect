@@ -139,7 +139,7 @@ export default async function SetPage({
     // 'public' sets are open to everyone — fall through
   }
 
-  const isPublicViewer = !isOwner && !isCollaborator && !isAdmin;
+  const isPublicViewer = !isOwner && !isCollaborator;
 
   const songIds = songs.map((s: any) => s.song_id);
   const participantIds = [set.owner_user_id, ...collaborators.map((c: any) => c.user_id)].filter(Boolean) as string[];
