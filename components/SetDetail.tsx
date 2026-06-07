@@ -342,7 +342,7 @@ function SongRowContent({
                 </span>
               )
             )}
-            {song.songs.tonality && (
+            {!isPublicViewer && song.songs.tonality && (
               <span className="text-xs font-semibold text-zinc-900">{song.songs.tonality}</span>
             )}
           </div>
