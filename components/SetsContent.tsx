@@ -25,6 +25,7 @@ type SetsData = {
   owned: SetItem[];
   collaborating: SetItem[];
   public: PublicSetItem[];
+  authenticated: boolean;
 };
 
 export default function SetsContent() {
@@ -35,14 +36,11 @@ export default function SetsContent() {
 
   useEffect(() => {
     fetch("/api/sets")
-      .then((r) => {
-        if (r.status === 401) { setIsSignedIn(false); setData({ owned: [], collaborating: [], public: [] }); return null; }
-        setIsSignedIn(true);
-        return r.json();
-      })
+      .then((r) => r.json())
       .then((json) => {
-        if (!json) return;
         setData(json);
+        setIsSignedIn(json.authenticated);
+        if (!json.authenticated) return;
         supabase.auth.getUser().then(({ data: { user } }) => {
           if (!user) return;
           supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("user_id", user.id).then(({ count }) => {
@@ -143,7 +141,29 @@ export default function SetsContent() {
         </section>
       )}
 
-      {isSignedIn && publicSets.length > 0 && (
+      {!isSignedIn && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 space-y-3">
+          <div>
+            <p className="text-base font-semibold text-zinc-900">Find your next jam partner</p>
+            <p className="mt-1 text-sm text-zinc-600">
+              Join SingJam to build your own sets, track your repertoire, and connect with musicians who know the same songs.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/auth"
+              className="inline-block rounded-xl bg-amber-500 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+            >
+              Create free account
+            </Link>
+            <Link href="/auth" className="text-sm font-medium text-amber-700 hover:text-amber-600 transition-colors">
+              Sign in
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {publicSets.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Public sets</h2>
           <div className="grid grid-cols-1 gap-3">
@@ -153,20 +173,11 @@ export default function SetsContent() {
                 set={{ ...set, owner_user_id: "" }}
                 ownerName={set.ownerName}
                 ownerUsername={set.ownerUsername}
-                canCopy
+                canCopy={isSignedIn}
               />
             ))}
           </div>
         </section>
-      )}
-
-      {!isSignedIn && isEmpty && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-          <p className="text-sm text-zinc-500">Sign in to create and manage sets.</p>
-          <Link href="/auth" className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
-            Sign in →
-          </Link>
-        </div>
       )}
     </div>
   );

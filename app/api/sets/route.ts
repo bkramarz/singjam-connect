@@ -13,7 +13,25 @@ function supabaseAdmin() {
 export async function GET() {
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!user) {
+    const { data: publicSetsData } = await supabase
+      .from("sets")
+      .select("id, name, description, owner_user_id, profiles(display_name, last_name, username)")
+      .eq("link_sharing", "public")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    const publicSets = ((publicSetsData ?? []) as any[]).map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
+      ownerUsername: s.profiles?.username ?? null,
+    }));
+
+    return NextResponse.json({ owned: [], collaborating: [], public: publicSets, authenticated: false });
+  }
 
   const [ownedRes, collabRes, publicRes] = await Promise.all([
     supabase
@@ -52,7 +70,7 @@ export async function GET() {
       ownerUsername: s.profiles?.username ?? null,
     }));
 
-  return NextResponse.json({ owned, collaborating, public: publicSets });
+  return NextResponse.json({ owned, collaborating, public: publicSets, authenticated: true });
 }
 
 export async function POST(req: Request) {
