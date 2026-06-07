@@ -336,7 +336,7 @@ function SongRowContent({
                 ))}
               </select>
             ) : (
-              song.key_note && (
+              !isPublicViewer && song.key_note && (
                 <span className="text-xs font-medium bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">
                   {song.key_note}
                 </span>
