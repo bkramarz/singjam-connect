@@ -159,24 +159,14 @@ export default function SetsContent() {
       )}
 
       {!isSignedIn && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 space-y-3">
-          <div>
-            <p className="text-base font-semibold text-zinc-900">Want to create sets like these?</p>
-            <p className="mt-1 text-sm text-zinc-600">
-              Join SingJam to build your own sets, track your repertoire, and find jam partners who know the same songs.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/auth"
-              className="inline-block rounded-xl bg-amber-500 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
-            >
-              Create free account
-            </Link>
-            <Link href="/auth" className="text-sm font-medium text-amber-700 hover:text-amber-600 transition-colors">
-              Sign in
-            </Link>
-          </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">Want to create sets like these?</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Join SingJam to build your own sets, track your repertoire, and find jam partners who know the same songs.
+          </p>
+          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+            Sign in →
+          </Link>
         </div>
       )}
     </div>
