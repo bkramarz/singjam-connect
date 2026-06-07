@@ -25,6 +25,7 @@ type SetsData = {
   owned: SetItem[];
   collaborating: SetItem[];
   public: PublicSetItem[];
+  authenticated: boolean;
 };
 
 export default function SetsContent() {
@@ -35,14 +36,11 @@ export default function SetsContent() {
 
   useEffect(() => {
     fetch("/api/sets")
-      .then((r) => {
-        if (r.status === 401) { setIsSignedIn(false); setData({ owned: [], collaborating: [], public: [] }); return null; }
-        setIsSignedIn(true);
-        return r.json();
-      })
+      .then((r) => r.json())
       .then((json) => {
-        if (!json) return;
         setData(json);
+        setIsSignedIn(json.authenticated);
+        if (!json.authenticated) return;
         supabase.auth.getUser().then(({ data: { user } }) => {
           if (!user) return;
           supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("user_id", user.id).then(({ count }) => {
@@ -143,7 +141,7 @@ export default function SetsContent() {
         </section>
       )}
 
-      {isSignedIn && publicSets.length > 0 && (
+      {publicSets.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Public sets</h2>
           <div className="grid grid-cols-1 gap-3">
@@ -153,17 +151,20 @@ export default function SetsContent() {
                 set={{ ...set, owner_user_id: "" }}
                 ownerName={set.ownerName}
                 ownerUsername={set.ownerUsername}
-                canCopy
+                canCopy={isSignedIn}
               />
             ))}
           </div>
         </section>
       )}
 
-      {!isSignedIn && isEmpty && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-          <p className="text-sm text-zinc-500">Sign in to create and manage sets.</p>
-          <Link href="/auth" className="mt-3 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+      {!isSignedIn && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">Build sets for your jams and gigs</p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Join SingJam to build your own sets, track your repertoire, and find jam partners who know the same songs.
+          </p>
+          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
             Sign in →
           </Link>
         </div>
