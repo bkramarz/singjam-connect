@@ -74,25 +74,23 @@ export default function SetCard({ set, songCount, isOwner, ownerName, ownerUsern
         <div className="flex items-center gap-2 mb-0.5">
           {isOwner ? (
             <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Owner</span>
-          ) : canCopy ? (
-            ownerName && (
-              <span className="text-xs text-zinc-400">
-                by{" "}
-                {ownerUsername ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); router.push(`/u/${ownerUsername}`); }}
-                    className="font-medium text-zinc-500 hover:underline"
-                  >
-                    {ownerName}
-                    {ownerName !== ownerUsername && (
-                      <span className="ml-1 font-normal text-zinc-400">@{ownerUsername}</span>
-                    )}
-                  </button>
-                ) : (
-                  <span className="font-medium text-zinc-500">{ownerName}</span>
-                )}
-              </span>
-            )
+          ) : ownerName ? (
+            <span className="text-xs text-zinc-400">
+              by{" "}
+              {ownerUsername ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); router.push(`/u/${ownerUsername}`); }}
+                  className="font-medium text-zinc-500 hover:underline"
+                >
+                  {ownerName}
+                  {ownerName !== ownerUsername && (
+                    <span className="ml-1 font-normal text-zinc-400">@{ownerUsername}</span>
+                  )}
+                </button>
+              ) : (
+                <span className="font-medium text-zinc-500">{ownerName}</span>
+              )}
+            </span>
           ) : (
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Collaborator</span>
           )}
