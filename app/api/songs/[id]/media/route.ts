@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { supabaseServer } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth";
 
 const ALLOWED_FIELDS = ["youtube_url", "spotify_url", "chord_chart_url"] as const;
 type AllowedField = (typeof ALLOWED_FIELDS)[number];
@@ -10,12 +10,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: songId } = await params;
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
 
   const body = await req.json();
   const updates: Partial<Record<AllowedField, string | null>> = {};

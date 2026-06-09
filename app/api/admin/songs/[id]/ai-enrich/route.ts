@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { supabaseServer } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth";
 
 const VALID_TONALITIES = [
   "Major", "Minor", "Dorian", "Phrygian", "Lydian", "Mixolydian",
@@ -109,17 +109,9 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await supabaseServer();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+  const { supabase } = auth;
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const { id: songId } = await params;

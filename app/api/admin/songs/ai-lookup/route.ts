@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { supabaseServer } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth";
 import { getSpotifyToken } from "@/lib/spotify";
 
 const VALID_TONALITIES = [
@@ -138,12 +138,8 @@ async function searchSpotifyTrack(token: string, title: string, artist: string):
 }
 
 export async function POST(req: Request) {
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
 
   const { title, artist = "", production = "" } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "title is required" }, { status: 400 });
