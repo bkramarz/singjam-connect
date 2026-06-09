@@ -74,6 +74,7 @@ export default function SongCard({
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [spotifyOpen, setSpotifyOpen] = useState(false);
+  const [askingLeadVoice, setAskingLeadVoice] = useState(false);
   const inRepertoire = repertoire.has(songId);
   const confidence = repertoire.get(songId);
   const confidenceLabel = LEVELS.find((l) => l.key === confidence)?.label ?? confidence;
@@ -162,14 +163,20 @@ export default function SongCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {inRepertoire ? (
+        {inRepertoire && !askingLeadVoice ? (
           <>
             <div className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-700">
               ✓ In your repertoire
             </div>
             <select
               value={confidence}
-              onChange={(e) => addSong(songId, e.target.value)}
+              onChange={(e) => {
+                if (e.target.value === "lead" && !singingVoice?.split(",").includes("lead")) {
+                  setAskingLeadVoice(true);
+                } else {
+                  addSong(songId, e.target.value);
+                }
+              }}
               className={`rounded-xl border px-2 py-1.5 text-sm ${
                 confidence === "lead"
                   ? "border-amber-400 bg-amber-100 text-amber-800 font-semibold"
@@ -177,21 +184,17 @@ export default function SongCard({
               }`}
               aria-label="Role"
             >
-              {LEVELS.map((l) => {
-                const blocked = l.key === "lead" && !singingVoice?.split(",").includes("lead");
-                return (
-                  <option key={l.key} value={l.key} disabled={blocked}>
-                    {blocked ? "Lead (singers only)" : l.label}
-                  </option>
-                );
-              })}
+              {LEVELS.map((l) => (
+                <option key={l.key} value={l.key}>{l.label}</option>
+              ))}
             </select>
           </>
-        ) : picking ? (
+        ) : (inRepertoire && askingLeadVoice) || picking ? (
           <ConfidencePicker
             singingVoice={singingVoice}
-            onSave={(level) => addSong(songId, level)}
-            onCancel={() => setPendingAddId(null)}
+            initialAskVoice={askingLeadVoice}
+            onSave={(level) => { addSong(songId, level); setAskingLeadVoice(false); }}
+            onCancel={() => { setPendingAddId(null); setAskingLeadVoice(false); }}
             onVoiceUpdated={onVoiceUpdated}
           />
         ) : (
@@ -202,7 +205,7 @@ export default function SongCard({
             + Add
           </button>
         )}
-        {!picking && (
+        {!picking && !askingLeadVoice && (
           <Link href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
             View
           </Link>
