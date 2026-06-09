@@ -436,17 +436,22 @@ export default function SetInvitePanel({
             className="bg-amber-50 rounded-2xl p-6 flex flex-col items-center gap-4 shadow-xl max-w-xs w-full md:max-w-none md:w-full md:h-full md:rounded-none md:justify-center md:gap-6 md:p-16"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 md:text-sm">Welcome to the jam</p>
-            <h2 className="text-base font-bold text-zinc-800 text-center md:text-4xl md:font-extrabold">
-              Scan to see the set<br className="hidden md:block" /> and mark what you know
-            </h2>
-            <p className="text-xs text-zinc-500 text-center md:text-lg">
-              Help the group find the songs everyone can play
-            </p>
+            <div className="flex flex-col items-center gap-4 md:gap-5 text-center">
+              <p className="text-sm font-bold text-zinc-800 md:text-xl">Welcome to SingJam!</p>
+              <h2 className="text-base font-bold text-zinc-800 text-center md:text-[2rem] md:font-extrabold md:w-[360px]">
+                Scan to view the set
+              </h2>
+              <p className="text-sm font-bold text-zinc-800 text-center md:text-xl flex items-center justify-center gap-2 flex-wrap">
+                Know a song? Hit
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white">
+                  + Add to my repertoire
+                </span>
+              </p>
+            </div>
             <img src={qrDataUrl} alt="QR code invite link" className="w-64 h-64 rounded-xl md:w-[360px] md:h-[360px]" />
             <button
               onClick={() => setQrDataUrl(null)}
-              className="w-full rounded-xl bg-amber-100 px-4 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-200 transition-colors md:max-w-sm md:py-3 md:text-base"
+              className="rounded-xl bg-amber-100 px-6 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-200 transition-colors md:px-8 md:py-3 md:text-base"
             >
               Done
             </button>
