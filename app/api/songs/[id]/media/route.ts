@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 
 const ALLOWED_FIELDS = ["youtube_url", "spotify_url", "chord_chart_url"] as const;
 type AllowedField = (typeof ALLOWED_FIELDS)[number];
-
-function supabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 export async function PATCH(
   req: Request,

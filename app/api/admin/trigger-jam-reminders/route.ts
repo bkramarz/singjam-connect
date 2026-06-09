@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resend } from "@/lib/resend";
 import { sendJamReminders } from "@/lib/sendJamReminders";
 
@@ -16,11 +16,7 @@ export async function POST() {
     .single();
   if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+  const admin = supabaseAdmin();
 
   const sent = await sendJamReminders(admin, resend);
   return NextResponse.json({ sent });

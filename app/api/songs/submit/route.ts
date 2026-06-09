@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin as admin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { generateSlug } from "@/lib/generateSlug";
 
@@ -11,15 +11,6 @@ const LANG_CODE_MAP: Record<string, string> = {
   ara: "Arabic", hin: "Hindi", lat: "Latin", cat: "Catalan",
   tur: "Turkish", vie: "Vietnamese", tha: "Thai", ind: "Indonesian",
 };
-
-
-function admin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 function normalizeName(name: string): string {
   return /^\[traditional\]$/i.test(name) ? "Traditional" : name;

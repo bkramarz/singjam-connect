@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { syncContact, ContactProfile } from "@/lib/activecampaign";
 
@@ -8,14 +8,6 @@ const AC_API_KEY = process.env.AC_API_KEY;
 
 const SINGJAM_TAG_ID = "24";
 const LIST_IDS = ["1", "4", "9"];
-
-function supabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 async function requireAdmin() {
   const supabase = await supabaseServer();

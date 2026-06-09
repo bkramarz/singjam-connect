@@ -1,18 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamWaitlistPromotedHtml } from "@/emails/jam-waitlist-promoted";
 import { jamRsvpConfirmedHtml } from "@/emails/jam-rsvp-confirmed";
 import { createNotification } from "@/lib/notifications";
-
-function supabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 export async function POST(
   _req: Request,
