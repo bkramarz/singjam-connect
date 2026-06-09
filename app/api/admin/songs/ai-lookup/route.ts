@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { supabaseServer } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth";
+import { getSpotifyToken } from "@/lib/spotify";
 
 const VALID_TONALITIES = [
   "Major", "Minor", "Dorian", "Phrygian", "Lydian", "Mixolydian",
@@ -123,25 +124,6 @@ async function lookupGeniusUrl(title: string, artist: string): Promise<string | 
   } catch { return null; }
 }
 
-async function getSpotifyToken(): Promise<string | null> {
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
-  try {
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
-      },
-      body: "grant_type=client_credentials",
-    });
-    if (!res.ok) return null;
-    const { access_token } = await res.json();
-    return access_token ?? null;
-  } catch { return null; }
-}
-
 async function searchSpotifyTrack(token: string, title: string, artist: string): Promise<string | null> {
   try {
     const q = `track:${title} artist:${artist}`;
@@ -156,12 +138,8 @@ async function searchSpotifyTrack(token: string, title: string, artist: string):
 }
 
 export async function POST(req: Request) {
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
 
   const { title, artist = "", production = "" } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "title is required" }, { status: 400 });

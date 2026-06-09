@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildIcs } from "@/lib/ics";
 
 export async function GET(
@@ -7,11 +7,7 @@ export async function GET(
 ) {
   const { id: jamId } = await params;
 
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+  const admin = supabaseAdmin();
 
   const { data: jam } = await admin
     .from("jams")

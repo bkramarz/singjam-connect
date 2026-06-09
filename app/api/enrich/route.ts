@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSpotifyToken } from "@/lib/spotify";
 
 const MB_HEADERS = {
   "User-Agent": "SingJamConnect/1.0 (https://github.com/bkramarz/singjam-connect)",
@@ -267,25 +268,6 @@ LIMIT 20`.trim();
 
 
 // ─── Spotify ──────────────────────────────────────────────────────────────────
-async function getSpotifyToken(): Promise<string | null> {
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
-
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.access_token ?? null;
-}
-
 async function enrichSpotify(title: string, artist: string) {
   const token = await getSpotifyToken();
   if (!token) return null;
