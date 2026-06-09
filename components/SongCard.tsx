@@ -105,11 +105,6 @@ export default function SongCard({
           {aka && aka.length ? (
             <div className="text-xs text-zinc-500">aka: {aka.join(" · ")}</div>
           ) : null}
-          {inRepertoire && (
-            <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
-              ✓ In your repertoire{confidenceLabel ? ` · ${confidenceLabel}` : ""}
-            </div>
-          )}
         </div>
         <div className="shrink-0 flex items-center gap-0.5">
           {youtubeId && (
@@ -166,11 +161,33 @@ export default function SongCard({
           )}
         </div>
       )}
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        <Link href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
-          View
-        </Link>
-        {picking ? (
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {inRepertoire ? (
+          <>
+            <div className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-700">
+              ✓ In your repertoire
+            </div>
+            <select
+              value={confidence}
+              onChange={(e) => addSong(songId, e.target.value)}
+              className={`rounded-xl border px-2 py-1.5 text-sm ${
+                confidence === "lead"
+                  ? "border-amber-400 bg-amber-100 text-amber-800 font-semibold"
+                  : "border-zinc-200"
+              }`}
+              aria-label="Role"
+            >
+              {LEVELS.map((l) => {
+                const blocked = l.key === "lead" && !singingVoice?.split(",").includes("lead");
+                return (
+                  <option key={l.key} value={l.key} disabled={blocked}>
+                    {blocked ? "Lead (singers only)" : l.label}
+                  </option>
+                );
+              })}
+            </select>
+          </>
+        ) : picking ? (
           <ConfidencePicker
             singingVoice={singingVoice}
             onSave={(level) => addSong(songId, level)}
@@ -179,11 +196,16 @@ export default function SongCard({
           />
         ) : (
           <button
-            className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
+            className="rounded-xl bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-400 transition-colors"
             onClick={() => onAdd(songId, slug)}
           >
-            {inRepertoire ? "Update" : "Add"}
+            + Add
           </button>
+        )}
+        {!picking && (
+          <Link href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+            View
+          </Link>
         )}
       </div>
     </div>

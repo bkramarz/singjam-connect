@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { title, artist } = await req.json();
+  const { title, artist, spotify_url: submittedSpotifyUrl } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
 
   const db = admin();
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   if (primaryArtistName) {
     const artistId = await findOrCreate(db, "artists", primaryArtistName);
     if (artistId) {
-      await db.from("song_recording_artists").insert({ song_id: song.id, artist_id: artistId, year: primaryYear, position: 0 });
+      await db.from("song_recording_artists").insert({ song_id: song.id, artist_id: artistId, year: primaryYear, position: 0, spotify_url: submittedSpotifyUrl ?? null });
     }
   }
 

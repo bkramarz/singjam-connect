@@ -138,7 +138,7 @@ export default function RepertoireButton({
   return (
     <button
       onClick={handleAddClick}
-      className="rounded-xl border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      className="rounded-xl bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-400 transition-colors"
     >
       + Add to repertoire
     </button>
