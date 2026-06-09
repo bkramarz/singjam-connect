@@ -214,7 +214,12 @@ export default function MatchesPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="truncate font-semibold text-zinc-900">{fullName || u.username || "Someone"}</div>
+                      <Link
+                        href={u.username ? `/u/${u.username}` : `/profile/${u.id}`}
+                        className="block truncate font-semibold text-zinc-900 hover:text-amber-600"
+                      >
+                        {fullName || u.username || "Someone"}
+                      </Link>
                       {u.username && <div className="truncate text-xs text-zinc-400">@{u.username}</div>}
                     </div>
                   </div>
@@ -267,7 +272,12 @@ export default function MatchesPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="truncate font-semibold text-zinc-900">{fullName || m.username || "Someone"}</div>
+                      <Link
+                        href={m.username ? `/u/${m.username}` : `/profile/${m.user_id}`}
+                        className="block truncate font-semibold text-zinc-900 hover:text-amber-600"
+                      >
+                        {fullName || m.username || "Someone"}
+                      </Link>
                       {m.username && <div className="truncate text-xs text-zinc-400">@{m.username}</div>}
                       {m.neighborhood && <div className="truncate text-xs text-zinc-500">{m.neighborhood}</div>}
                     </div>
