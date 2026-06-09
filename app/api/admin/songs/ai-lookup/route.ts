@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { supabaseServer } from "@/lib/supabase/server";
+import { getSpotifyToken } from "@/lib/spotify";
 
 const VALID_TONALITIES = [
   "Major", "Minor", "Dorian", "Phrygian", "Lydian", "Mixolydian",
@@ -120,25 +121,6 @@ async function lookupGeniusUrl(title: string, artist: string): Promise<string | 
     if (!res.ok) return null;
     const data = await res.json();
     return (data.response?.hits?.[0]?.result?.url as string) ?? null;
-  } catch { return null; }
-}
-
-async function getSpotifyToken(): Promise<string | null> {
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
-  try {
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
-      },
-      body: "grant_type=client_credentials",
-    });
-    if (!res.ok) return null;
-    const { access_token } = await res.json();
-    return access_token ?? null;
   } catch { return null; }
 }
 
