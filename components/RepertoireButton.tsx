@@ -29,6 +29,7 @@ export default function RepertoireButton({
   const [confidence, setConfidence] = useState(initialConfidence);
   const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [voiceCheckPending, setVoiceCheckPending] = useState(false);
 
   useEffect(() => {
     setConfidence(initialConfidence);
@@ -89,8 +90,9 @@ export default function RepertoireButton({
       <ConfidencePicker
         singingVoice={singingVoice}
         saving={saving}
-        onSave={save}
-        onCancel={() => setPicking(false)}
+        initialAskVoice={voiceCheckPending}
+        onSave={(level) => { save(level); setVoiceCheckPending(false); }}
+        onCancel={() => { setPicking(false); setVoiceCheckPending(false); }}
       />
     );
   }
@@ -101,7 +103,14 @@ export default function RepertoireButton({
         <select
           value={confidence}
           disabled={saving}
-          onChange={(e) => save(e.target.value as Level)}
+          onChange={(e) => {
+            if (e.target.value === "lead" && !singingVoice?.split(",").includes("lead")) {
+              setVoiceCheckPending(true);
+              setPicking(true);
+            } else {
+              save(e.target.value as Level);
+            }
+          }}
           className={`rounded-xl border px-2 py-1.5 text-sm disabled:opacity-40 ${
             confidence === "lead"
               ? "border-amber-400 bg-amber-100 text-amber-800 font-semibold"
@@ -109,14 +118,9 @@ export default function RepertoireButton({
           }`}
           aria-label="Role"
         >
-          {LEVELS.map((l) => {
-            const blocked = l.key === "lead" && !singingVoice?.split(",").includes("lead");
-            return (
-              <option key={l.key} value={l.key} disabled={blocked}>
-                {blocked ? "Lead (singers only)" : l.label}
-              </option>
-            );
-          })}
+          {LEVELS.map((l) => (
+            <option key={l.key} value={l.key}>{l.label}</option>
+          ))}
         </select>
         <button
           onClick={remove}

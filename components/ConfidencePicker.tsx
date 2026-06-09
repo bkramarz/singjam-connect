@@ -18,6 +18,7 @@ export default function ConfidencePicker({
   onCancel,
   onVoiceUpdated,
   variant = "card",
+  initialAskVoice = false,
 }: {
   singingVoice: string | null;
   saving?: boolean;
@@ -25,10 +26,11 @@ export default function ConfidencePicker({
   onCancel: () => void;
   onVoiceUpdated?: (voice: string) => void;
   variant?: "compact" | "card";
+  initialAskVoice?: boolean;
 }) {
   const supabase = supabaseBrowser();
   const [localVoice, setLocalVoice] = useState(singingVoice);
-  const [askingVoice, setAskingVoice] = useState(false);
+  const [askingVoice, setAskingVoice] = useState(initialAskVoice);
   const [savingVoice, setSavingVoice] = useState(false);
 
   useEffect(() => { setLocalVoice(singingVoice); }, [singingVoice]);
@@ -62,7 +64,7 @@ export default function ConfidencePicker({
           disabled={savingVoice}
           onClick={handleVoiceConfirm}
           className={isCompact
-            ? "rounded-full px-2 py-0.5 text-xs bg-amber-100 text-amber-800 hover:opacity-80 transition-opacity disabled:opacity-50"
+            ? "rounded-full px-2 py-1.5 text-xs bg-amber-100 text-amber-800 hover:opacity-80 transition-opacity disabled:opacity-50"
             : "rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
           }
         >
@@ -98,7 +100,7 @@ export default function ConfidencePicker({
               await onSave(key);
             }}
             className={isCompact
-              ? `rounded-full px-2 py-0.5 text-xs transition-opacity disabled:opacity-50 ${
+              ? `rounded-full px-2 py-1.5 text-xs transition-opacity disabled:opacity-50 ${
                   blocked
                     ? "bg-zinc-100 text-zinc-400"
                     : key === "lead"
@@ -110,7 +112,9 @@ export default function ConfidencePicker({
               : `rounded-xl border px-3 py-1.5 text-sm transition-colors disabled:opacity-40 ${
                   blocked
                     ? "border-zinc-200 bg-zinc-100 text-zinc-400"
-                    : "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 delay-150"
+                    : key === "lead"
+                    ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
                 }`
             }
           >
