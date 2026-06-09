@@ -190,10 +190,7 @@ export default function AuthPanel({
 
   return (
     <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-      <h2 className="text-xl font-semibold text-slate-900">
-        {mode === "signin" ? "Welcome back" : "Create an account"}
-      </h2>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="text-sm text-slate-500">
         {mode === "signin" ? (
           <>No account? <button onClick={() => { setMode("signup"); setStatus(null); }} className="text-amber-600 hover:underline">Create one</button></>
         ) : (
