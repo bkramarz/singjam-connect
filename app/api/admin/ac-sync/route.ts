@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { supabaseServer } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/auth";
 import { syncContact, ContactProfile } from "@/lib/activecampaign";
 
 const AC_API_URL = process.env.AC_API_URL;
@@ -8,14 +8,6 @@ const AC_API_KEY = process.env.AC_API_KEY;
 
 const SINGJAM_TAG_ID = "24";
 const LIST_IDS = ["1", "4", "9"];
-
-async function requireAdmin() {
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  return profile?.role === "admin" ? user : null;
-}
 
 async function acFetch(path: string) {
   if (!AC_API_URL || !AC_API_KEY) return null;
@@ -48,11 +40,10 @@ export type ACSyncStatus = {
 };
 
 export async function GET() {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
   const admin = supabaseAdmin();
-
-  const user = await requireAdmin();
-  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
   const [{ data: sbAuthData }, profilesResult, acContacts] = await Promise.all([
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from("profiles").select("id"),
@@ -97,8 +88,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = await requireAdmin();
-  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
 
   const { userIds }: { userIds: string[] } = await req.json();
   if (!Array.isArray(userIds) || userIds.length === 0) {
