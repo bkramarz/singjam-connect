@@ -1,6 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import HomeButtons from "@/components/HomeButtons";
-import UpcomingJams from "@/components/UpcomingJams";
+import UpcomingJams, { UpcomingJamsSkeleton } from "@/components/UpcomingJams";
 
 export const metadata: Metadata = {
   description: "Find your people through shared music. Build your repertoire, discover musicians nearby, and get invited to jams in your community.",
@@ -27,7 +28,9 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <UpcomingJams />
+      <Suspense fallback={<UpcomingJamsSkeleton />}>
+        <UpcomingJams />
+      </Suspense>
     </div>
   );
 }
