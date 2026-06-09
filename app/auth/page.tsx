@@ -27,8 +27,8 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
         </>
       ) : (
         <>
-          <h1 className="text-xl font-semibold">Welcome back</h1>
-          <p className="mt-2 text-sm text-zinc-600">Sign in to <strong>discover new music</strong> and <strong>new friends</strong>. Our app is totally <strong>free to use</strong> and we will only email you about <strong>cool music stuff</strong> 😎 🎸🥁</p>
+          <h1 className="text-xl font-semibold">Sign in to SingJam</h1>
+          <p className="mt-2 text-sm text-zinc-600"><strong>Discover new music</strong> and <strong>new friends</strong>. Totally <strong>free</strong> — we&apos;ll only email you about <strong>cool music stuff</strong> 😎 🎸🥁</p>
         </>
       )}
       {error && (
