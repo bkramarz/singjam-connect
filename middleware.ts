@@ -25,17 +25,21 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refreshes the session token and writes updated cookies to the response.
-  // Do not add logic between createServerClient and getUser.
-  const { data: { user } } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
-
   const authRequired = ["/admin", "/notifications", "/profile", "/account"];
-  if (!user && authRequired.some((p) => pathname.startsWith(p))) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth";
-    return NextResponse.redirect(url);
+  const needsAuthCheck = authRequired.some((p) => pathname.startsWith(p));
+  // Only call getUser() (a Supabase network round-trip) when the path requires
+  // auth, or when the request already carries session cookies and needs refreshing.
+  const hasAuthCookie = request.cookies.getAll().some((c) => c.name.startsWith("sb-"));
+
+  if (needsAuthCheck || hasAuthCookie) {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user && needsAuthCheck) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
