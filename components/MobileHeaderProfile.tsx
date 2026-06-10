@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useProfile } from "@/hooks/useProfile";
+import { useProfile } from "@/components/ProfileProvider";
 import NotificationBell from "./NotificationBell";
 
 export default function MobileHeaderProfile() {
