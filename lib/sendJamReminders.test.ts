@@ -75,8 +75,8 @@ function makeResend() {
   return { emails: { send: vi.fn().mockResolvedValue({ id: "email-id" }) } } as any;
 }
 
-// BASE_JAM starts at 3 PM EDT on 2026-06-10.
-// Tests lock "now" to 2026-06-09T12:00:00Z = 8 AM EDT, so the 8 AM / tomorrow
+// BASE_JAM starts at 3 PM EDT on 2026-06-10. Tests lock "now" to
+// 2026-06-09T12:00:00Z = 8 AM EDT, so the "8 AM or later / tomorrow" eligibility
 // checks both pass and all behaviour tests can run without time-related filtering.
 const BASE_JAM = {
   id: "jam-1",
@@ -89,7 +89,7 @@ const BASE_JAM = {
 };
 
 beforeEach(() => {
-  // 2026-06-09T12:00:00Z = 8 AM EDT — satisfies the 8 AM / tomorrow filter for BASE_JAM
+  // 2026-06-09T12:00:00Z = 8 AM EDT — satisfies the eligibility filter for BASE_JAM
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-06-09T12:00:00Z"));
   vi.clearAllMocks();
@@ -119,6 +119,17 @@ describe("sendJamReminders", () => {
 
     expect(sent).toBe(0);
     expect(resend.emails.send).not.toHaveBeenCalled();
+  });
+
+  it("still sends later the same day when the 8 AM run was missed (catch-up)", async () => {
+    vi.setSystemTime(new Date("2026-06-09T17:00:00Z")); // 1 PM EDT, jam still tomorrow
+    const admin = makeAdmin({ jams: [BASE_JAM] });
+    const resend = makeResend();
+
+    const sent = await sendJamReminders(admin, resend);
+
+    expect(sent).toBe(1);
+    expect(resend.emails.send).toHaveBeenCalledTimes(1);
   });
 
   it("skips jams when the jam is not tomorrow in the jam's timezone", async () => {
@@ -167,6 +178,23 @@ describe("sendJamReminders", () => {
     expect(resend.emails.send).toHaveBeenCalledTimes(4);
   });
 
+  it("skips link invites with a null invited_user_id without aborting the send", async () => {
+    // Link invites store a null invited_user_id; getUserById(null) throws, so
+    // these must be filtered out before recipient lookup.
+    const rsvps = [{ user_id: "user-1" }];
+    const invites = [{ invited_user_id: null }, { invited_user_id: "user-2" }, { invited_user_id: null }];
+    const admin = makeAdmin({ jams: [BASE_JAM], rsvps, invites });
+    const resend = makeResend();
+
+    const sent = await sendJamReminders(admin, resend);
+
+    // host-1 + user-1 + user-2 — the two null link invites are ignored
+    expect(sent).toBe(3);
+    expect(resend.emails.send).toHaveBeenCalledTimes(3);
+    expect(admin.auth.admin.getUserById).not.toHaveBeenCalledWith(null);
+    expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
+  });
+
   it("deduplicates when the host also has an attending RSVP", async () => {
     const rsvps = [{ user_id: "host-1" }, { user_id: "user-1" }];
     const admin = makeAdmin({ jams: [BASE_JAM], rsvps });
@@ -192,7 +220,7 @@ describe("sendJamReminders", () => {
     expect(resend.emails.send).toHaveBeenCalledTimes(2);
   });
 
-  it("records the reminder in jam_reminders_sent before emailing", async () => {
+  it("records the reminder only after a successful send", async () => {
     const rsvps = [{ user_id: "user-1" }];
     const admin = makeAdmin({
       jams: [{ ...BASE_JAM, full_address: null, neighborhood: "Brooklyn" }],
@@ -203,7 +231,7 @@ describe("sendJamReminders", () => {
     await sendJamReminders(admin, resend);
 
     expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
-    expect(admin._mockInsert.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(admin._mockInsert.mock.invocationCallOrder[0]).toBeGreaterThan(
       (resend.emails.send as any).mock.invocationCallOrder[0]
     );
   });
@@ -214,6 +242,31 @@ describe("sendJamReminders", () => {
 
     await sendJamReminders(admin, resend);
 
+    expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
+  });
+
+  it("does not record the reminder when every send fails, so it retries next run", async () => {
+    const admin = makeAdmin({ jams: [BASE_JAM] });
+    const resend = makeResend();
+    resend.emails.send.mockRejectedValue(new Error("Resend down"));
+
+    const sent = await sendJamReminders(admin, resend);
+
+    expect(sent).toBe(0);
+    expect(admin._mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("records the reminder when at least one send succeeds despite another failing", async () => {
+    const rsvps = [{ user_id: "user-1" }];
+    const admin = makeAdmin({ jams: [BASE_JAM], rsvps });
+    const resend = makeResend();
+    resend.emails.send
+      .mockRejectedValueOnce(new Error("bounced"))
+      .mockResolvedValueOnce({ id: "email-id" });
+
+    const sent = await sendJamReminders(admin, resend);
+
+    expect(sent).toBe(1);
     expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
   });
 

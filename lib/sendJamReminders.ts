@@ -22,13 +22,28 @@ function isJamTomorrow(now: Date, jamStartsAt: string, tz: string): boolean {
   return localDateStr(new Date(jamStartsAt), tz) === tomorrowStr;
 }
 
+// Eligible from 8 AM local on the day before until local midnight: the reminder
+// normally goes out on the 8 AM run, but using >= 8 (rather than === 8) lets a
+// later run the same day catch up if the 8 AM run was missed or failed. The
+// jam_reminders_sent unique row keeps it to one send.
+function isEligible(now: Date, jam: { starts_at: string | null; timezone: string | null }): boolean {
+  if (!jam.starts_at) return false;
+  const tz = jam.timezone ?? "UTC";
+  try {
+    return localHour(now, tz) >= 8 && isJamTomorrow(now, jam.starts_at, tz);
+  } catch (err) {
+    console.error(`sendJamReminders: invalid timezone "${tz}"`, err);
+    return false;
+  }
+}
+
 export async function sendJamReminders(admin: SupabaseClient, resend: Resend): Promise<number> {
   const now = new Date();
 
-  // Broad window covers all timezones: 8 AM anywhere in the world is between
-  // 10h and 60h before a jam happening "tomorrow" in that same timezone.
-  const windowStart = new Date(now.getTime() + 10 * 60 * 60 * 1000).toISOString();
-  const windowEnd = new Date(now.getTime() + 60 * 60 * 60 * 1000).toISOString();
+  // Coarse prefilter; isEligible is the source of truth. A jam happening
+  // "tomorrow" in its own timezone is at most ~40h away once it is 8 AM there.
+  const windowStart = now.toISOString();
+  const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
 
   const { data: alreadySent } = await admin
     .from("jam_reminders_sent")
@@ -54,82 +69,103 @@ export async function sendJamReminders(admin: SupabaseClient, resend: Resend): P
     throw error;
   }
 
-  // Only send to jams where it is currently 8 AM in the jam's timezone
-  // and the jam is happening tomorrow in that same timezone.
-  const eligibleJams = (jams ?? []).filter((jam) => {
-    if (!jam.starts_at) return false;
-    const tz = jam.timezone ?? "UTC";
-    return localHour(now, tz) === 8 && isJamTomorrow(now, jam.starts_at, tz);
-  });
+  const eligibleJams = (jams ?? []).filter((jam) => isEligible(now, jam));
 
   if (eligibleJams.length === 0) return 0;
 
   let sent = 0;
 
   for (const jam of eligibleJams) {
-    const address = jam.full_address ?? jam.neighborhood ?? null;
-    const jamUrl = `https://singjam.org/jam/${jam.id}`;
-    const jamDay = new Date(jam.starts_at).toLocaleString("en-US", {
-      timeZone: jam.timezone ?? undefined,
-      weekday: "long",
-    });
+    // Isolate each jam so a failure on one doesn't abort reminders for the rest.
+    try {
+      const address = jam.full_address ?? jam.neighborhood ?? null;
+      const jamUrl = `https://singjam.org/jam/${jam.id}`;
+      const jamDay = new Date(jam.starts_at).toLocaleString("en-US", {
+        timeZone: jam.timezone ?? undefined,
+        weekday: "long",
+      });
 
-    const [{ data: rsvps }, { data: pendingInvites }] = await Promise.all([
-      admin
-        .from("jam_rsvps")
-        .select("user_id")
-        .eq("jam_id", jam.id)
-        .eq("status", "attending"),
-      admin
-        .from("jam_invites")
-        .select("invited_user_id")
-        .eq("jam_id", jam.id)
-        .eq("status", "pending"),
-    ]);
+      const [{ data: rsvps }, { data: pendingInvites }] = await Promise.all([
+        admin
+          .from("jam_rsvps")
+          .select("user_id")
+          .eq("jam_id", jam.id)
+          .eq("status", "attending"),
+        admin
+          .from("jam_invites")
+          .select("invited_user_id")
+          .eq("jam_id", jam.id)
+          .eq("status", "pending"),
+      ]);
 
-    // Record before emailing so a transient email error doesn't trigger a re-send
-    await admin.from("jam_reminders_sent").insert({ jam_id: jam.id, reminder_type: "24h" });
+      // Collect unique user_ids: host + attending RSVPs + pending invites.
+      // Link invites have a null invited_user_id and must be skipped — passing
+      // null to getUserById throws and would abort the whole send.
+      const userIdSet = new Set<string>();
+      if (jam.host_user_id) userIdSet.add(jam.host_user_id);
+      for (const r of rsvps ?? []) if (r.user_id) userIdSet.add(r.user_id);
+      for (const i of pendingInvites ?? []) if (i.invited_user_id) userIdSet.add(i.invited_user_id);
 
-    // Collect unique user_ids: host + attending RSVPs + pending invites
-    const userIdSet = new Set<string>();
-    userIdSet.add(jam.host_user_id);
-    for (const r of rsvps ?? []) userIdSet.add(r.user_id);
-    for (const i of pendingInvites ?? []) userIdSet.add(i.invited_user_id);
-
-    const profilesAndEmails = await Promise.all(
-      [...userIdSet].map(async (user_id) => {
-        const [{ data: profile }, { data: authData }] = await Promise.all([
-          admin.from("profiles").select("display_name, username").eq("id", user_id).single(),
-          (admin.auth as any).admin.getUserById(user_id),
-        ]);
-        return {
-          email: authData?.user?.email ?? null,
-          name: (profile as any)?.display_name ?? (profile as any)?.username ?? null,
-        };
-      })
-    );
-
-    const recipients = profilesAndEmails.filter((r) => r.email !== null) as { email: string; name: string | null }[];
-
-    await Promise.all(
-      recipients.map((r) =>
-        resend.emails.send({
-          from: FROM_ADDRESS,
-          to: r.email,
-          subject: `Reminder: ${jam.name ?? "Your jam"} is tomorrow (${jamDay})`,
-          html: jamReminderHtml({
-            name: r.name,
-            jamName: jam.name ?? "Your jam",
-            jamUrl,
-            startsAt: jam.starts_at,
-            timezone: jam.timezone,
-            address,
-          }),
+      const profilesAndEmails = await Promise.all(
+        [...userIdSet].map(async (user_id) => {
+          const [{ data: profile }, { data: authData }] = await Promise.all([
+            admin.from("profiles").select("display_name, username").eq("id", user_id).single(),
+            (admin.auth as any).admin.getUserById(user_id),
+          ]);
+          return {
+            email: authData?.user?.email ?? null,
+            name: (profile as any)?.display_name ?? (profile as any)?.username ?? null,
+          };
         })
-      )
-    );
+      );
 
-    sent += recipients.length;
+      const recipients = profilesAndEmails.filter((r) => r.email !== null) as { email: string; name: string | null }[];
+
+      if (recipients.length === 0) {
+        // Nothing to send; record so we don't reprocess this jam every hour.
+        await admin.from("jam_reminders_sent").insert({ jam_id: jam.id, reminder_type: "24h" });
+        continue;
+      }
+
+      const results = await Promise.allSettled(
+        recipients.map((r) =>
+          resend.emails.send({
+            from: FROM_ADDRESS,
+            to: r.email,
+            subject: `Reminder: ${jam.name ?? "Your jam"} is tomorrow (${jamDay})`,
+            html: jamReminderHtml({
+              name: r.name,
+              jamName: jam.name ?? "Your jam",
+              jamUrl,
+              startsAt: jam.starts_at,
+              timezone: jam.timezone,
+              address,
+            }),
+          })
+        )
+      );
+
+      results.forEach((res, i) => {
+        if (res.status === "rejected") {
+          console.error(`sendJamReminders: failed to email ${recipients[i].email} for jam ${jam.id}`, res.reason);
+        }
+      });
+
+      const succeeded = results.filter((res) => res.status === "fulfilled").length;
+
+      if (succeeded === 0) {
+        // Every send failed (e.g. a Resend outage). Leave the jam unrecorded so
+        // the next hourly run retries instead of silently dropping the reminder.
+        console.error(`sendJamReminders: all sends failed for jam ${jam.id}; will retry next run`);
+        continue;
+      }
+
+      // Record only after a successful send so a failed send is retried.
+      await admin.from("jam_reminders_sent").insert({ jam_id: jam.id, reminder_type: "24h" });
+      sent += succeeded;
+    } catch (err) {
+      console.error(`sendJamReminders: error processing jam ${jam.id}`, err);
+    }
   }
 
   return sent;
