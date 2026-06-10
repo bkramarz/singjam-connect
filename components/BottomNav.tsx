@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useProfile } from "@/components/ProfileProvider";
+import { useProfile } from "@/hooks/useProfile";
 
 const TABS = [
   {
