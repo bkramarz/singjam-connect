@@ -4,15 +4,44 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useProfile } from "@/components/ProfileProvider";
+import { useProfile } from "@/hooks/useProfile";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function NavMenu() {
-  const { profile, unread } = useProfile();
+  const { profile } = useProfile();
   const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const supabase = supabaseBrowser();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchCount() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { count } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("read", false);
+      if (!cancelled) setUnread(count ?? 0);
+    }
+
+    fetchCount();
+
+    const handleVisibility = () => { if (document.visibilityState === "visible") fetchCount(); };
+    const handleRead = () => fetchCount();
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("notifications-read", handleRead);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("notifications-read", handleRead);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!open) return;

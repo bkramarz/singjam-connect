@@ -33,11 +33,7 @@ export async function middleware(request: NextRequest) {
   const hasAuthCookie = request.cookies.getAll().some((c) => c.name.startsWith("sb-"));
 
   if (needsAuthCheck || hasAuthCookie) {
-    // getClaims() refreshes the session like getUser(), but verifies the JWT
-    // locally (no Supabase round trip) once the project uses asymmetric
-    // signing keys. With legacy HS256 keys it falls back to getUser().
-    const { data } = await supabase.auth.getClaims();
-    const user = data?.claims ?? null;
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (!user && needsAuthCheck) {
       const url = request.nextUrl.clone();

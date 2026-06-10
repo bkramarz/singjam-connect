@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useProfile } from "@/components/ProfileProvider";
+import { useProfile } from "@/hooks/useProfile";
 import NavMenu from "./NavMenu";
 
 export default function TopNav() {

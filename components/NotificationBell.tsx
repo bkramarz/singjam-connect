@@ -1,10 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useProfile } from "@/components/ProfileProvider";
+import { useEffect, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function NotificationBell() {
-  const { unread } = useProfile();
+  const [unread, setUnread] = useState(0);
+  const supabase = supabaseBrowser();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchCount() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+
+      const { count } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("read", false);
+
+      if (!cancelled) setUnread(count ?? 0);
+    }
+
+    fetchCount();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") fetchCount();
+    };
+    const handleRead = () => fetchCount();
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("notifications-read", handleRead);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("notifications-read", handleRead);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Link
