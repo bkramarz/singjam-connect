@@ -127,31 +127,33 @@ export async function sendJamReminders(admin: SupabaseClient, resend: Resend): P
         continue;
       }
 
-      const results = await Promise.allSettled(
-        recipients.map((r) =>
-          resend.emails.send({
-            from: FROM_ADDRESS,
-            to: r.email,
-            subject: `Reminder: ${jam.name ?? "Your jam"} is tomorrow (${jamDay})`,
-            html: jamReminderHtml({
-              name: r.name,
-              jamName: jam.name ?? "Your jam",
-              jamUrl,
-              startsAt: jam.starts_at,
-              timezone: jam.timezone,
-              address,
-            }),
-          })
-        )
-      );
+      const payloads = recipients.map((r) => ({
+        from: FROM_ADDRESS,
+        to: r.email,
+        subject: `Reminder: ${jam.name ?? "Your jam"} is tomorrow (${jamDay})`,
+        html: jamReminderHtml({
+          name: r.name,
+          jamName: jam.name ?? "Your jam",
+          jamUrl,
+          startsAt: jam.starts_at,
+          timezone: jam.timezone,
+          address,
+        }),
+      }));
 
-      results.forEach((res, i) => {
-        if (res.status === "rejected") {
-          console.error(`sendJamReminders: failed to email ${recipients[i].email} for jam ${jam.id}`, res.reason);
+      // Resend allows only 5 requests/sec, so send via the batch endpoint (up
+      // to 100 emails in a single request) instead of one request per
+      // recipient — otherwise jams with >5 recipients lose the overflow to 429s.
+      let succeeded = 0;
+      for (let i = 0; i < payloads.length; i += 100) {
+        const chunk = payloads.slice(i, i + 100);
+        const { data, error } = await resend.batch.send(chunk);
+        if (error) {
+          console.error(`sendJamReminders: batch send failed for jam ${jam.id}`, error);
+        } else {
+          succeeded += data?.data?.length ?? chunk.length;
         }
-      });
-
-      const succeeded = results.filter((res) => res.status === "fulfilled").length;
+      }
 
       if (succeeded === 0) {
         // Every send failed (e.g. a Resend outage). Leave the jam unrecorded so
