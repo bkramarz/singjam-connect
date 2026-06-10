@@ -14,24 +14,14 @@ function makeAdmin({
   const admin = {
     from: vi.fn((table: string) => {
       if (table === "jams") {
-        // Simulate DB-level filtering: exclude already-sent jams and honour the
-        // [starts_at >= windowStart, starts_at <= windowEnd] window.
-        const base = jams.filter((j) => !alreadySentIds.includes(j.id));
-        let lo: string | undefined;
+        // Simulate DB-level filtering: exclude jams already in the sent log
+        const filteredJams = jams.filter((j) => !alreadySentIds.includes(j.id));
+        const result = { data: filteredJams, error: null };
         return {
           select: () => ({
-            gte: (_col: string, v: string) => {
-              lo = v;
-              return {
-                lte: (_col2: string, hi: string) => {
-                  const data = base.filter(
-                    (j) => (!lo || j.starts_at >= lo) && j.starts_at <= hi
-                  );
-                  const result = { data, error: null };
-                  return { ...result, not: () => result };
-                },
-              };
-            },
+            gte: () => ({
+              lte: () => ({ ...result, not: () => result }),
+            }),
           }),
         };
       }
@@ -86,8 +76,8 @@ function makeResend() {
 }
 
 // BASE_JAM starts at 3 PM EDT on 2026-06-10. Tests lock "now" to
-// 2026-06-10T00:00:00Z, which is ~19h before the jam, so it sits inside the
-// 24h reminder window and all behaviour tests can run.
+// 2026-06-09T12:00:00Z = 8 AM EDT, so the "8 AM or later / tomorrow" eligibility
+// checks both pass and all behaviour tests can run without time-related filtering.
 const BASE_JAM = {
   id: "jam-1",
   name: "Friday Jam",
@@ -99,8 +89,9 @@ const BASE_JAM = {
 };
 
 beforeEach(() => {
+  // 2026-06-09T12:00:00Z = 8 AM EDT — satisfies the eligibility filter for BASE_JAM
   vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-06-10T00:00:00Z"));
+  vi.setSystemTime(new Date("2026-06-09T12:00:00Z"));
   vi.clearAllMocks();
 });
 
@@ -119,9 +110,9 @@ describe("sendJamReminders", () => {
     expect(resend.emails.send).not.toHaveBeenCalled();
   });
 
-  it("skips jams starting more than 24h away", async () => {
-    const jam = { ...BASE_JAM, starts_at: "2026-06-11T19:00:00Z" }; // ~43h away
-    const admin = makeAdmin({ jams: [jam] });
+  it("skips jams when it is not yet 8 AM in the jam's timezone", async () => {
+    vi.setSystemTime(new Date("2026-06-09T11:00:00Z")); // 7 AM EDT
+    const admin = makeAdmin({ jams: [BASE_JAM] });
     const resend = makeResend();
 
     const sent = await sendJamReminders(admin, resend);
@@ -130,8 +121,19 @@ describe("sendJamReminders", () => {
     expect(resend.emails.send).not.toHaveBeenCalled();
   });
 
-  it("skips jams that have already started", async () => {
-    const jam = { ...BASE_JAM, starts_at: "2026-06-09T19:00:00Z" }; // in the past
+  it("still sends later the same day when the 8 AM run was missed (catch-up)", async () => {
+    vi.setSystemTime(new Date("2026-06-09T17:00:00Z")); // 1 PM EDT, jam still tomorrow
+    const admin = makeAdmin({ jams: [BASE_JAM] });
+    const resend = makeResend();
+
+    const sent = await sendJamReminders(admin, resend);
+
+    expect(sent).toBe(1);
+    expect(resend.emails.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips jams when the jam is not tomorrow in the jam's timezone", async () => {
+    const jam = { ...BASE_JAM, starts_at: "2026-06-11T19:00:00Z" }; // two days away
     const admin = makeAdmin({ jams: [jam] });
     const resend = makeResend();
 

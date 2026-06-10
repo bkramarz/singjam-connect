@@ -3,17 +3,47 @@ import type { Resend } from "resend";
 import { jamReminderHtml } from "../emails/jam-reminder";
 
 const FROM_ADDRESS = "SingJam <hello@singjam.org>";
-const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function localDateStr(date: Date, tz: string): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: tz }).format(date);
+}
+
+function localHour(date: Date, tz: string): number {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hourCycle: "h23" }).format(date)
+  );
+}
+
+function isJamTomorrow(now: Date, jamStartsAt: string, tz: string): boolean {
+  const todayStr = localDateStr(now, tz);
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const tomorrow = new Date(y, m - 1, d + 1);
+  const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+  return localDateStr(new Date(jamStartsAt), tz) === tomorrowStr;
+}
+
+// Eligible from 8 AM local on the day before until local midnight: the reminder
+// normally goes out on the 8 AM run, but using >= 8 (rather than === 8) lets a
+// later run the same day catch up if the 8 AM run was missed or failed. The
+// jam_reminders_sent unique row keeps it to one send.
+function isEligible(now: Date, jam: { starts_at: string | null; timezone: string | null }): boolean {
+  if (!jam.starts_at) return false;
+  const tz = jam.timezone ?? "UTC";
+  try {
+    return localHour(now, tz) >= 8 && isJamTomorrow(now, jam.starts_at, tz);
+  } catch (err) {
+    console.error(`sendJamReminders: invalid timezone "${tz}"`, err);
+    return false;
+  }
+}
 
 export async function sendJamReminders(admin: SupabaseClient, resend: Resend): Promise<number> {
   const now = new Date();
 
-  // Send a reminder once a jam starts within the next 24 hours. Any hourly run
-  // that finds an unsent jam still in this window sends it, so a missed or
-  // failed run is retried on the next tick — the jam_reminders_sent unique row
-  // dedupes so a jam is only ever reminded once.
+  // Coarse prefilter; isEligible is the source of truth. A jam happening
+  // "tomorrow" in its own timezone is at most ~40h away once it is 8 AM there.
   const windowStart = now.toISOString();
-  const windowEnd = new Date(now.getTime() + REMINDER_WINDOW_MS).toISOString();
+  const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
 
   const { data: alreadySent } = await admin
     .from("jam_reminders_sent")
@@ -39,7 +69,7 @@ export async function sendJamReminders(admin: SupabaseClient, resend: Resend): P
     throw error;
   }
 
-  const eligibleJams = (jams ?? []).filter((jam) => jam.starts_at);
+  const eligibleJams = (jams ?? []).filter((jam) => isEligible(now, jam));
 
   if (eligibleJams.length === 0) return 0;
 
