@@ -72,7 +72,18 @@ function makeAdmin({
 }
 
 function makeResend() {
-  return { emails: { send: vi.fn().mockResolvedValue({ id: "email-id" }) } } as any;
+  return {
+    batch: {
+      send: vi.fn((payloads: any[]) =>
+        Promise.resolve({ data: { data: payloads.map(() => ({ id: "email-id" })) }, error: null })
+      ),
+    },
+  } as any;
+}
+
+// All recipient addresses across every batch.send call.
+function sentTo(resend: any): string[] {
+  return (resend.batch.send.mock.calls as any[]).flatMap((c) => c[0]).map((p: any) => p.to);
 }
 
 // BASE_JAM starts at 3 PM EDT on 2026-06-10. Tests lock "now" to
@@ -107,7 +118,7 @@ describe("sendJamReminders", () => {
     const sent = await sendJamReminders(admin, resend);
 
     expect(sent).toBe(0);
-    expect(resend.emails.send).not.toHaveBeenCalled();
+    expect(resend.batch.send).not.toHaveBeenCalled();
   });
 
   it("skips jams when it is not yet 8 AM in the jam's timezone", async () => {
@@ -118,7 +129,7 @@ describe("sendJamReminders", () => {
     const sent = await sendJamReminders(admin, resend);
 
     expect(sent).toBe(0);
-    expect(resend.emails.send).not.toHaveBeenCalled();
+    expect(resend.batch.send).not.toHaveBeenCalled();
   });
 
   it("still sends later the same day when the 8 AM run was missed (catch-up)", async () => {
@@ -129,7 +140,7 @@ describe("sendJamReminders", () => {
     const sent = await sendJamReminders(admin, resend);
 
     expect(sent).toBe(1);
-    expect(resend.emails.send).toHaveBeenCalledTimes(1);
+    expect(sentTo(resend)).toHaveLength(1);
   });
 
   it("skips jams when the jam is not tomorrow in the jam's timezone", async () => {
@@ -140,7 +151,7 @@ describe("sendJamReminders", () => {
     const sent = await sendJamReminders(admin, resend);
 
     expect(sent).toBe(0);
-    expect(resend.emails.send).not.toHaveBeenCalled();
+    expect(resend.batch.send).not.toHaveBeenCalled();
   });
 
   it("always sends to the host even with no RSVPs or pending invites", async () => {
@@ -150,7 +161,7 @@ describe("sendJamReminders", () => {
     const sent = await sendJamReminders(admin, resend);
 
     expect(sent).toBe(1);
-    expect(resend.emails.send).toHaveBeenCalledTimes(1);
+    expect(sentTo(resend)).toHaveLength(1);
   });
 
   it("sends to attending RSVPs and the host", async () => {
@@ -162,7 +173,7 @@ describe("sendJamReminders", () => {
 
     // host-1 + user-1 + user-2
     expect(sent).toBe(3);
-    expect(resend.emails.send).toHaveBeenCalledTimes(3);
+    expect(sentTo(resend)).toHaveLength(3);
   });
 
   it("sends to pending invitees in addition to attending RSVPs and the host", async () => {
@@ -175,7 +186,7 @@ describe("sendJamReminders", () => {
 
     // host-1 + user-1 + user-2 + user-3
     expect(sent).toBe(4);
-    expect(resend.emails.send).toHaveBeenCalledTimes(4);
+    expect(sentTo(resend)).toHaveLength(4);
   });
 
   it("skips link invites with a null invited_user_id without aborting the send", async () => {
@@ -190,7 +201,7 @@ describe("sendJamReminders", () => {
 
     // host-1 + user-1 + user-2 — the two null link invites are ignored
     expect(sent).toBe(3);
-    expect(resend.emails.send).toHaveBeenCalledTimes(3);
+    expect(sentTo(resend)).toHaveLength(3);
     expect(admin.auth.admin.getUserById).not.toHaveBeenCalledWith(null);
     expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
   });
@@ -204,7 +215,7 @@ describe("sendJamReminders", () => {
 
     // host-1 (deduped) + user-1
     expect(sent).toBe(2);
-    expect(resend.emails.send).toHaveBeenCalledTimes(2);
+    expect(sentTo(resend)).toHaveLength(2);
   });
 
   it("deduplicates when a pending invitee also has an attending RSVP", async () => {
@@ -217,7 +228,7 @@ describe("sendJamReminders", () => {
 
     // host-1 + user-1 (deduped)
     expect(sent).toBe(2);
-    expect(resend.emails.send).toHaveBeenCalledTimes(2);
+    expect(sentTo(resend)).toHaveLength(2);
   });
 
   it("records the reminder only after a successful send", async () => {
@@ -232,7 +243,7 @@ describe("sendJamReminders", () => {
 
     expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
     expect(admin._mockInsert.mock.invocationCallOrder[0]).toBeGreaterThan(
-      (resend.emails.send as any).mock.invocationCallOrder[0]
+      (resend.batch.send as any).mock.invocationCallOrder[0]
     );
   });
 
@@ -248,7 +259,7 @@ describe("sendJamReminders", () => {
   it("does not record the reminder when every send fails, so it retries next run", async () => {
     const admin = makeAdmin({ jams: [BASE_JAM] });
     const resend = makeResend();
-    resend.emails.send.mockRejectedValue(new Error("Resend down"));
+    resend.batch.send.mockResolvedValue({ data: null, error: { message: "Resend down" } });
 
     const sent = await sendJamReminders(admin, resend);
 
@@ -256,18 +267,18 @@ describe("sendJamReminders", () => {
     expect(admin._mockInsert).not.toHaveBeenCalled();
   });
 
-  it("records the reminder when at least one send succeeds despite another failing", async () => {
-    const rsvps = [{ user_id: "user-1" }];
-    const admin = makeAdmin({ jams: [BASE_JAM], rsvps });
+  it("sends all recipients in a single batch request to respect Resend's rate limit", async () => {
+    const rsvps = [{ user_id: "user-1" }, { user_id: "user-2" }, { user_id: "user-3" }];
+    const invites = [{ invited_user_id: "user-4" }, { invited_user_id: "user-5" }, { invited_user_id: "user-6" }];
+    const admin = makeAdmin({ jams: [BASE_JAM], rsvps, invites });
     const resend = makeResend();
-    resend.emails.send
-      .mockRejectedValueOnce(new Error("bounced"))
-      .mockResolvedValueOnce({ id: "email-id" });
 
     const sent = await sendJamReminders(admin, resend);
 
-    expect(sent).toBe(1);
-    expect(admin._mockInsert).toHaveBeenCalledWith({ jam_id: "jam-1", reminder_type: "24h" });
+    // host + 6 others = 7 recipients, all in one batch.send call (not 7 calls)
+    expect(sent).toBe(7);
+    expect(resend.batch.send).toHaveBeenCalledTimes(1);
+    expect(resend.batch.send.mock.calls[0][0]).toHaveLength(7);
   });
 
   it("uses neighborhood as fallback when full_address is null", async () => {
@@ -278,7 +289,7 @@ describe("sendJamReminders", () => {
 
     await sendJamReminders(admin, resend);
 
-    const htmlValues = (resend.emails.send.mock.calls as any[]).map((c: any) => c[0].html);
+    const htmlValues = (resend.batch.send.mock.calls as any[]).flatMap((c) => c[0]).map((p: any) => p.html);
     expect(htmlValues.every((html: string) => html.includes("Park Slope"))).toBe(true);
   });
 
@@ -290,7 +301,7 @@ describe("sendJamReminders", () => {
 
     await sendJamReminders(admin, resend);
 
-    const subject = resend.emails.send.mock.calls[0][0].subject as string;
+    const subject = resend.batch.send.mock.calls[0][0][0].subject as string;
     expect(subject).toMatch(/is tomorrow \(Wednesday\)/);
   });
 
@@ -301,7 +312,7 @@ describe("sendJamReminders", () => {
     const sent = await sendJamReminders(admin, resend);
 
     expect(sent).toBe(0);
-    expect(resend.emails.send).not.toHaveBeenCalled();
+    expect(resend.batch.send).not.toHaveBeenCalled();
   });
 
   it("throws when the jams query fails", async () => {
