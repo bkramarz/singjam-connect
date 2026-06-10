@@ -5,6 +5,7 @@ import Link from "next/link";
 import TopNav from "@/components/TopNav";
 import BottomNav from "@/components/BottomNav";
 import MobileHeaderProfile from "@/components/MobileHeaderProfile";
+import ProfileProvider from "@/components/ProfileProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,7 +30,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.className}>
+      <head>
+        {/* Supabase queries are anonymous CORS fetches, so the preconnect
+            must be crossOrigin="anonymous" to warm the connection they use. */}
+        <link
+          rel="preconnect"
+          href={process.env.NEXT_PUBLIC_SUPABASE_URL}
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="min-h-screen bg-slate-50">
+        <ProfileProvider>
         <header className="sticky top-0 z-10 bg-slate-900">
           <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
             <Link href="/?home" className="flex items-center gap-2.5">
@@ -64,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <BottomNav />
+        </ProfileProvider>
       </body>
     </html>
   );
