@@ -13,6 +13,7 @@ import { sortRepertoireSearchResults } from "@/lib/sortRepertoireSearchResults";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 import SongCard from "@/components/SongCard";
+import AddToSetPanel from "@/components/AddToSetPanel";
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
@@ -181,15 +182,13 @@ export default function RepertoirePage() {
 
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
   const [userSets, setUserSets] = useState<{ id: string; name: string }[]>([]);
-  const [addToSetFor, setAddToSetFor] = useState<string | null>(null);
-  const [addToSetStatus, setAddToSetStatus] = useState<Record<string, string>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRemoveConfirm, setBulkRemoveConfirm] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<string | null>(null);
   const [bulkSetId, setBulkSetId] = useState("");
   const [bulkConfidenceLevel, setBulkConfidenceLevel] = useState("");
   const [newSetName, setNewSetName] = useState("");
-  const [newSetForSongId, setNewSetForSongId] = useState<string | null>(null);
+  const [songSetMemberships, setSongSetMemberships] = useState<Record<string, Set<string>>>({});
   const [bulkCreatingSet, setBulkCreatingSet] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const loadingMoreRef = useRef(false);
@@ -469,20 +468,6 @@ export default function RepertoirePage() {
     });
   }
 
-  async function createSetAndAdd(name: string, songId: string) {
-    const res = await fetch("/api/sets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) { alert("Failed to create set"); return; }
-    const { id } = await res.json();
-    setUserSets((prev) => [{ id, name }, ...prev]);
-    setNewSetForSongId(null);
-    setNewSetName("");
-    await addToSet(songId, id);
-  }
-
   async function createSetAndBulkAdd(name: string) {
     const res = await fetch("/api/sets", {
       method: "POST",
@@ -574,25 +559,11 @@ export default function RepertoirePage() {
     });
   };
 
-  async function addToSet(songId: string, setId: string) {
-    setAddToSetFor(null);
-    const set = userSets.find((s) => s.id === setId);
-    const res = await fetch(`/api/sets/${setId}/songs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ songId }),
-    });
-    const msg = res.ok
-      ? `Added to ${set?.name ?? "set"}`
-      : res.status === 409
-      ? "Already in that set"
-      : null;
-    if (msg) {
-      setAddToSetStatus((prev) => ({ ...prev, [songId]: msg }));
-      setTimeout(
-        () => setAddToSetStatus((prev) => { const { [songId]: _, ...rest } = prev; return rest; }),
-        2500
-      );
+  async function loadSetMemberships(songId: string) {
+    if (songSetMemberships[songId] !== undefined) return;
+    const { data } = await supabase.from("set_songs").select("set_id").eq("song_id", songId);
+    if (data) {
+      setSongSetMemberships((prev) => ({ ...prev, [songId]: new Set(data.map((r: any) => r.set_id)) }));
     }
   }
 
@@ -769,7 +740,7 @@ export default function RepertoirePage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                    <div className="relative flex flex-wrap items-center gap-2 sm:shrink-0">
                       {inRep ? (
                         <>
                           <select
@@ -793,70 +764,14 @@ export default function RepertoirePage() {
                             ))}
                           </select>
                           {userSets.length > 0 && (
-                            addToSetFor === result.song_id ? (
-                              newSetForSongId === result.song_id ? (
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="text"
-                                    value={newSetName}
-                                    onChange={(e) => setNewSetName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter" && newSetName.trim()) createSetAndAdd(newSetName.trim(), result.song_id);
-                                      if (e.key === "Escape") { setNewSetForSongId(null); setNewSetName(""); }
-                                    }}
-                                    placeholder="Set name…"
-                                    autoFocus
-                                    className="w-28 rounded-xl border border-zinc-300 px-2 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                                  />
-                                  <button
-                                    onClick={() => { if (newSetName.trim()) createSetAndAdd(newSetName.trim(), result.song_id); }}
-                                    disabled={!newSetName.trim()}
-                                    className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-40"
-                                  >
-                                    Create
-                                  </button>
-                                  <button
-                                    onClick={() => { setNewSetForSongId(null); setNewSetName(""); }}
-                                    className="text-zinc-400 hover:text-zinc-600 text-sm"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1.5">
-                                  <select
-                                    className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
-                                    defaultValue=""
-                                    onChange={(e) => {
-                                      if (e.target.value === "__new__") setNewSetForSongId(result.song_id);
-                                      else if (e.target.value) addToSet(result.song_id, e.target.value);
-                                    }}
-                                  >
-                                    <option value="" disabled>Pick a set…</option>
-                                    {userSets.map((s) => (
-                                      <option key={s.id} value={s.id}>{s.name}</option>
-                                    ))}
-                                    <option value="__new__">+ New set…</option>
-                                  </select>
-                                  <button
-                                    onClick={() => { setAddToSetFor(null); setNewSetForSongId(null); setNewSetName(""); }}
-                                    className="text-zinc-400 hover:text-zinc-600 text-sm"
-                                    aria-label="Cancel"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              )
-                            ) : addToSetStatus[result.song_id] ? (
-                              <span className="text-xs text-green-600">{addToSetStatus[result.song_id]}</span>
-                            ) : (
-                              <button
-                                onClick={() => setAddToSetFor(result.song_id)}
-                                className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                              >
-                                Add to set
-                              </button>
-                            )
+                            <AddToSetPanel
+                              songId={result.song_id}
+                              sets={userSets}
+                              inSets={songSetMemberships[result.song_id]}
+                              onOpen={() => loadSetMemberships(result.song_id)}
+                              onAdded={(setId) => setSongSetMemberships((prev) => ({ ...prev, [result.song_id]: new Set([...(prev[result.song_id] ?? []), setId]) }))}
+                              onSetCreated={(s) => setUserSets((prev) => [s, ...prev])}
+                            />
                           )}
                           <Link href={href} className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors">
                             View
@@ -1155,7 +1070,7 @@ export default function RepertoirePage() {
                   </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                  <div className="relative flex flex-wrap items-center gap-2 sm:shrink-0">
                     <select
                       value={(it.confidence ?? "") as ConfidenceKey}
                       onChange={(e) => updateConfidence(it.song_id, e.target.value)}
@@ -1178,70 +1093,14 @@ export default function RepertoirePage() {
                     </select>
 
                     {userSets.length > 0 && (
-                      addToSetFor === it.song_id ? (
-                        newSetForSongId === it.song_id ? (
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={newSetName}
-                              onChange={(e) => setNewSetName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && newSetName.trim()) createSetAndAdd(newSetName.trim(), it.song_id);
-                                if (e.key === "Escape") { setNewSetForSongId(null); setNewSetName(""); }
-                              }}
-                              placeholder="Set name…"
-                              autoFocus
-                              className="w-28 rounded-xl border border-zinc-300 px-2 py-1.5 text-sm focus:border-amber-400 focus:outline-none"
-                            />
-                            <button
-                              onClick={() => { if (newSetName.trim()) createSetAndAdd(newSetName.trim(), it.song_id); }}
-                              disabled={!newSetName.trim()}
-                              className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-40"
-                            >
-                              Create
-                            </button>
-                            <button
-                              onClick={() => { setNewSetForSongId(null); setNewSetName(""); }}
-                              className="text-zinc-400 hover:text-zinc-600 text-sm"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <select
-                              className="rounded-xl border border-zinc-300 px-2 py-1.5 text-sm"
-                              defaultValue=""
-                              onChange={(e) => {
-                                if (e.target.value === "__new__") setNewSetForSongId(it.song_id);
-                                else if (e.target.value) addToSet(it.song_id, e.target.value);
-                              }}
-                            >
-                              <option value="" disabled>Pick a set…</option>
-                              {userSets.map((s) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                              ))}
-                              <option value="__new__">+ New set…</option>
-                            </select>
-                            <button
-                              onClick={() => { setAddToSetFor(null); setNewSetForSongId(null); setNewSetName(""); }}
-                              className="text-zinc-400 hover:text-zinc-600 text-sm"
-                              aria-label="Cancel"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        )
-                      ) : addToSetStatus[it.song_id] ? (
-                        <span className="text-xs text-green-600">{addToSetStatus[it.song_id]}</span>
-                      ) : (
-                        <button
-                          onClick={() => setAddToSetFor(it.song_id)}
-                          className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                        >
-                          Add to set
-                        </button>
-                      )
+                      <AddToSetPanel
+                        songId={it.song_id}
+                        sets={userSets}
+                        inSets={songSetMemberships[it.song_id]}
+                        onOpen={() => loadSetMemberships(it.song_id)}
+                        onAdded={(setId) => setSongSetMemberships((prev) => ({ ...prev, [it.song_id]: new Set([...(prev[it.song_id] ?? []), setId]) }))}
+                        onSetCreated={(s) => setUserSets((prev) => [s, ...prev])}
+                      />
                     )}
 
                     <Link

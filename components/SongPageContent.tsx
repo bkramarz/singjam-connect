@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import RepertoireButton from "@/components/RepertoireButton";
+import AddToSetPanel from "@/components/AddToSetPanel";
 
 function formatComposersLong(names: string[], cultures: string[]): string {
   const isTraditional = names.some((n) => n.toLowerCase() === "traditional");
@@ -73,6 +74,8 @@ export default function SongPageContent() {
   const [confidence, setConfidence] = useState<string | null>(null);
   const [songUsers, setSongUsers] = useState<SongUsers | null>(null);
   const [songUsersLoading, setSongUsersLoading] = useState(false);
+  const [userSets, setUserSets] = useState<{ id: string; name: string }[] | null>(null);
+  const [songInSets, setSongInSets] = useState<Set<string>>(new Set());
   const supabase = supabaseBrowser();
 
   useEffect(() => {
@@ -142,6 +145,18 @@ export default function SongPageContent() {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  async function loadSetData() {
+    const songId = data?.song?.id;
+    const [setsJson, membership] = await Promise.all([
+      userSets === null
+        ? fetch("/api/sets").then((r) => (r.ok ? r.json() : { owned: [], collaborating: [] }))
+        : null,
+      songId ? supabase.from("set_songs").select("set_id").eq("song_id", songId) : null,
+    ]);
+    if (setsJson) setUserSets([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]);
+    if (membership?.data) setSongInSets(new Set(membership.data.map((r: any) => r.set_id)));
+  }
 
   if (notFound) return <p className="text-sm text-slate-500">Song not found.</p>;
   if (!data) {
@@ -219,7 +234,19 @@ export default function SongPageContent() {
             <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence} />
+            <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence}>
+              {confidence && (
+                <AddToSetPanel
+                  songId={song.id}
+                  sets={userSets}
+                  inSets={songInSets}
+                  direction="down"
+                  onOpen={loadSetData}
+                  onAdded={(setId) => setSongInSets((prev) => new Set([...prev, setId]))}
+                  onSetCreated={(s) => setUserSets((prev) => [s, ...(prev ?? [])])}
+                />
+              )}
+            </RepertoireButton>
             {isAdmin && (
               <Link href={`/admin/songs/${song.slug ?? song.id}`}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
@@ -425,7 +452,19 @@ export default function SongPageContent() {
 
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence} />
+          <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence}>
+            {confidence && (
+              <AddToSetPanel
+                songId={song.id}
+                sets={userSets}
+                inSets={songInSets}
+                direction="up"
+                onOpen={loadSetData}
+                onAdded={(setId) => setSongInSets((prev) => new Set([...prev, setId]))}
+                onSetCreated={(s) => setUserSets((prev) => [s, ...(prev ?? [])])}
+              />
+            )}
+          </RepertoireButton>
           {isAdmin && (
             <Link href={`/admin/songs/${song.slug ?? song.id}`}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">

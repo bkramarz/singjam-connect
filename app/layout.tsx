@@ -59,16 +59,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <div className="overflow-x-hidden">
+        <div className="overflow-x-clip">
         <main className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:px-6 sm:py-8 sm:pb-8">{children}</main>
 
-        <footer className="mx-auto hidden max-w-4xl px-6 py-10 sm:block">
-          <div className="border-t border-slate-200 pt-8 text-xs text-slate-400 flex items-center justify-between gap-4">
+        <footer className="mx-auto max-w-4xl px-6 py-8 pb-24 sm:py-10 sm:pb-10">
+          <div className="border-t border-slate-200 pt-6 text-xs text-slate-400 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <span>© {new Date().getFullYear()} SingJam · Music. Community. Love.</span>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <Link href="/feedback" className="hover:text-slate-600">Report a bug</Link>
               <Link href="/privacy" className="hover:text-slate-600">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-slate-600">Terms of Service</Link>
+              <a href="https://sacredmusicfellowship.org/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600">About Us</a>
             </div>
           </div>
         </footer>

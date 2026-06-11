@@ -246,7 +246,10 @@ export default function MatchesPage() {
           <div className="grid gap-3">
             {matches.map((m: any) => {
               const fullName = [m.display_name, m.last_name].filter(Boolean).join(" ");
-              const singingVoices: string[] = m.singing_voice ? m.singing_voice.split(",").filter((v: string) => v !== "none") : [];
+              const SINGING_ORDER = ["lead", "backup"];
+              const singingVoices: string[] = m.singing_voice
+                ? m.singing_voice.split(",").filter((v: string) => v !== "none").sort((a: string, b: string) => SINGING_ORDER.indexOf(a) - SINGING_ORDER.indexOf(b))
+                : [];
               const instrumentLevels: Record<string, string> = m.instrument_levels ?? {};
               const topInstruments = Object.entries(instrumentLevels)
                 .sort(([, a], [, b]) => {
@@ -291,7 +294,7 @@ export default function MatchesPage() {
                   {(singingVoices.length > 0 || topInstruments.length > 0) && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {singingVoices.map((v: string) => (
-                        <span key={v} className="rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700">
+                        <span key={v} className={`rounded-full border px-2.5 py-0.5 text-xs ${v === 'backup' ? 'bg-violet-50 border-violet-200 text-violet-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                           {SINGING_LABEL[v] ?? v}
                         </span>
                       ))}

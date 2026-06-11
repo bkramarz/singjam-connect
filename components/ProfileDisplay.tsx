@@ -37,8 +37,9 @@ export default function ProfileDisplay({
   additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
 }) {
   const fullName = [profile.display_name, profile.last_name].filter(Boolean).join(" ");
+  const SINGING_ORDER = ["lead", "backup"];
   const singingVoices = profile.singing_voice
-    ? profile.singing_voice.split(",").filter((v) => v !== "none")
+    ? profile.singing_voice.split(",").filter((v) => v !== "none").sort((a, b) => SINGING_ORDER.indexOf(a) - SINGING_ORDER.indexOf(b))
     : [];
   const instrumentLevels = profile.instrument_levels ?? {};
   const favoriteGenres = profile.favorite_genres ?? [];
@@ -96,7 +97,7 @@ export default function ProfileDisplay({
             {singingVoices.map((v) => (
               <span
                 key={v}
-                className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm text-zinc-700"
+                className={`rounded-full border px-3 py-1 text-sm ${v === 'backup' ? 'bg-violet-50 border-violet-200 text-violet-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}
               >
                 {SINGING_LABEL[v] ?? v}
               </span>
@@ -163,9 +164,11 @@ export default function ProfileDisplay({
             <ul className="space-y-1">
               {sharedSongs.map((s) => (
                 <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
-                  {titleCounts[s.title] > 1 && s.display_artist
-                    ? `${s.title} (${s.display_artist})`
-                    : s.title}
+                  <a href={`/songs/${s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    {titleCounts[s.title] > 1 && s.display_artist
+                      ? `${s.title} (${s.display_artist})`
+                      : s.title}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -183,7 +186,9 @@ export default function ProfileDisplay({
           <ul className="space-y-1">
             {additionalSongs.map((s) => (
               <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
-                {s.title}{s.display_artist ? ` · ${s.display_artist}` : ""}
+                <a href={`/songs/${s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  {s.title}{s.display_artist ? ` · ${s.display_artist}` : ""}
+                </a>
               </li>
             ))}
           </ul>
