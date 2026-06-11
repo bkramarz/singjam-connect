@@ -1970,7 +1970,7 @@ export default function SetDetail({
                       })}
                     </ul>
                   )}
-                  {searchQuery.trim() && !searching && searchResults.length === 0 && (
+                  {searchQuery.trim() && !searching && (
                     showMissingSong ? (
                       <div className="space-y-2 rounded-xl border border-zinc-200 p-3">
                         <p className="text-sm font-medium text-zinc-700">Add a missing song</p>
@@ -2007,7 +2007,7 @@ export default function SetDetail({
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        <p className="text-xs text-zinc-400">No songs found.</p>
+                        {searchResults.length === 0 && <p className="text-xs text-zinc-400">No songs found.</p>}
                         <button
                           onClick={() => { setShowMissingSong(true); setMissingSongTitle(searchQuery.trim()); setMissingSongArtist(""); }}
                           className="text-xs text-amber-600 hover:text-amber-700 transition-colors"

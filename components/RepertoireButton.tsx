@@ -18,11 +18,13 @@ export default function RepertoireButton({
   initialConfidence,
   singingVoice = null,
   onConfidenceChange,
+  children,
 }: {
   songId: string;
   initialConfidence: string | null;
   singingVoice?: string | null;
   onConfidenceChange?: (level: string | null) => void;
+  children?: React.ReactNode;
 }) {
   const supabase = supabaseBrowser();
   const router = useRouter();
@@ -99,7 +101,7 @@ export default function RepertoireButton({
 
   if (confidence !== null) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="relative flex flex-wrap items-center gap-2">
         <select
           value={confidence}
           disabled={saving}
@@ -122,10 +124,11 @@ export default function RepertoireButton({
             <option key={l.key} value={l.key}>{l.label}</option>
           ))}
         </select>
+        {children}
         <button
           onClick={remove}
           disabled={saving}
-          className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40"
+          className="rounded-xl border border-zinc-200 px-2 py-1 text-xs text-zinc-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40"
         >
           Remove
         </button>
