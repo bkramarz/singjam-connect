@@ -50,7 +50,11 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // The leading $ excludes the home page: it serves identical anonymous
+  // HTML from the CDN cache, and routing it through middleware forces an
+  // edge-function cold start (~2s) in front of an otherwise-cached response.
+  // Session cookie refresh for signed-in visitors happens client-side there.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
