@@ -4,11 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
-
-const SINGING_LABEL: Record<string, string> = {
-  lead: "Lead vocals",
-  backup: "Backup vocals",
-};
+import { SINGING_LABEL, voiceBadgeClass } from "@/lib/singingVoice";
 
 type AttendeeData = {
   profileMap: Map<string, any>;
@@ -17,17 +13,17 @@ type AttendeeData = {
   totalGoing: number;
 };
 
-function parseTags(profile: any): { label: string; isSinging: boolean }[] {
-  const tags: { label: string; isSinging: boolean }[] = [];
+function parseTags(profile: any): { label: string; voice: "lead" | "backup" | null }[] {
+  const tags: { label: string; voice: "lead" | "backup" | null }[] = [];
   const voices: string[] = (profile?.singing_voice ?? "")
     .split(",")
     .filter((v: string) => v && v !== "none");
   for (const v of voices) {
-    if (SINGING_LABEL[v]) tags.push({ label: SINGING_LABEL[v], isSinging: v === "lead" });
+    if (SINGING_LABEL[v]) tags.push({ label: SINGING_LABEL[v], voice: v as "lead" | "backup" });
   }
   const instruments: Record<string, string> = profile?.instrument_levels ?? {};
   for (const [name, level] of Object.entries(instruments)) {
-    tags.push({ label: `${name} · ${level}`, isSinging: false });
+    tags.push({ label: `${name} · ${level}`, voice: null });
   }
   return tags;
 }
@@ -50,12 +46,10 @@ function AttendeeRow({ profile, badge }: { profile: any; badge: ReactNode }) {
       </div>
       {tags.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {tags.map(({ label, isSinging }) => (
+          {tags.map(({ label, voice }) => (
             <span
               key={label}
-              className={isSinging
-                ? "rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700"
-                : "rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-xs text-zinc-600"}
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${voiceBadgeClass(voice)}`}
             >
               {label}
             </span>

@@ -3,6 +3,7 @@ export type ProfileSong = {
   title: string;
   display_artist: string | null;
   confidence: string | null;
+  slug: string | null;
 };
 
 export async function fetchProfileSongs(
@@ -23,6 +24,7 @@ export async function fetchProfileSongs(
     title: s.title as string,
     display_artist: (s.display_artist ?? null) as string | null,
     confidence: (confidenceMap.get(s.song_id) ?? null) as string | null,
+    slug: (s.slug ?? null) as string | null,
   }));
 
   const sharedIds = new Set(sharedSongs.map((s) => s.song_id));
@@ -34,7 +36,7 @@ export async function fetchProfileSongs(
   if (additionalIds.length > 0) {
     const { data: songDetails } = await supabase
       .from("songs")
-      .select("id, title, display_artist")
+      .select("id, title, display_artist, slug")
       .in("id", additionalIds);
     additionalSongs = (songDetails ?? [])
       .map((s: any) => ({
@@ -42,6 +44,7 @@ export async function fetchProfileSongs(
         title: s.title as string,
         display_artist: (s.display_artist ?? null) as string | null,
         confidence: (confidenceMap.get(s.id) ?? null) as string | null,
+        slug: (s.slug ?? null) as string | null,
       }))
       .sort((a: ProfileSong, b: ProfileSong) => a.title.localeCompare(b.title));
   }
