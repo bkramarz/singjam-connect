@@ -23,6 +23,7 @@ export default function AuthPanel({
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signedUp, setSignedUp] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   async function resolveDestination(): Promise<string> {
     if (next) return next;
@@ -102,14 +103,18 @@ export default function AuthPanel({
     if (!email) return;
     setBusy(true);
     setStatus(null);
+    setResetSent(false);
+    // The recovery email template links to /auth/confirm with a token hash,
+    // which works even when the link is opened in a different browser or
+    // device than the one that requested the reset.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+      redirectTo: `${window.location.origin}/auth/confirm`,
     });
     setBusy(false);
     if (error) {
       setStatus(error.message);
     } else {
-      setStatus(`Password reset link sent to ${email}.`);
+      setResetSent(true);
     }
   }
 
@@ -139,7 +144,7 @@ export default function AuthPanel({
         <h2 className="text-xl font-semibold text-slate-900">Reset your password</h2>
         <p className="mt-1 text-sm text-slate-500">
           Enter your email and we'll send you a reset link.{" "}
-          <button onClick={() => { setMode("signin"); setStatus(null); }} className="text-amber-600 hover:underline">
+          <button onClick={() => { setMode("signin"); setStatus(null); setResetSent(false); }} className="text-amber-600 hover:underline">
             Back to sign in
           </button>
         </p>
@@ -161,8 +166,13 @@ export default function AuthPanel({
           >
             {busy ? "Sending…" : "Send reset link"}
           </button>
+          {resetSent && (
+            <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-100">
+              If an account exists for <strong>{email}</strong>, a password reset link is on its way. Check your spam folder if you don't see it within a couple of minutes.
+            </div>
+          )}
           {status && (
-            <div className={`rounded-lg px-4 py-3 text-sm ring-1 ${status.includes("sent") ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-red-50 text-red-600 ring-red-100"}`}>
+            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 ring-1 ring-red-100">
               {status}
             </div>
           )}
