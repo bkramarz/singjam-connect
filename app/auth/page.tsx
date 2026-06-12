@@ -13,6 +13,11 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
 
   const isSignup = mode === "signup" || !!invite;
 
+  const decodedError = error ? decodeURIComponent(error) : null;
+  const friendlyError = decodedError?.includes("code verifier")
+    ? "We couldn't verify that link. Please request a new password reset link and try again."
+    : decodedError;
+
   return (
     <div className="mx-auto max-w-md">
       {invite ? (
@@ -31,9 +36,9 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
           <p className="mt-2 text-sm text-zinc-600"><strong>Discover new music</strong> and <strong>new friends</strong>. Totally <strong>free</strong> — we&apos;ll only email you about <strong>cool music stuff</strong> 😎 🎸🥁</p>
         </>
       )}
-      {error && (
+      {friendlyError && (
         <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 ring-1 ring-red-100">
-          {decodeURIComponent(error)}
+          {friendlyError}
         </div>
       )}
       <div className="mt-4">
