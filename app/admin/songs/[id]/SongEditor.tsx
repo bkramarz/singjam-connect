@@ -1588,6 +1588,13 @@ function SortableArtistRow({
               >
                 {isSearchingSpotify ? "…" : "↺"}
               </button>
+              <button
+                type="button"
+                onClick={() => onTogglePasteSpotify(e.id)}
+                className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-green-400 hover:text-green-600"
+              >
+                Paste URL
+              </button>
             </>
           ) : spotifyNotFoundIds.has(e.id) ? (
             <>

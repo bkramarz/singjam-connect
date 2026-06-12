@@ -51,7 +51,7 @@ export default async function SetPage({
   const [setRes, songsRes, collabRes, requestsRes, profileRes] = await Promise.all([
     supabase
       .from("sets")
-      .select("id, name, description, owner_user_id, jam_id, link_sharing, youtube_playlist_id, youtube_playlist_fingerprint, spotify_playlist_id, spotify_playlist_fingerprint, profiles(display_name, last_name, username, avatar_url)")
+      .select("id, name, description, owner_user_id, jam_id, link_sharing, youtube_playlist_id, youtube_playlist_fingerprint, spotify_playlist_id, spotify_playlist_fingerprint, ultimate_guitar_playlist_url, profiles(display_name, last_name, username, avatar_url)")
       .eq("id", id)
       .single(),
     supabase
