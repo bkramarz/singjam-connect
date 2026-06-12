@@ -82,6 +82,7 @@ type SetData = {
   youtube_playlist_fingerprint: string | null;
   spotify_playlist_id: string | null;
   spotify_playlist_fingerprint: string | null;
+  ultimate_guitar_playlist_url: string | null;
   profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
 
@@ -743,6 +744,9 @@ export default function SetDetail({
     spotify: set.spotify_playlist_id ? { url: `https://open.spotify.com/playlist/${set.spotify_playlist_id}` } : undefined,
   });
   const [playlistError, setPlaylistError] = useState<"youtube" | "spotify" | null>(null);
+  const [ugPlaylistUrl, setUgPlaylistUrl] = useState<string | null>(set.ultimate_guitar_playlist_url ?? null);
+  const [editingUgPlaylist, setEditingUgPlaylist] = useState(false);
+  const [ugPlaylistInput, setUgPlaylistInput] = useState("");
   const [showMissingSong, setShowMissingSong] = useState(false);
   const [missingSongTitle, setMissingSongTitle] = useState("");
   const [missingSongArtist, setMissingSongArtist] = useState("");
@@ -1316,6 +1320,18 @@ export default function SetDetail({
     setCreatingPlaylist(null);
   }
 
+  async function handleSaveUgPlaylist() {
+    const url = ugPlaylistInput.trim() || null;
+    setUgPlaylistUrl(url);
+    setEditingUgPlaylist(false);
+    setUgPlaylistInput("");
+    fetch(`/api/sets/${set.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ultimate_guitar_playlist_url: url }),
+    });
+  }
+
   async function handleDeleteSet() {
     setDeleting(true);
     await fetch(`/api/sets/${set.id}`, { method: "DELETE" });
@@ -1789,6 +1805,86 @@ export default function SetDetail({
           <a href={playlistLinks.spotify.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-xl border border-green-200 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 transition-colors">
             <SpotifyIcon />
             Spotify playlist →
+          </a>
+        ) : null}
+
+        {isOwner ? (
+          ugPlaylistUrl ? (
+            <>
+              <div className="flex items-center rounded-xl border border-amber-200 overflow-hidden">
+                <a href={ugPlaylistUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors">
+                  <UltimateGuitarIcon />
+                  UG playlist
+                </a>
+                <button
+                  onClick={() => { setUgPlaylistInput(ugPlaylistUrl); setEditingUgPlaylist(true); }}
+                  className="px-3 py-2 text-sm text-amber-400 hover:bg-amber-50 hover:text-amber-700 transition-colors border-l border-amber-200"
+                  title="Edit URL"
+                >
+                  ✎
+                </button>
+              </div>
+              {editingUgPlaylist && (
+                <div className="basis-full flex items-center gap-2">
+                  <input
+                    autoFocus
+                    value={ugPlaylistInput}
+                    onChange={(e) => setUgPlaylistInput(e.target.value)}
+                    placeholder="https://www.ultimate-guitar.com/…"
+                    className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                  />
+                  <button
+                    onClick={handleSaveUgPlaylist}
+                    disabled={!ugPlaylistInput.trim()}
+                    className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setEditingUgPlaylist(false); setUgPlaylistInput(""); }}
+                    className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </>
+          ) : editingUgPlaylist ? (
+            <div className="basis-full flex items-center gap-2">
+              <input
+                autoFocus
+                value={ugPlaylistInput}
+                onChange={(e) => setUgPlaylistInput(e.target.value)}
+                placeholder="https://www.ultimate-guitar.com/…"
+                className="flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
+              />
+              <button
+                onClick={handleSaveUgPlaylist}
+                disabled={!ugPlaylistInput.trim()}
+                className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => { setEditingUgPlaylist(false); setUgPlaylistInput(""); }}
+                className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingUgPlaylist(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-200 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+            >
+              <UltimateGuitarIcon />
+              UG playlist
+            </button>
+          )
+        ) : ugPlaylistUrl ? (
+          <a href={ugPlaylistUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-xl border border-amber-200 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors">
+            <UltimateGuitarIcon />
+            UG playlist →
           </a>
         ) : null}
 

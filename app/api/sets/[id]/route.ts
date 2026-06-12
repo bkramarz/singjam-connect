@@ -11,7 +11,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, description, link_sharing } = body;
+  const { name, description, link_sharing, ultimate_guitar_playlist_url } = body;
 
   if (link_sharing !== undefined) {
     if (!["private", "link", "public"].includes(link_sharing)) {
@@ -20,6 +20,16 @@ export async function PATCH(
     const { error } = await supabase
       .from("sets")
       .update({ link_sharing, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("owner_user_id", user.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (ultimate_guitar_playlist_url !== undefined) {
+    const { error } = await supabase
+      .from("sets")
+      .update({ ultimate_guitar_playlist_url: ultimate_guitar_playlist_url || null, updated_at: new Date().toISOString() })
       .eq("id", id)
       .eq("owner_user_id", user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
