@@ -2,10 +2,17 @@
 //  - recovery email links to /auth/confirm with a token hash (works across
 //    browsers/devices, unlike the default PKCE confirmation URL)
 //  - branded template + subject matching our transactional emails
-//  - auth emails sent from hello@singjam.org (same sender as app emails)
+//  - with RESEND_API_KEY also set: auth emails sent via Resend SMTP from
+//    hello@singjam.org (same sender as app emails)
+//
+// The Management API treats the smtp_* fields as one bundle — PATCHing any
+// of them without the full set (host, port, user, pass, admin email) wipes
+// the custom SMTP config and silently breaks all auth email sending. So the
+// SMTP block is only included when RESEND_API_KEY is provided, and always in
+// full.
 //
 // Run AFTER the /auth/confirm route is deployed, or new reset links will 404:
-//   SUPABASE_ACCESS_TOKEN=sbp_... node scripts/update-auth-email-config.mjs
+//   SUPABASE_ACCESS_TOKEN=sbp_... RESEND_API_KEY=re_... node scripts/update-auth-email-config.mjs
 
 const PROJECT_REF = "orwkaalmfxzwifnmzvts";
 
@@ -38,6 +45,25 @@ const recoveryTemplate = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const config = {
+  mailer_subjects_recovery: "Reset your SingJam password",
+  mailer_templates_recovery_content: recoveryTemplate,
+};
+
+if (process.env.RESEND_API_KEY) {
+  Object.assign(config, {
+    smtp_host: "smtp.resend.com",
+    smtp_port: "465",
+    smtp_user: "resend",
+    smtp_pass: process.env.RESEND_API_KEY,
+    smtp_admin_email: "hello@singjam.org",
+    smtp_sender_name: "SingJam",
+    smtp_max_frequency: 60,
+  });
+} else {
+  console.log("RESEND_API_KEY not set — leaving SMTP config untouched.");
+}
+
 const res = await fetch(
   `https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth`,
   {
@@ -46,11 +72,7 @@ const res = await fetch(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      mailer_subjects_recovery: "Reset your SingJam password",
-      mailer_templates_recovery_content: recoveryTemplate,
-      smtp_admin_email: "hello@singjam.org",
-    }),
+    body: JSON.stringify(config),
   }
 );
 
