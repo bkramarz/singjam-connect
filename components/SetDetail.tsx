@@ -718,6 +718,7 @@ export default function SetDetail({
   const [addSongError, setAddSongError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [songListFilter, setSongListFilter] = useState("");
+  const [songSort, setSongSort] = useState<"custom" | "az" | "za" | "popularity">("custom");
   const [pendingSong, setPendingSong] = useState<any | null>(null);
   const { results: searchResults, loading: searching } = useSongSearch(searchQuery, { limit: 20 });
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
@@ -1102,15 +1103,26 @@ export default function SetDetail({
     })),
   ];
 
+  const sortedSongs = (() => {
+    if (songSort === "custom") return songs;
+    const copy = [...songs];
+    if (songSort === "az") return copy.sort((a, b) => a.songs.title.localeCompare(b.songs.title));
+    if (songSort === "za") return copy.sort((a, b) => b.songs.title.localeCompare(a.songs.title));
+    return copy.sort((a, b) => {
+      const score = (id: string) => songKnowledge.filter(k => k.song_id === id && (k.confidence === "lead" || k.confidence === "support")).length;
+      return score(b.song_id) - score(a.song_id);
+    });
+  })();
+
   const visibleSongs = songListFilter
-    ? songs.filter((s) => {
+    ? sortedSongs.filter((s) => {
         const q = songListFilter.toLowerCase();
         return (
           s.songs.title.toLowerCase().includes(q) ||
           (s.songs.display_artist ?? "").toLowerCase().includes(q)
         );
       })
-    : songs;
+    : sortedSongs;
 
   // Build a per-song lookup: songId → Map<userId, confidence>
   const songKnowledgeMap = new Map<string, Map<string, string>>();
@@ -1862,6 +1874,26 @@ export default function SetDetail({
               </button>
             )}
           </div>
+          <div className="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5">
+            {([
+              { value: "custom", label: "Custom order" },
+              { value: "az",     label: "A → Z" },
+              { value: "za",     label: "Z → A" },
+              { value: "popularity", label: "Popular" },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setSongSort(value)}
+                className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  songSort === value
+                    ? "bg-white text-zinc-900 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {visibleSongs.length === 0 && (
             <p className="py-4 text-center text-sm text-zinc-400">No songs match &ldquo;{songListFilter}&rdquo;</p>
           )}
@@ -1869,7 +1901,7 @@ export default function SetDetail({
         )}
 
         {songs.length > 0 && (
-          canEdit && !songListFilter ? (
+          canEdit && !songListFilter && songSort === "custom" ? (
             <DndContext id={set.id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={songs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                 {songs.map((song, i) => {
@@ -1907,8 +1939,9 @@ export default function SetDetail({
               </SortableContext>
             </DndContext>
           ) : (
-            visibleSongs.map((song) => {
+            visibleSongs.map((song, i) => {
               const originalIndex = songs.indexOf(song);
+              const displayNumber = songSort === "custom" ? originalIndex + 1 : i + 1;
               const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
               const knowledgeUserIds = new Set(knowledgeForSong.keys());
               const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
@@ -1919,7 +1952,7 @@ export default function SetDetail({
                   );
               return (
                 <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
-                  <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{originalIndex + 1}</span>
+                  <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{displayNumber}</span>
                   <SongRowContent
                     song={song}
                     index={originalIndex}
