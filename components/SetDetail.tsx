@@ -1896,7 +1896,8 @@ export default function SetDetail({
               </SortableContext>
             </DndContext>
           ) : (
-            visibleSongs.map((song, i) => {
+            visibleSongs.map((song) => {
+              const originalIndex = songs.indexOf(song);
               const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
               const knowledgeUserIds = new Set(knowledgeForSong.keys());
               const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
@@ -1907,10 +1908,10 @@ export default function SetDetail({
                   );
               return (
                 <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
-                  <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{i + 1}</span>
+                  <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{originalIndex + 1}</span>
                   <SongRowContent
                     song={song}
-                    index={i}
+                    index={originalIndex}
                     canEdit={canEdit}
                     isAdmin={isAdmin}
                     isHost={isOwner}
