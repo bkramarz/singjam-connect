@@ -28,13 +28,19 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: setId } = await params;
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  let songOrder: string[] | null = null;
+  try {
+    const body = await req.json();
+    if (Array.isArray(body.songOrder)) songOrder = body.songOrder;
+  } catch { /* no body */ }
 
   const { data: setOwner } = await supabase.from("sets").select("owner_user_id").eq("id", setId).single();
   if (!setOwner || setOwner.owner_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -47,14 +53,23 @@ export async function POST(
     admin.from("sets").select("name, spotify_playlist_id").eq("id", setId).single(),
     admin
       .from("set_songs")
-      .select("position, songs(song_recording_artists(position, spotify_url))")
+      .select("song_id, position, songs(song_recording_artists(position, spotify_url))")
       .eq("set_id", setId)
       .order("position", { ascending: true }),
   ]);
   if (!setRes.data) return NextResponse.json({ error: "Set not found" }, { status: 404 });
 
+  let orderedSongs = (songsRes.data ?? []) as any[];
+  if (songOrder?.length) {
+    orderedSongs = [...orderedSongs].sort((a, b) => {
+      const ai = songOrder!.indexOf(a.song_id);
+      const bi = songOrder!.indexOf(b.song_id);
+      return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+    });
+  }
+
   const trackUris: string[] = [];
-  for (const song of (songsRes.data ?? []) as any[]) {
+  for (const song of orderedSongs) {
     const artists = [...(song.songs?.song_recording_artists ?? [])].sort((a: any, b: any) => a.position - b.position);
     const trackId = getSpotifyTrackId(artists.find((a: any) => a.spotify_url)?.spotify_url);
     if (trackId) trackUris.push(`spotify:track:${trackId}`);
@@ -124,6 +139,6 @@ export async function POST(
     url: playlistUrl,
     fingerprint: fingerprintStr,
     added: trackUris.length,
-    total: (songsRes.data ?? []).length,
+    total: orderedSongs.length,
   });
 }
