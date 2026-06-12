@@ -33,8 +33,8 @@ export default function ProfileDisplay({
   profile: ProfileData;
   isOwner?: boolean;
   invitesEnabled?: boolean;
-  sharedSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
-  additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null }[];
+  sharedSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null; slug: string | null }[];
+  additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null; slug: string | null }[];
 }) {
   const fullName = [profile.display_name, profile.last_name].filter(Boolean).join(" ");
   const SINGING_ORDER = ["lead", "backup"];
@@ -164,7 +164,7 @@ export default function ProfileDisplay({
             <ul className="space-y-1">
               {sharedSongs.map((s) => (
                 <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
-                  <a href={`/songs/${s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  <a href={`/songs/${s.slug ?? s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
                     {titleCounts[s.title] > 1 && s.display_artist
                       ? `${s.title} (${s.display_artist})`
                       : s.title}
@@ -186,7 +186,7 @@ export default function ProfileDisplay({
           <ul className="space-y-1">
             {additionalSongs.map((s) => (
               <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
-                <a href={`/songs/${s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                <a href={`/songs/${s.slug ?? s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
                   {s.title}{s.display_artist ? ` · ${s.display_artist}` : ""}
                 </a>
               </li>
