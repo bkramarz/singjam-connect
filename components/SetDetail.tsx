@@ -715,6 +715,7 @@ export default function SetDetail({
   const [nameValue, setNameValue] = useState(set.name);
   const [descValue, setDescValue] = useState(set.description ?? "");
   const [showAddSong, setShowAddSong] = useState(false);
+  const [addSongError, setAddSongError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [songListFilter, setSongListFilter] = useState("");
   const [pendingSong, setPendingSong] = useState<any | null>(null);
@@ -976,29 +977,39 @@ export default function SetDetail({
     }
 
     setPendingSong(null);
+    setAddSongError(null);
     setSearchQuery("");
     setShowAddSong(false);
 
-    const res = await fetch(`/api/sets/${set.id}/songs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      const { song, knowledge } = await res.json();
-      setSongs((prev) => {
-        const without = prev.filter((s) => s.id !== optimisticId);
-        return [...without, song];
+    try {
+      const res = await fetch(`/api/sets/${set.id}/songs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
-      if (knowledge?.length) {
-        setSongKnowledge((prev) => [...prev, ...knowledge]);
+
+      if (res.ok) {
+        const { song, knowledge } = await res.json();
+        setSongs((prev) => {
+          const without = prev.filter((s) => s.id !== optimisticId);
+          return [...without, song];
+        });
+        if (knowledge?.length) {
+          setSongKnowledge((prev) => [...prev, ...knowledge]);
+        }
+        if (confidence) {
+          setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
+        }
+      } else {
+        if (songHint) setSongs((prev) => prev.filter((s) => s.id !== optimisticId));
+        const json = await res.json().catch(() => ({}));
+        setAddSongError(json.error === "Song already in set" ? "That song is already in this set." : "Couldn't add song — please try again.");
+        setShowAddSong(true);
       }
-      if (confidence) {
-        setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
-      }
-    } else if (songHint) {
-      setSongs((prev) => prev.filter((s) => s.id !== optimisticId));
+    } catch {
+      if (songHint) setSongs((prev) => prev.filter((s) => s.id !== optimisticId));
+      setAddSongError("Couldn't add song — check your connection and try again.");
+      setShowAddSong(true);
     }
   }
 
@@ -1941,7 +1952,7 @@ export default function SetDetail({
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-zinc-700">Add a song</p>
                 <button
-                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setPendingSong(null); setShowMissingSong(false); setMissingSongError(null); }}
+                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setPendingSong(null); setShowMissingSong(false); setMissingSongError(null); setAddSongError(null); }}
                   className="text-zinc-400 hover:text-zinc-600"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -1949,6 +1960,10 @@ export default function SetDetail({
                   </svg>
                 </button>
               </div>
+
+              {addSongError && (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{addSongError}</p>
+              )}
 
               {pendingSong ? (
                 <div className="space-y-3">
