@@ -716,6 +716,7 @@ export default function SetDetail({
   const [descValue, setDescValue] = useState(set.description ?? "");
   const [showAddSong, setShowAddSong] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [songListFilter, setSongListFilter] = useState("");
   const [pendingSong, setPendingSong] = useState<any | null>(null);
   const { results: searchResults, loading: searching } = useSongSearch(searchQuery, { limit: 20 });
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
@@ -1089,6 +1090,16 @@ export default function SetDetail({
       avatar_url: c.profiles?.avatar_url ?? null,
     })),
   ];
+
+  const visibleSongs = songListFilter
+    ? songs.filter((s) => {
+        const q = songListFilter.toLowerCase();
+        return (
+          s.songs.title.toLowerCase().includes(q) ||
+          (s.songs.display_artist ?? "").toLowerCase().includes(q)
+        );
+      })
+    : songs;
 
   // Build a per-song lookup: songId → Map<userId, confidence>
   const songKnowledgeMap = new Map<string, Map<string, string>>();
@@ -1817,7 +1828,37 @@ export default function SetDetail({
         )}
 
         {songs.length > 0 && (
-          canEdit ? (
+          <>
+          <div className="relative">
+            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Filter songs…"
+              value={songListFilter}
+              onChange={(e) => setSongListFilter(e.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm placeholder-zinc-400 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
+            />
+            {songListFilter && (
+              <button
+                onClick={() => setSongListFilter("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {visibleSongs.length === 0 && (
+            <p className="py-4 text-center text-sm text-zinc-400">No songs match &ldquo;{songListFilter}&rdquo;</p>
+          )}
+          </>
+        )}
+
+        {songs.length > 0 && (
+          canEdit && !songListFilter ? (
             <DndContext id={set.id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={songs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                 {songs.map((song, i) => {
@@ -1855,7 +1896,7 @@ export default function SetDetail({
               </SortableContext>
             </DndContext>
           ) : (
-            songs.map((song, i) => {
+            visibleSongs.map((song, i) => {
               const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
               const knowledgeUserIds = new Set(knowledgeForSong.keys());
               const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
@@ -1870,9 +1911,9 @@ export default function SetDetail({
                   <SongRowContent
                     song={song}
                     index={i}
-                    canEdit={false}
-                    isAdmin={false}
-                    isHost={false}
+                    canEdit={canEdit}
+                    isAdmin={isAdmin}
+                    isHost={isOwner}
                     isPublicViewer={isPublicViewer}
                     participants={rowParticipants}
                     hasEligible={hasEligible}
@@ -1880,9 +1921,9 @@ export default function SetDetail({
                     currentUserId={currentUserId}
                     currentUserSingingVoice={userSingingVoice}
                     inRepertoire={userRepertoire.has(song.song_id)}
-                    onMediaAdded={() => {}}
-                    onKeyChanged={() => {}}
-                    onLeadersChanged={() => {}}
+                    onMediaAdded={handleMediaAdded}
+                    onKeyChanged={handleKeyChanged}
+                    onLeadersChanged={handleLeadersChanged}
                     onAddToRepertoire={handleAddToRepertoire}
                     onVoiceUpdated={setUserSingingVoice}
                     signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
