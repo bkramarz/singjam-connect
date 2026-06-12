@@ -1644,7 +1644,14 @@ export default function SetDetail({
                   setId={set.id}
                   isOwner={isOwner}
                   alreadyCollaboratorIds={collaborators.filter((c) => c.user_id).map((c) => c.user_id!)}
-                  onCollaboratorAdded={(c) => setCollaborators((prev) => [...prev, c])}
+                  onCollaboratorAdded={(c) => setCollaborators((prev) => {
+                    if (prev.some((existing) => existing.id === c.id)) return prev;
+                    return [...prev, c].sort((a, b) => {
+                      const nameA = (a.profiles?.display_name ?? a.profiles?.username ?? "").toLowerCase();
+                      const nameB = (b.profiles?.display_name ?? b.profiles?.username ?? "").toLowerCase();
+                      return nameA.localeCompare(nameB);
+                    });
+                  })}
                 />
               </div>
             )}
