@@ -47,10 +47,15 @@ export default function SetInvitePanel({
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [linkRole, setLinkRole] = useState<"editor" | "viewer">("editor");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setCanShare(!!navigator.share);
   }, []);
+
+  useEffect(() => {
+    setAdded((prev) => new Set([...alreadyCollaboratorIds, ...prev]));
+  }, [alreadyCollaboratorIds]);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -59,10 +64,16 @@ export default function SetInvitePanel({
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
       setSearching(true);
       try {
-        const res = await fetch(`/api/users/search?q=${encodeURIComponent(query.trim())}`);
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(query.trim())}`, {
+          signal: abortRef.current.signal,
+        });
         if (res.ok) setResults(await res.json());
+      } catch (e: any) {
+        if (e?.name !== "AbortError") throw e;
       } finally {
         setSearching(false);
       }
