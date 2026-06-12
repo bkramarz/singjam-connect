@@ -5,12 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import InviteToJamButton from "@/components/InviteToJamButton";
-
-const SINGING_LABEL: Record<string, string> = {
-  lead: "Lead vocals",
-  backup: "Backup vocals",
-  none: "Doesn't sing",
-};
+import { SINGING_LABEL, voiceBadgeClass } from "@/lib/singingVoice";
 
 type UserResult = {
   id: string;
@@ -294,7 +289,7 @@ export default function MatchesPage() {
                   {(singingVoices.length > 0 || topInstruments.length > 0) && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {singingVoices.map((v: string) => (
-                        <span key={v} className={`rounded-full border px-2.5 py-0.5 text-xs ${v === 'backup' ? 'bg-violet-50 border-violet-200 text-violet-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                        <span key={v} className={`rounded-full border px-2.5 py-0.5 text-xs ${voiceBadgeClass(v as "lead" | "backup")}`}>
                           {SINGING_LABEL[v] ?? v}
                         </span>
                       ))}

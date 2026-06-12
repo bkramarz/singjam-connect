@@ -2,14 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
 import InviteToJamButton from "@/components/InviteToJamButton";
+import { SINGING_LABEL, voiceBadgeClass } from "@/lib/singingVoice";
+import type { ProfileSong } from "@/lib/fetchProfileSongs";
 
 const INSTRUMENT_LEVEL_ORDER = ["Professional", "Advanced", "Intermediate", "Beginner"];
-
-const SINGING_LABEL: Record<string, string> = {
-  lead: "Lead vocals",
-  backup: "Backup vocals",
-  none: "Doesn't sing",
-};
 
 export interface ProfileData {
   id: string;
@@ -33,8 +29,8 @@ export default function ProfileDisplay({
   profile: ProfileData;
   isOwner?: boolean;
   invitesEnabled?: boolean;
-  sharedSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null; slug: string | null }[];
-  additionalSongs?: { song_id: string; title: string; display_artist: string | null; confidence: string | null; slug: string | null }[];
+  sharedSongs?: ProfileSong[];
+  additionalSongs?: ProfileSong[];
 }) {
   const fullName = [profile.display_name, profile.last_name].filter(Boolean).join(" ");
   const SINGING_ORDER = ["lead", "backup"];
@@ -97,7 +93,7 @@ export default function ProfileDisplay({
             {singingVoices.map((v) => (
               <span
                 key={v}
-                className={`rounded-full border px-3 py-1 text-sm ${v === 'backup' ? 'bg-violet-50 border-violet-200 text-violet-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}
+                className={`rounded-full border px-3 py-1 text-sm ${voiceBadgeClass(v as "lead" | "backup")}`}
               >
                 {SINGING_LABEL[v] ?? v}
               </span>

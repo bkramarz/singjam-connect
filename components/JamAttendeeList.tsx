@@ -4,11 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
-
-const SINGING_LABEL: Record<string, string> = {
-  lead: "Lead vocals",
-  backup: "Backup vocals",
-};
+import { SINGING_LABEL, voiceBadgeClass } from "@/lib/singingVoice";
 
 type AttendeeData = {
   profileMap: Map<string, any>;
@@ -23,7 +19,7 @@ function parseTags(profile: any): { label: string; voice: "lead" | "backup" | nu
     .split(",")
     .filter((v: string) => v && v !== "none");
   for (const v of voices) {
-    if (SINGING_LABEL[v]) tags.push({ label: SINGING_LABEL[v], voice: v === "lead" ? "lead" : v === "backup" ? "backup" : null });
+    if (SINGING_LABEL[v]) tags.push({ label: SINGING_LABEL[v], voice: v as "lead" | "backup" });
   }
   const instruments: Record<string, string> = profile?.instrument_levels ?? {};
   for (const [name, level] of Object.entries(instruments)) {
@@ -53,13 +49,7 @@ function AttendeeRow({ profile, badge }: { profile: any; badge: ReactNode }) {
           {tags.map(({ label, voice }) => (
             <span
               key={label}
-              className={
-                voice === "lead"
-                  ? "rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700"
-                  : voice === "backup"
-                  ? "rounded-full bg-violet-50 border border-violet-200 px-2.5 py-0.5 text-xs text-violet-700"
-                  : "rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-xs text-zinc-600"
-              }
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${voiceBadgeClass(voice)}`}
             >
               {label}
             </span>
