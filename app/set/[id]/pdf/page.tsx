@@ -9,8 +9,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `${(data as any)?.name ?? "Set"} | PDF Builder` };
 }
 
-export default async function SetPDFPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SetPDFPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ order?: string }> }) {
   const { id } = await params;
+  const { order } = await searchParams;
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -18,7 +19,7 @@ export default async function SetPDFPage({ params }: { params: Promise<{ id: str
     supabase.from("sets").select("id, name, owner_user_id, link_sharing, profiles(display_name, username)").eq("id", id).single(),
     supabase
       .from("set_songs")
-      .select("position, key_note, leader_user_ids, songs(title, display_artist, tonality, song_recording_artists(position, youtube_url), song_composers(people(name)))")
+      .select("song_id, position, key_note, leader_user_ids, songs(title, display_artist, tonality, song_recording_artists(position, youtube_url), song_composers(people(name)))")
       .eq("set_id", id)
       .order("position", { ascending: true }),
     user
@@ -48,13 +49,13 @@ export default async function SetPDFPage({ params }: { params: Promise<{ id: str
     if (name && collab.user_id) participantMap.set(collab.user_id as string, name);
   }
 
-  const songs = (songsRes.data ?? []).map((s: any, idx: number) => {
+  let rawSongs = (songsRes.data ?? []).map((s: any) => {
     const songwriters = (s.songs?.song_composers ?? [])
       .map((sc: any) => sc.people?.name)
       .filter(Boolean) as string[];
 
     return {
-      position: idx + 1,
+      song_id: s.song_id as string,
       title: (s.songs?.title ?? "") as string,
       artist: (s.songs?.display_artist ?? null) as string | null,
       key: (s.key_note ?? null) as string | null,
@@ -65,6 +66,17 @@ export default async function SetPDFPage({ params }: { params: Promise<{ id: str
         .filter(Boolean) as string[],
     };
   });
+
+  if (order) {
+    const orderIds = order.split(",");
+    rawSongs.sort((a, b) => {
+      const ai = orderIds.indexOf(a.song_id);
+      const bi = orderIds.indexOf(b.song_id);
+      return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+    });
+  }
+
+  const songs = rawSongs.map(({ song_id: _id, ...rest }, idx) => ({ position: idx + 1, ...rest }));
 
   return <PDFBuilderLoader setName={set.name} songs={songs} />;
 }

@@ -1241,7 +1241,7 @@ export default function SetDetail({
     if (csvColumns.spotify)  headers.push("Spotify");
     if (csvColumns.chords)   headers.push("Chord Chart");
 
-    const rows = songs.map((s, i) => {
+    const rows = sortedSongs.map((s, i) => {
       const cols: (string | number)[] = [i + 1, `"${s.songs.title.replace(/"/g, '""')}"`];
       if (csvColumns.artist)   cols.push(`"${(s.songs.display_artist ?? "").replace(/"/g, '""')}"`);
       if (csvColumns.year)     cols.push(s.songs.year ?? "");
@@ -1300,7 +1300,11 @@ export default function SetDetail({
   async function handleCreatePlaylist(platform: "youtube" | "spotify") {
     setCreatingPlaylist(platform);
     setPlaylistError(null);
-    const res = await fetch(`/api/sets/${set.id}/playlists/${platform}`, { method: "POST" });
+    const res = await fetch(`/api/sets/${set.id}/playlists/${platform}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ songOrder: sortedSongs.map((s) => s.song_id) }),
+    });
     if (res.ok) {
       const data = await res.json();
       setPlaylistLinks(prev => ({ ...prev, [platform]: { url: data.url, added: data.added, total: data.total } }));
@@ -1830,7 +1834,7 @@ export default function SetDetail({
           </div>
         )}
         <a
-          href={`/set/${set.id}/pdf`}
+          href={`/set/${set.id}/pdf${songSort !== "custom" ? `?order=${sortedSongs.map((s) => s.song_id).join(",")}` : ""}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"

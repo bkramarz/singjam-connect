@@ -64,12 +64,18 @@ async function clearPlaylistItems(playlistId: string, access_token: string): Pro
 }
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: setId } = await params;
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
+
+  let songOrder: string[] | null = null;
+  try {
+    const body = await req.json();
+    if (Array.isArray(body.songOrder)) songOrder = body.songOrder;
+  } catch { /* no body */ }
 
   const access_token = await getAccessToken();
   if (!access_token) return NextResponse.json({ error: "Could not authenticate with YouTube" }, { status: 500 });
@@ -79,7 +85,7 @@ export async function POST(
     admin.from("sets").select("name, youtube_playlist_id").eq("id", setId).single(),
     admin
       .from("set_songs")
-      .select("position, songs(title, youtube_url, song_recording_artists(position, youtube_url))")
+      .select("song_id, position, songs(title, youtube_url, song_recording_artists(position, youtube_url))")
       .eq("set_id", setId)
       .order("position", { ascending: true }),
   ]);
@@ -115,7 +121,14 @@ export async function POST(
     await admin.from("sets").update({ youtube_playlist_id: playlistId }).eq("id", setId);
   }
 
-  const songs = (songsRes.data ?? []) as any[];
+  let songs = (songsRes.data ?? []) as any[];
+  if (songOrder?.length) {
+    songs = [...songs].sort((a, b) => {
+      const ai = songOrder!.indexOf(a.song_id);
+      const bi = songOrder!.indexOf(b.song_id);
+      return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+    });
+  }
   let added = 0;
   const fingerprint: string[] = [];
 
