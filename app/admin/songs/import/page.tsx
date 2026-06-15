@@ -194,6 +194,7 @@ export default function ImportCSVPage() {
               artist_id: artistId,
               year: primaryYear,
               position: 0,
+              spotify_url: data.spotify?.spotify_url ?? null,
             });
           }
         }

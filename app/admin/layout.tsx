@@ -34,6 +34,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/songs/import" className="text-slate-600 hover:text-slate-900">
             Import CSV
           </Link>
+          <Link href="/admin/songs/backfill-spotify" className="text-slate-600 hover:text-slate-900">
+            Spotify
+          </Link>
           <Link href="/admin/songs/review" className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
             Review
             {!!reviewCount && reviewCount > 0 && (
