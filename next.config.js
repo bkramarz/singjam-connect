@@ -20,7 +20,7 @@ const nextConfig = {
         // middleware may emit one when refreshing a logged-in user's session.
         source: "/",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=300, s-maxage=600, stale-while-revalidate=3600" },
+          { key: "Cache-Control", value: "public, max-age=60, s-maxage=60, stale-while-revalidate=3600" },
         ],
       },
       {

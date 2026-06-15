@@ -32,6 +32,9 @@ export default function AdminSettingsPage() {
   const [reminderSending, setReminderSending] = useState(false);
   const [reminderResult, setReminderResult] = useState<number | null>(null);
 
+  const [revalidating, setRevalidating] = useState(false);
+  const [revalidated, setRevalidated] = useState(false);
+
   useEffect(() => {
     supabase
       .from("feature_flags")
@@ -53,6 +56,14 @@ export default function AdminSettingsPage() {
     });
     setValues((prev) => ({ ...prev, [key]: enabled }));
     setSaving(null);
+  }
+
+  async function revalidateJams() {
+    setRevalidating(true);
+    setRevalidated(false);
+    await fetch("/api/admin/revalidate-jams", { method: "POST" });
+    setRevalidating(false);
+    setRevalidated(true);
   }
 
   async function sendReminders() {
@@ -116,6 +127,25 @@ export default function AdminSettingsPage() {
             );
           })}
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Upcoming events</h2>
+            <p className="text-sm text-zinc-400 mt-0.5">Flush the homepage cache after adding or editing an official event.</p>
+          </div>
+          <button
+            onClick={revalidateJams}
+            disabled={revalidating}
+            className="text-sm px-3 py-1.5 rounded-lg bg-zinc-900 text-white font-medium hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {revalidating ? "Refreshing…" : "Refresh now"}
+          </button>
+        </div>
+        {revalidated && (
+          <p className="text-sm text-zinc-500">Cache cleared — the homepage will show the latest events within a minute.</p>
+        )}
       </div>
 
       <div className="space-y-4">
