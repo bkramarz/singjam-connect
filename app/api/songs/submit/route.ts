@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   const lyricistNames: string[] = mb?.lyricists ?? [];
   const primaryYear: number | null = mb?.year ?? null;
   const langCodes: string[] = mb?.languages ?? [];
-  const primaryArtistName: string | null = mb?.display_artist ?? artist?.trim() ?? null;
+  const primaryArtistName: string | null = mb?.display_artist ?? artist?.trim() ?? enrichData.spotify?.artist ?? null;
 
   // Duplicate check using canonical values
   const normArtist = primaryArtistName ?? "";

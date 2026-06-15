@@ -305,6 +305,7 @@ async function enrichSpotify(title: string, artist: string) {
   return {
     title: track.name as string,
     artist: (track.artists?.[0]?.name ?? "") as string,
+    spotify_url: (track.external_urls?.spotify as string) ?? null,
     genres,
   };
 }
