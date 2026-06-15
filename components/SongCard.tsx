@@ -202,7 +202,7 @@ export default function SongCard({
             className="rounded-xl bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-400 transition-colors"
             onClick={() => onAdd(songId, slug)}
           >
-            + Add
+            + Add to repertoire
           </button>
         )}
         {!picking && !askingLeadVoice && (

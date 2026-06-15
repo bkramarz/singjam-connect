@@ -353,7 +353,7 @@ function SongRowContent({
                 href={signInUrl}
                 className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
               >
-                + Add to my repertoire
+                + Add to repertoire
               </a>
             ) : pickingRepertoire ? (
               <div className="mt-1.5">
@@ -370,7 +370,7 @@ function SongRowContent({
                 onClick={() => setPickingRepertoire(true)}
                 className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
               >
-                + Add to my repertoire
+                + Add to repertoire
               </button>
             )
           )}
