@@ -18,7 +18,7 @@ const getUpcomingJams = unstable_cache(
     return data ?? [];
   },
   ["upcoming-jams"],
-  { revalidate: 300 }
+  { revalidate: 60, tags: ["upcoming-jams"] }
 );
 
 export function UpcomingJamsSkeleton() {
