@@ -351,7 +351,7 @@ function SongRowContent({
             !currentUserId ? (
               <a
                 href={signInUrl}
-                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors"
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-400 transition-colors"
               >
                 + Add to my repertoire
               </a>
@@ -368,7 +368,7 @@ function SongRowContent({
             ) : (
               <button
                 onClick={() => setPickingRepertoire(true)}
-                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-400 transition-colors"
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-400 transition-colors"
               >
                 + Add to my repertoire
               </button>

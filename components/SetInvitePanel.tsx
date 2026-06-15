@@ -454,7 +454,7 @@ export default function SetInvitePanel({
               </h2>
               <p className="text-sm font-bold text-zinc-800 text-center md:text-xl flex items-center justify-center gap-2 flex-wrap">
                 Know a song? Hit
-                <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white">
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1.5 text-xs font-medium text-white">
                   + Add to my repertoire
                 </span>
               </p>
