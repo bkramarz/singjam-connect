@@ -51,8 +51,8 @@ export default async function AdminSongPage({
       supabase.from("themes").select("id, name").order("name"),
       supabase.from("cultures").select("id, name").order("name"),
       supabase.from("languages").select("id, name").order("name"),
-      supabase.from("people").select("id, name").order("name"),
-      supabase.from("artists").select("id, name").order("name"),
+      supabase.from("people").select("id, name").order("name").limit(10000),
+      supabase.from("artists").select("id, name").order("name").limit(10000),
       supabase.from("productions").select("id, name").order("name"),
     ]);
 
