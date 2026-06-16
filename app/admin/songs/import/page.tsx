@@ -64,7 +64,7 @@ export default function ImportCSVPage() {
     Promise.all([
       supabase.from("genres").select("id, name"),
       supabase.from("languages").select("id, name"),
-      supabase.from("artists").select("id, name"),
+      supabase.from("artists").select("id, name").limit(10000),
     ]).then(([g, l, a]) => {
       setAllGenres(g.data ?? []);
       setAllLanguages(l.data ?? []);
