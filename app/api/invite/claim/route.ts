@@ -17,5 +17,11 @@ export async function POST(req: Request) {
     .eq("token", token)
     .is("invited_user_id", null);
 
-  return NextResponse.json({ ok: true });
+  const { data: invite } = await admin
+    .from("jam_invites")
+    .select("jam_id")
+    .eq("token", token)
+    .maybeSingle();
+
+  return NextResponse.json({ ok: true, jamId: invite?.jam_id ?? null });
 }

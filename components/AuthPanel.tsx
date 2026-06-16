@@ -26,14 +26,17 @@ export default function AuthPanel({
   const [resetSent, setResetSent] = useState(false);
 
   async function resolveDestination(): Promise<string> {
-    if (next) return next;
+    if (next) return inviteToken ? `${next}?invite=${inviteToken}` : next;
     if (inviteToken) {
-      const { data } = await supabase
-        .from("jam_invites")
-        .select("jam_id")
-        .eq("token", inviteToken)
-        .maybeSingle();
-      if ((data as any)?.jam_id) return `/jam/${(data as any).jam_id}`;
+      // No next param — claim the invite now so we have the jam ID to redirect to.
+      // JamContent's own claim path isn't available here since the token won't be in the URL.
+      const res = await fetch("/api/invite/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: inviteToken }),
+      });
+      const { jamId } = res.ok ? await res.json() : {};
+      if (jamId) return `/jam/${jamId}`;
     }
     return "/repertoire";
   }
