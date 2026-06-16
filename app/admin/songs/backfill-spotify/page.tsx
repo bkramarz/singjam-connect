@@ -145,7 +145,16 @@ export default function BackfillSpotifyPage() {
                 const result = results[i];
                 return (
                   <tr key={`${entry.song_id}:${entry.artist_id}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-2 font-medium text-slate-800">{entry.title}</td>
+                    <td className="px-4 py-2 font-medium">
+                      <a
+                        href={`/songs/${entry.song_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-800 hover:underline"
+                      >
+                        {entry.title}
+                      </a>
+                    </td>
                     <td className="px-4 py-2 text-slate-500">{entry.artist_name}</td>
                     <td className="px-4 py-2">
                       {result?.status === "pending" && <span className="text-slate-300">—</span>}

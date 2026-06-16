@@ -23,11 +23,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-4 border-b border-slate-200 pb-4">
-        <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+      <div className="mb-6 flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:gap-4">
+        <span className="w-fit rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
           Admin
         </span>
-        <nav className="flex gap-4 text-sm">
+        <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           <Link href="/admin/songs" className="text-slate-600 hover:text-slate-900">
             Songs
           </Link>
