@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +35,33 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
   const { error } = await supabase.from("sets").update({ jam_id: jamId }).eq("id", setId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const admin = supabaseAdmin();
+  const [rsvpRes, existingCollabRes] = await Promise.all([
+    admin.from("jam_rsvps").select("user_id").eq("jam_id", jamId).eq("status", "attending"),
+    admin.from("set_collaborators").select("user_id").eq("set_id", setId),
+  ]);
+
+  const existingUserIds = new Set<string>([
+    user.id,
+    ...((existingCollabRes.data ?? []) as any[]).map((c: any) => c.user_id),
+  ]);
+
+  const attendeeIds = new Set<string>(((rsvpRes.data ?? []) as any[]).map((r: any) => r.user_id));
+  attendeeIds.add(jam.host_user_id);
+
+  const newCollaborators = [...attendeeIds].filter((uid) => !existingUserIds.has(uid));
+  if (newCollaborators.length > 0) {
+    await admin.from("set_collaborators").insert(
+      newCollaborators.map((uid) => ({
+        set_id: setId,
+        user_id: uid,
+        invited_by: user.id,
+        status: "accepted",
+        role: "editor",
+      }))
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
