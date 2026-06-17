@@ -22,8 +22,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { useSongSearch } from "@/hooks/useSongSearch";
 import SetInvitePanel from "@/components/SetInvitePanel";
+import SetSongPanel from "@/components/SetSongPanel";
 import { formatComposers } from "@/lib/formatComposers";
 import ConfidencePicker from "@/components/ConfidencePicker";
 
@@ -84,12 +84,6 @@ type SetData = {
   spotify_playlist_fingerprint: string | null;
   ultimate_guitar_playlist_url: string | null;
   profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
-};
-
-type JamSong = {
-  song_id: string;
-  title: string;
-  display_artist: string | null;
 };
 
 const CSV_COLUMN_OPTIONS = [
@@ -685,7 +679,6 @@ export default function SetDetail({
   isOwner,
   isAdmin,
   isPublicViewer = false,
-  jamSharedSongs = [],
   songKnowledge: initialSongKnowledge = [],
   canAccessJam = false,
 }: {
@@ -699,7 +692,6 @@ export default function SetDetail({
   isOwner: boolean;
   isAdmin: boolean;
   isPublicViewer?: boolean;
-  jamSharedSongs?: JamSong[];
   songKnowledge?: { user_id: string; song_id: string; confidence: string }[];
   canAccessJam?: boolean;
 }) {
@@ -715,13 +707,9 @@ export default function SetDetail({
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(set.name);
   const [descValue, setDescValue] = useState(set.description ?? "");
-  const [showAddSong, setShowAddSong] = useState(false);
-  const [addSongError, setAddSongError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [songListFilter, setSongListFilter] = useState("");
   const [songSort, setSongSort] = useState<"custom" | "az" | "za" | "popularity">("custom");
-  const [pendingSong, setPendingSong] = useState<any | null>(null);
-  const { results: searchResults, loading: searching } = useSongSearch(searchQuery, { limit: 20 });
+  const [globalSongPopularity, setGlobalSongPopularity] = useState<Map<string, number>>(new Map());
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
   const [showInvitePanel, setShowInvitePanel] = useState(false);
   const [showAllCollaborators, setShowAllCollaborators] = useState(false);
@@ -747,11 +735,6 @@ export default function SetDetail({
   const [ugPlaylistUrl, setUgPlaylistUrl] = useState<string | null>(set.ultimate_guitar_playlist_url ?? null);
   const [editingUgPlaylist, setEditingUgPlaylist] = useState(false);
   const [ugPlaylistInput, setUgPlaylistInput] = useState("");
-  const [showMissingSong, setShowMissingSong] = useState(false);
-  const [missingSongTitle, setMissingSongTitle] = useState("");
-  const [missingSongArtist, setMissingSongArtist] = useState("");
-  const [missingSongBusy, setMissingSongBusy] = useState(false);
-  const [missingSongError, setMissingSongError] = useState<string | null>(null);
   const [showCsvOptions, setShowCsvOptions] = useState(false);
   const [csvColumns, setCsvColumns] = useState<Record<CsvColumnKey, boolean>>({
     artist: true,
@@ -939,103 +922,19 @@ export default function SetDetail({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [set.id]);
 
-  async function handleSelectSong(song: any) {
-    const existing = userRepertoire.get(song.song_id);
-    if (existing) {
-      await submitAddSong(song.song_id, null, song);
-    } else {
-      setPendingSong(song);
-    }
-  }
+  const isSolo = collaborators.length === 0;
 
-  async function submitAddSong(songId: string, confidence: string | null, songHint?: { title: string; display_artist: string | null; slug?: string | null; year?: number | null }) {
-    const body: any = { songId };
-    if (confidence) body.confidence = confidence;
-
-    const optimisticId = `optimistic-${songId}`;
-
-    if (songHint) {
-      const optimistic: Song = {
-        id: optimisticId,
-        song_id: songId,
-        position: songs.length,
-        key_note: null,
-        leader_user_ids: [],
-        songs: {
-          title: songHint.title,
-          display_artist: songHint.display_artist,
-          slug: songHint.slug ?? null,
-          chord_chart_url: null,
-          youtube_url: null,
-          tonality: null,
-          year: songHint.year ?? null,
-          meter: null,
-          song_composers: [],
-          song_lyricists: [],
-          song_cultures: [],
-          song_genres: [],
-          song_themes: [],
-          song_recording_artists: [],
-        },
-      };
-      setSongs((prev) => [...prev, optimistic]);
-    }
-
-    setPendingSong(null);
-    setAddSongError(null);
-    setSearchQuery("");
-    setShowAddSong(false);
-
-    try {
-      const res = await fetch(`/api/sets/${set.id}/songs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (res.ok) {
-        const { song, knowledge } = await res.json();
-        setSongs((prev) => {
-          const without = prev.filter((s) => s.id !== optimisticId);
-          return [...without, song];
-        });
-        if (knowledge?.length) {
-          setSongKnowledge((prev) => [...prev, ...knowledge]);
-        }
-        if (confidence) {
-          setUserRepertoire((prev) => new Map(prev).set(songId, confidence));
-        }
-      } else {
-        if (songHint) setSongs((prev) => prev.filter((s) => s.id !== optimisticId));
-        const json = await res.json().catch(() => ({}));
-        setAddSongError(json.error === "Song already in set" ? "That song is already in this set." : "Couldn't add song — please try again.");
-        setShowAddSong(true);
+  useEffect(() => {
+    if (!isSolo) { setGlobalSongPopularity(new Map()); return; }
+    supabase.rpc("song_popularity_counts").then(({ data }) => {
+      const map = new Map<string, number>();
+      for (const row of (data ?? []) as any[]) {
+        map.set(row.song_id, Number(row.user_count));
       }
-    } catch {
-      if (songHint) setSongs((prev) => prev.filter((s) => s.id !== optimisticId));
-      setAddSongError("Couldn't add song — check your connection and try again.");
-      setShowAddSong(true);
-    }
-  }
-
-  async function submitMissingSong() {
-    if (!missingSongTitle.trim()) return;
-    setMissingSongBusy(true);
-    setMissingSongError(null);
-    const res = await fetch("/api/songs/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: missingSongTitle.trim(), artist: missingSongArtist.trim() }),
+      setGlobalSongPopularity(map);
     });
-    const json = await res.json();
-    setMissingSongBusy(false);
-    if ((res.status === 409 || res.ok) && json.id) {
-      setShowMissingSong(false);
-      await handleSelectSong({ song_id: json.id, title: missingSongTitle.trim(), display_artist: missingSongArtist.trim() || null });
-      return;
-    }
-    setMissingSongError(json.error ?? "Something went wrong. Please try again.");
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSolo]);
 
   async function handleAddToRepertoire(songId: string, confidence: string) {
     await supabase
@@ -1113,6 +1012,9 @@ export default function SetDetail({
     if (songSort === "az") return copy.sort((a, b) => a.songs.title.localeCompare(b.songs.title));
     if (songSort === "za") return copy.sort((a, b) => b.songs.title.localeCompare(a.songs.title));
     return copy.sort((a, b) => {
+      if (isSolo) {
+        return (globalSongPopularity.get(b.song_id) ?? 0) - (globalSongPopularity.get(a.song_id) ?? 0);
+      }
       const score = (id: string) => songKnowledge.filter(k => k.song_id === id && (k.confidence === "lead" || k.confidence === "support")).length;
       return score(b.song_id) - score(a.song_id);
     });
@@ -1976,7 +1878,7 @@ export default function SetDetail({
           </div>
           <div className="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5">
             {([
-              { value: "custom", label: "Custom order" },
+              { value: "custom", label: "Custom" },
               { value: "az",     label: "A → Z" },
               { value: "za",     label: "Z → A" },
               { value: "popularity", label: "Popular" },
@@ -2079,155 +1981,23 @@ export default function SetDetail({
           )
         )}
 
-        {canEdit && (
-          showAddSong ? (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-zinc-700">Add a song</p>
-                <button
-                  onClick={() => { setShowAddSong(false); setSearchQuery(""); setPendingSong(null); setShowMissingSong(false); setMissingSongError(null); setAddSongError(null); }}
-                  className="text-zinc-400 hover:text-zinc-600"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {addSongError && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{addSongError}</p>
-              )}
-
-              {pendingSong ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-zinc-700">
-                    How well do you know <span className="font-semibold">{pendingSong.title}</span>?
-                  </p>
-                  <ConfidencePicker
-                    variant="compact"
-                    singingVoice={userSingingVoice}
-                    onSave={(level) => submitAddSong(pendingSong.song_id, level, pendingSong)}
-                    onCancel={() => setPendingSong(null)}
-                    onVoiceUpdated={setUserSingingVoice}
-                  />
-                </div>
-              ) : (
-                <>
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setShowMissingSong(false); setMissingSongError(null); }}
-                    placeholder="Search songs…"
-                    className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                    autoFocus
-                  />
-                  {jamSharedSongs.length > 0 && !searchQuery && (
-                    <div>
-                      <p className="mb-1.5 text-xs font-medium text-zinc-500">Shared by attendees</p>
-                      <ul className="max-h-48 overflow-y-auto divide-y divide-zinc-100 rounded-xl border border-zinc-200">
-                        {jamSharedSongs.map((song) => {
-                          const alreadyAdded = songs.some((s) => s.song_id === song.song_id);
-                          return (
-                            <li key={song.song_id}>
-                              <button
-                                disabled={alreadyAdded}
-                                onClick={() => handleSelectSong(song)}
-                                className="w-full text-left px-3 py-2.5 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                              >
-                                <p className="text-sm font-medium text-zinc-900">{song.title}</p>
-                                {song.display_artist && <p className="text-xs text-zinc-500">{song.display_artist}</p>}
-                                {alreadyAdded && <p className="text-xs text-zinc-400">Already in set</p>}
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                  {searching && <p className="text-xs text-zinc-400">Searching…</p>}
-                  {searchResults.length > 0 && (
-                    <ul className="divide-y divide-zinc-100 max-h-64 overflow-y-auto rounded-xl border border-zinc-200">
-                      {searchResults.map((song: any) => {
-                        const alreadyAdded = songs.some((s) => s.song_id === song.song_id);
-                        return (
-                          <li key={song.song_id}>
-                            <button
-                              disabled={alreadyAdded}
-                              onClick={() => handleSelectSong(song)}
-                              className="w-full text-left px-3 py-2.5 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            >
-                              <p className="text-sm font-medium text-zinc-900">{song.title}</p>
-                              {song.display_artist && (
-                                <p className="text-xs text-zinc-500">{song.display_artist}</p>
-                              )}
-                              {alreadyAdded && <p className="text-xs text-zinc-400">Already in set</p>}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  {searchQuery.trim() && !searching && (
-                    showMissingSong ? (
-                      <div className="space-y-2 rounded-xl border border-zinc-200 p-3">
-                        <p className="text-sm font-medium text-zinc-700">Add a missing song</p>
-                        <input
-                          value={missingSongTitle}
-                          onChange={(e) => setMissingSongTitle(e.target.value)}
-                          placeholder="Song title"
-                          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                        />
-                        <input
-                          value={missingSongArtist}
-                          onChange={(e) => setMissingSongArtist(e.target.value)}
-                          placeholder="Recording artist (optional)"
-                          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                        />
-                        {missingSongError && <p className="text-xs text-red-500">{missingSongError}</p>}
-                        {missingSongBusy && <p className="text-xs text-zinc-400">Looking up song info — this may take a moment…</p>}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={submitMissingSong}
-                            disabled={missingSongBusy || !missingSongTitle.trim()}
-                            className="rounded-xl bg-amber-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
-                          >
-                            {missingSongBusy ? "Adding…" : "Add song"}
-                          </button>
-                          <button
-                            onClick={() => setShowMissingSong(false)}
-                            disabled={missingSongBusy}
-                            className="rounded-xl border border-zinc-200 px-4 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        {searchResults.length === 0 && <p className="text-xs text-zinc-400">No songs found.</p>}
-                        <button
-                          onClick={() => { setShowMissingSong(true); setMissingSongTitle(searchQuery.trim()); setMissingSongArtist(""); }}
-                          className="text-xs text-amber-600 hover:text-amber-700 transition-colors"
-                        >
-                          Add a missing song →
-                        </button>
-                      </div>
-                    )
-                  )}
-                </>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddSong(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-300 py-2.5 text-sm text-zinc-400 hover:border-zinc-400 hover:text-zinc-600 transition-colors"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Add song
-            </button>
-          )
+        {currentUserId && (
+          <SetSongPanel
+            setId={set.id}
+            canEdit={canEdit}
+            isSolo={isSolo}
+            currentSongIds={songs.map((s) => s.song_id)}
+            userRepertoire={userRepertoire}
+            userSingingVoice={userSingingVoice}
+            onSongAdding={(optimistic) => setSongs((prev) => [...prev, optimistic])}
+            onSongAdded={(optimisticId, song, knowledge) => {
+              setSongs((prev) => [...prev.filter((s) => s.id !== optimisticId), song]);
+              if (knowledge.length) setSongKnowledge((prev) => [...prev, ...knowledge]);
+            }}
+            onSongAddFailed={(optimisticId) => setSongs((prev) => prev.filter((s) => s.id !== optimisticId))}
+            onRepertoireUpdated={(songId, confidence) => setUserRepertoire((prev) => new Map(prev).set(songId, confidence))}
+            onVoiceUpdated={setUserSingingVoice}
+          />
         )}
       </div>
 
