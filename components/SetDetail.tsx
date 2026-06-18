@@ -731,7 +731,7 @@ export default function SetDetail({
     youtube: set.youtube_playlist_id ? { url: `https://www.youtube.com/playlist?list=${set.youtube_playlist_id}` } : undefined,
     spotify: set.spotify_playlist_id ? { url: `https://open.spotify.com/playlist/${set.spotify_playlist_id}` } : undefined,
   });
-  const [playlistError, setPlaylistError] = useState<"youtube" | "spotify" | null>(null);
+  const [playlistError, setPlaylistError] = useState<"youtube" | "spotify" | "spotify_auth_expired" | null>(null);
   const [ugPlaylistUrl, setUgPlaylistUrl] = useState<string | null>(set.ultimate_guitar_playlist_url ?? null);
   const [editingUgPlaylist, setEditingUgPlaylist] = useState(false);
   const [ugPlaylistInput, setUgPlaylistInput] = useState("");
@@ -1217,7 +1217,8 @@ export default function SetDetail({
       if (platform === "youtube") setLastSyncedYoutubeFingerprint(data.fingerprint ?? null);
       else setLastSyncedSpotifyFingerprint(data.fingerprint ?? null);
     } else {
-      setPlaylistError(platform);
+      const data = await res.json().catch(() => ({}));
+      setPlaylistError(platform === "spotify" && data.error === "spotify_auth_expired" ? "spotify_auth_expired" : platform);
     }
     setCreatingPlaylist(null);
   }
@@ -1285,7 +1286,9 @@ export default function SetDetail({
           )}
           {playlistError && (
             <p className="text-sm text-red-700">
-              Couldn&apos;t sync {playlistError === "youtube" ? "YouTube" : "Spotify"} playlist. Please try again.
+              {playlistError === "spotify_auth_expired"
+                ? "Spotify connection has expired — the site admin has been notified. Please try again later."
+                : `Couldn’t sync ${playlistError === "youtube" ? "YouTube" : "Spotify"} playlist. Please try again.`}
             </p>
           )}
         </div>
