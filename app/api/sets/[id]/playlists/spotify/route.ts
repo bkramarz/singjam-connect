@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
+import { resend, FROM_ADDRESS } from "@/lib/resend";
+import { spotifyAuthExpiredEmailHtml } from "@/emails/spotify-auth-expired";
 
 function getSpotifyTrackId(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -10,7 +12,7 @@ function getSpotifyTrackId(url: string | null | undefined): string | null {
   } catch { return null; }
 }
 
-async function getAccessToken(): Promise<string | null> {
+async function getAccessToken(): Promise<{ token: string | null; authExpired: boolean }> {
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: {
@@ -26,11 +28,41 @@ async function getAccessToken(): Promise<string | null> {
     const body = await res.json().catch(() => ({}));
     if (body.error === "invalid_grant") {
       console.error("[Spotify] Refresh token expired or revoked — re-run the OAuth flow and update SPOTIFY_REFRESH_TOKEN.");
+      return { token: null, authExpired: true };
     }
-    return null;
+    return { token: null, authExpired: false };
   }
   const { access_token } = await res.json();
-  return access_token ?? null;
+  return { token: access_token ?? null, authExpired: false };
+}
+
+async function notifyAdminOfExpiredToken() {
+  try {
+    const admin = supabaseAdmin();
+    const { data } = await admin
+      .from("system_flags")
+      .select("value")
+      .eq("key", "spotify_invalid_grant_notified_at")
+      .maybeSingle();
+    const lastNotified = data?.value ? new Date(data.value) : null;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    if (lastNotified && lastNotified > sevenDaysAgo) return;
+    await Promise.all([
+      resend.emails.send({
+        from: FROM_ADDRESS,
+        to: "music@singjam.org",
+        subject: "Action required: Spotify connection expired",
+        html: spotifyAuthExpiredEmailHtml(),
+      }),
+      admin.from("system_flags").upsert({
+        key: "spotify_invalid_grant_notified_at",
+        value: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    ]);
+  } catch (err) {
+    console.error("[Spotify] Failed to send admin notification:", err);
+  }
 }
 
 export async function POST(
@@ -51,8 +83,14 @@ export async function POST(
   const { data: setOwner } = await supabase.from("sets").select("owner_user_id").eq("id", setId).single();
   if (!setOwner || setOwner.owner_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const access_token = await getAccessToken();
-  if (!access_token) return NextResponse.json({ error: "Could not authenticate with Spotify" }, { status: 500 });
+  const { token: access_token, authExpired } = await getAccessToken();
+  if (!access_token) {
+    if (authExpired) {
+      await notifyAdminOfExpiredToken();
+      return NextResponse.json({ error: "spotify_auth_expired" }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Could not authenticate with Spotify" }, { status: 500 });
+  }
 
   const admin = supabaseAdmin();
   const [setRes, songsRes] = await Promise.all([
