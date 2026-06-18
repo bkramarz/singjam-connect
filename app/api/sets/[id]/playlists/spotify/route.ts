@@ -22,7 +22,13 @@ async function getAccessToken(): Promise<string | null> {
       refresh_token: process.env.SPOTIFY_REFRESH_TOKEN!,
     }),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (body.error === "invalid_grant") {
+      console.error("[Spotify] Refresh token expired or revoked — re-run the OAuth flow and update SPOTIFY_REFRESH_TOKEN.");
+    }
+    return null;
+  }
   const { access_token } = await res.json();
   return access_token ?? null;
 }
