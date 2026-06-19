@@ -996,7 +996,7 @@ export default function SetDetail({
   }
 
   const participants: Participant[] = [
-    ...(set.profiles ? [{ user_id: set.owner_user_id, display_name: set.profiles.display_name, last_name: null, username: set.profiles.username, avatar_url: null }] : []),
+    ...(set.profiles ? [{ user_id: set.owner_user_id, display_name: set.profiles.display_name, last_name: set.profiles.last_name ?? null, username: set.profiles.username, avatar_url: set.profiles.avatar_url ?? null }] : []),
     ...collaborators.filter((c) => c.user_id).map((c) => ({
       user_id: c.user_id!,
       display_name: c.profiles?.display_name ?? null,
