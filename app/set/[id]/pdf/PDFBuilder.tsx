@@ -117,7 +117,6 @@ type PageProps = {
   pageIndex: number;
   totalPages: number;
   setName: string;
-  dateStr: string;
 };
 
 function PageCard({ children, pageIndex, totalPages }: { children: React.ReactNode; pageIndex: number; totalPages: number }) {
@@ -133,11 +132,10 @@ function PageCard({ children, pageIndex, totalPages }: { children: React.ReactNo
   );
 }
 
-function DocHeader({ setName, dateStr, p }: { setName: string; dateStr: string; p: ReturnType<typeof ps> }) {
+function DocHeader({ setName, p }: { setName: string; p: ReturnType<typeof ps> }) {
   return (
     <div className="mb-6 pb-4 border-b border-zinc-200">
       <h2 className="font-bold text-zinc-900 leading-tight" style={{ fontSize: p.title }}>{setName}</h2>
-      <p className="text-zinc-400 mt-1" style={{ fontSize: p.label }}>{dateStr}</p>
     </div>
   );
 }
@@ -155,14 +153,14 @@ function ListColHeaders({ fields, includeNumber, showKey, keyColLabel, p }: {
   );
 }
 
-function ListPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages, setName, dateStr }: PageProps) {
+function ListPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages, setName }: PageProps) {
   const showKey = fields.has("key") || fields.has("tonality");
   const keyColLabel = fields.has("key") && fields.has("tonality") ? "Key / Tonality"
     : fields.has("key") ? "Key" : "Tonality";
 
   return (
     <PageCard pageIndex={pageIndex} totalPages={totalPages}>
-      {pageIndex === 0 && <DocHeader setName={setName} dateStr={dateStr} p={p} />}
+      {pageIndex === 0 && <DocHeader setName={setName} p={p} />}
       <ListColHeaders fields={fields} includeNumber={includeNumber} showKey={showKey} keyColLabel={keyColLabel} p={p} />
       <div style={{ fontSize: p.body }}>
         {songs.map((song) => (
@@ -212,7 +210,7 @@ function TwoColPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages
   const ordered = columnFirstOrder(songs);
   return (
     <PageCard pageIndex={pageIndex} totalPages={totalPages}>
-      {pageIndex === 0 && <DocHeader setName={setName} dateStr={dateStr} p={p} />}
+      {pageIndex === 0 && <DocHeader setName={setName} p={p} />}
       <div className="grid grid-cols-2 gap-3" style={{ fontSize: p.body }}>
         {ordered.map((song) => (
           <div key={song.position} className="border border-zinc-200 rounded-lg p-3 min-w-0">
@@ -272,9 +270,6 @@ function SetListDoc({
   layout: Layout;
   fontSize: number;
 }) {
-  const dateStr = new Date().toLocaleDateString("en-US", {
-    year: "numeric", month: "long", day: "numeric",
-  });
   const fs = fontSize;
   const showKey = fields.has("key") || fields.has("tonality");
   const showArtist = fields.has("artist");
@@ -296,7 +291,6 @@ function SetListDoc({
     // DocHeader: pb-4 border-b border-zinc-200 mb-6
     header: { paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#e4e4e7", marginBottom: 24 },
     title: { fontSize: titleFs, fontFamily: "Helvetica-Bold" },
-    date: { fontSize: lbl, color: "#999999", marginTop: 4 },
     // ListColHeaders: gap-2 pb-1.5 border-b border-zinc-200 mb-1
     colRow: { flexDirection: "row", gap: 8, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: "#e4e4e7", marginBottom: 4 },
     colLabel: { fontSize: lbl, fontFamily: "Helvetica-Bold", color: "#888888" },
@@ -352,7 +346,6 @@ function SetListDoc({
         {/* Matches DocHeader: pb-4 border-b mb-6 */}
         <View style={s.header}>
           <Text style={s.title}>{setName}</Text>
-          <Text style={s.date}>{dateStr}</Text>
         </View>
 
         {layout === "list" ? (
@@ -415,10 +408,6 @@ export default function PDFBuilder({ setName, songs }: { setName: string; songs:
   const [includeNumber, setIncludeNumber] = useState(true);
   const [fontSize, setFontSize] = useState(10);
 
-  const dateStr = new Date().toLocaleDateString("en-US", {
-    year: "numeric", month: "long", day: "numeric",
-  });
-
   function toggleField(f: Field) {
     setFields((prev) => {
       const next = new Set(prev);
@@ -469,7 +458,7 @@ export default function PDFBuilder({ setName, songs }: { setName: string; songs:
     : splitTwoColPages(songs, fields, fontSize);
 
   const p = ps(fontSize);
-  const commonProps = { fields, includeNumber, p, totalPages: pages.length, setName, dateStr };
+  const commonProps = { fields, includeNumber, p, totalPages: pages.length, setName };
 
   return (
     <div className="flex h-screen bg-zinc-200 overflow-hidden">

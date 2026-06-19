@@ -75,17 +75,16 @@ export async function DELETE(
 
   const isOwner = (set as any)?.owner_user_id === user.id;
 
-  const query = admin
-    .from("set_collaborators")
-    .delete()
-    .eq("id", inviteId);
-
   if (!isOwner) {
     // Non-owners can only cancel their own pending (unclaimed) invites
-    query.eq("invited_by", user.id).is("user_id", null);
+    await admin.from("set_collaborators").delete()
+      .eq("id", inviteId)
+      .eq("invited_by", user.id)
+      .is("user_id", null);
+  } else {
+    await admin.from("set_collaborators").delete()
+      .eq("id", inviteId);
   }
-
-  await query;
 
   return NextResponse.json({ ok: true });
 }

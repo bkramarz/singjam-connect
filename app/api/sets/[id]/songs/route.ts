@@ -8,6 +8,30 @@ export async function GET(
 ) {
   const { id: setId } = await params;
   const supabase = await supabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  const admin = supabaseAdmin();
+
+  const { data: set } = await admin
+    .from("sets")
+    .select("owner_user_id, link_sharing")
+    .eq("id", setId)
+    .maybeSingle();
+
+  if (!set) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const isOwner = user?.id === (set as any).owner_user_id;
+
+  if (!isOwner && (set as any).link_sharing !== "public") {
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { data: collab } = await admin
+      .from("set_collaborators")
+      .select("id")
+      .eq("set_id", setId)
+      .eq("user_id", user.id)
+      .eq("status", "accepted")
+      .maybeSingle();
+    if (!collab) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { data, error } = await supabase
     .from("set_songs")
