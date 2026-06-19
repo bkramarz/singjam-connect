@@ -1253,10 +1253,11 @@ export default function SetDetail({
     }
   }
 
-  const youtubeFingerprint = songs.map(s => getPrimaryYoutubeId(s.songs)).filter(Boolean).join(",");
-  const spotifyFingerprint = songs.map(s => getSpotifyTrackId(getPrimarySpotifyUrl(s.songs))).filter(Boolean).join(",");
-  const youtubeOutdated = !!playlistLinks.youtube && lastSyncedYoutubeFingerprint !== youtubeFingerprint;
-  const spotifyOutdated = !!playlistLinks.spotify && lastSyncedSpotifyFingerprint !== spotifyFingerprint;
+  const sortIds = (fp: string | null) => (fp ?? "").split(",").filter(Boolean).sort().join(",");
+  const youtubeFingerprint = sortIds(songs.map(s => getPrimaryYoutubeId(s.songs)).filter(Boolean).join(","));
+  const spotifyFingerprint = sortIds(songs.map(s => getSpotifyTrackId(getPrimarySpotifyUrl(s.songs))).filter(Boolean).join(","));
+  const youtubeOutdated = !!playlistLinks.youtube && sortIds(lastSyncedYoutubeFingerprint) !== youtubeFingerprint;
+  const spotifyOutdated = !!playlistLinks.spotify && sortIds(lastSyncedSpotifyFingerprint) !== spotifyFingerprint;
 
   const ownerFullName = [set.profiles?.display_name, set.profiles?.last_name].filter(Boolean).join(" ") || set.profiles?.username || "Unknown";
 
