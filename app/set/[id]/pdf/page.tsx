@@ -37,7 +37,11 @@ export default async function SetPDFPage({ params, searchParams }: { params: Pro
 
   const isOwner = user?.id === set.owner_user_id;
   const isCollaborator = !!authCollabRes.data;
-  if (!isOwner && !isCollaborator && set.link_sharing !== "view") redirect(`/set/${id}`);
+  if (!isOwner && !isCollaborator) {
+    if (set.link_sharing === "private") redirect(`/set/${id}`);
+    if (set.link_sharing === "link" && !user) redirect(`/set/${id}`);
+    // "public" falls through
+  }
 
   const participantMap = new Map<string, string>();
   if (set.profiles) {
