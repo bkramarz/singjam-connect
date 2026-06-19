@@ -100,7 +100,7 @@ export default async function SetPage({
       const admin = supabaseAdmin();
       const { data: existing } = await admin
         .from("set_collaborators")
-        .select("id")
+        .select("id, status")
         .eq("set_id", id)
         .eq("user_id", user.id)
         .maybeSingle();
@@ -113,6 +113,15 @@ export default async function SetPage({
           .single();
 
         if (newCollab) collaborators = sortCollaborators([...collaborators, newCollab as any]);
+      } else if ((existing as any).status === "requested") {
+        const { data: upgraded } = await admin
+          .from("set_collaborators")
+          .update({ status: "accepted", role: "viewer" })
+          .eq("id", (existing as any).id)
+          .select("id, user_id, status, role, profiles!user_id(display_name, last_name, username, avatar_url)")
+          .single();
+
+        if (upgraded) collaborators = sortCollaborators([...collaborators, upgraded as any]);
       }
     }
   }
