@@ -100,6 +100,7 @@ export default function AdminSettingsPage() {
   const usersWithIssues = (acStatus ?? []).filter(
     (s) => !s.inAC || !s.hasTag || s.missingLists.length > 0
   );
+  const usersWithUnsubscribes = (acStatus ?? []).filter((s) => s.unsubscribedLists.length > 0);
 
   return (
     <div className="space-y-10 max-w-2xl">
@@ -214,10 +215,11 @@ export default function AdminSettingsPage() {
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {acStatus.map((s) => {
-                  const clean = s.inAC && s.hasTag && s.missingLists.length === 0;
+                  const hasIssue = !s.inAC || !s.hasTag || s.missingLists.length > 0;
                   const isSyncing = resyncing.has(s.userId);
+                  const rowBg = hasIssue ? "bg-red-50" : s.unsubscribedLists.length > 0 ? "bg-amber-50" : "";
                   return (
-                    <tr key={s.userId} className={clean ? "" : "bg-red-50"}>
+                    <tr key={s.userId} className={rowBg}>
                       <td className="px-4 py-3 text-zinc-700 font-mono text-xs">{s.email}</td>
                       <td className="px-4 py-3 text-center">
                         {s.inAC ? <span className="text-green-500">✓</span> : <span className="text-red-400">✗</span>}
@@ -226,16 +228,25 @@ export default function AdminSettingsPage() {
                         {s.hasTag ? <span className="text-green-500">✓</span> : <span className="text-red-400">✗</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {s.missingLists.length === 0 ? (
+                        {s.missingLists.length === 0 && s.unsubscribedLists.length === 0 ? (
                           <span className="text-green-500">✓</span>
                         ) : (
-                          <span className="text-red-400 text-xs">
-                            missing {s.missingLists.map((id) => LIST_LABELS[id] ?? id).join(", ")}
-                          </span>
+                          <div className="flex flex-col gap-0.5 items-center">
+                            {s.missingLists.length > 0 && (
+                              <span className="text-red-400 text-xs">
+                                missing {s.missingLists.map((id) => LIST_LABELS[id] ?? id).join(", ")}
+                              </span>
+                            )}
+                            {s.unsubscribedLists.length > 0 && (
+                              <span className="text-amber-500 text-xs">
+                                unsub {s.unsubscribedLists.map((id) => LIST_LABELS[id] ?? id).join(", ")}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {!clean && (
+                        {hasIssue && (
                           <button
                             onClick={() => resync([s.userId])}
                             disabled={isSyncing}
@@ -251,7 +262,7 @@ export default function AdminSettingsPage() {
               </tbody>
             </table>
             <div className="px-4 py-3 border-t border-zinc-100 text-xs text-zinc-400">
-              {acStatus.length} users · {acStatus.filter((s) => s.inAC && s.hasTag && s.missingLists.length === 0).length} clean · {usersWithIssues.length} with issues
+              {acStatus.length} users · {acStatus.filter((s) => s.inAC && s.hasTag && s.missingLists.length === 0 && s.unsubscribedLists.length === 0).length} clean · {usersWithIssues.length} with issues{usersWithUnsubscribes.length > 0 ? ` · ${usersWithUnsubscribes.length} unsubscribed` : ""}
             </div>
           </div>
         )}

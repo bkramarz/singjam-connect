@@ -157,10 +157,23 @@ export async function syncContact(email: string, profile: ContactProfile = {}): 
     return failures;
   }
 
+  // Fetch current list memberships so we never resubscribe an explicit unsubscribe.
+  const existingLists = await acFetch(`/contacts/${contactId}/contactLists`, { method: "GET" });
+  const unsubscribedListIds = new Set<string>(
+    (existingLists?.contactLists ?? [])
+      .filter((cl: { status: string }) => cl.status === "2")
+      .map((cl: { list: string }) => cl.list)
+  );
+
+  const subscribeIfAllowed = (listId: string) =>
+    unsubscribedListIds.has(listId)
+      ? Promise.resolve(true) // skip — honour the unsubscribe
+      : acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: listId, status: 1 } }) });
+
   const [r1, r4, r9, rtag] = await Promise.all([
-    acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: "1", status: 1 } }) }),
-    acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: "4", status: 1 } }) }),
-    acFetch("/contactLists", { method: "POST", body: JSON.stringify({ contactList: { contact: contactId, list: "9", status: 1 } }) }),
+    subscribeIfAllowed("1"),
+    subscribeIfAllowed("4"),
+    subscribeIfAllowed("9"),
     acFetch("/contactTags", { method: "POST", body: JSON.stringify({ contactTag: { contact: contactId, tag: TAG_ID } }) }),
   ]);
 

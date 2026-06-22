@@ -206,7 +206,7 @@ function columnFirstOrder(songs: PDFSong[]): PDFSong[] {
   return result;
 }
 
-function TwoColPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages, setName, dateStr }: PageProps) {
+function TwoColPageCard({ songs, fields, includeNumber, p, pageIndex, totalPages, setName }: PageProps) {
   const ordered = columnFirstOrder(songs);
   return (
     <PageCard pageIndex={pageIndex} totalPages={totalPages}>
