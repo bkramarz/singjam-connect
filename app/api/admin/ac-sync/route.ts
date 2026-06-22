@@ -37,6 +37,7 @@ export type ACSyncStatus = {
   inAC: boolean;
   hasTag: boolean;
   missingLists: string[];
+  unsubscribedLists: string[];
 };
 
 export async function GET() {
@@ -59,7 +60,7 @@ export async function GET() {
       const acContact = acByEmail.get(email);
 
       if (!acContact) {
-        return { email, userId: sbUser.id, inAC: false, hasTag: false, missingLists: [...LIST_IDS] };
+        return { email, userId: sbUser.id, inAC: false, hasTag: false, missingLists: [...LIST_IDS], unsubscribedLists: [] };
       }
 
       const [tagsData, listsData] = await Promise.all([
@@ -68,18 +69,17 @@ export async function GET() {
       ]);
 
       const tagIds: string[] = (tagsData?.contactTags ?? []).map((t: { tag: string }) => t.tag);
-      const subscribedLists = new Set<string>(
-        (listsData?.contactLists ?? [])
-          .filter((cl: { status: string }) => cl.status === "1")
-          .map((cl: { list: string }) => cl.list)
-      );
+      const contactLists: { list: string; status: string }[] = listsData?.contactLists ?? [];
+      const subscribedLists = new Set<string>(contactLists.filter((cl) => cl.status === "1").map((cl) => cl.list));
+      const unsubscribedListSet = new Set<string>(contactLists.filter((cl) => cl.status === "2").map((cl) => cl.list));
 
       return {
         email,
         userId: sbUser.id,
         inAC: true,
         hasTag: tagIds.includes(SINGJAM_TAG_ID),
-        missingLists: LIST_IDS.filter((id) => !subscribedLists.has(id)),
+        missingLists: LIST_IDS.filter((id) => !subscribedLists.has(id) && !unsubscribedListSet.has(id)),
+        unsubscribedLists: LIST_IDS.filter((id) => unsubscribedListSet.has(id)),
       };
     })
   );
