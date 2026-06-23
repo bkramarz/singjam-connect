@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSongSearch } from "@/hooks/useSongSearch";
 import ConfidencePicker from "@/components/ConfidencePicker";
 import { type SharedSong, type SortMode, displayedSongs } from "@/lib/setDisplayedSongs";
+import SearchInput from "@/components/SearchInput";
 
 function WhoKnows({ s }: { s: SharedSong }) {
   const leadsSet = new Set(s.who_else_leads);
@@ -291,8 +292,7 @@ export default function SetSongPanel({
       </div>
 
       {canEdit && (
-        <input
-          type="search"
+        <SearchInput
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
@@ -300,8 +300,13 @@ export default function SetSongPanel({
             setMissingSongError(null);
             setAddError(null);
           }}
+          onClear={() => {
+            setSearchQuery("");
+            setShowMissingSong(false);
+            setMissingSongError(null);
+            setAddError(null);
+          }}
           placeholder="Search songs…"
-          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
         />
       )}
 
