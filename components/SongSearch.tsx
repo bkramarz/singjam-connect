@@ -11,6 +11,7 @@ import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 import SongCard from "@/components/SongCard";
+import SearchInput from "@/components/SearchInput";
 
 type PopularSong = {
   song_id: string;
@@ -307,10 +308,10 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       {/* Search box */}
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm space-y-3">
         <div>
-          <input
-            className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm"
+          <SearchInput
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onClear={() => setQ("")}
             placeholder="Search by title, first line, recording artist, or composer"
           />
         </div>

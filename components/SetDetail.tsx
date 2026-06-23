@@ -26,6 +26,7 @@ import SetInvitePanel from "@/components/SetInvitePanel";
 import SetSongPanel from "@/components/SetSongPanel";
 import { formatComposers } from "@/lib/formatComposers";
 import ConfidencePicker from "@/components/ConfidencePicker";
+import SearchInput from "@/components/SearchInput";
 
 const MUSICAL_KEYS = ["A", "Bb", "B", "C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab"];
 
@@ -1858,28 +1859,12 @@ export default function SetDetail({
 
         {songs.length > 0 && (
           <>
-          <div className="relative">
-            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Filter songs…"
-              value={songListFilter}
-              onChange={(e) => setSongListFilter(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm placeholder-zinc-400 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
-            />
-            {songListFilter && (
-              <button
-                onClick={() => setSongListFilter("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
+          <SearchInput
+            value={songListFilter}
+            onChange={(e) => setSongListFilter(e.target.value)}
+            onClear={() => setSongListFilter("")}
+            placeholder="Filter songs…"
+          />
           <div className="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5">
             {([
               { value: "custom", label: "Custom" },

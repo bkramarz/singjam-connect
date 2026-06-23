@@ -7,6 +7,7 @@ import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import SearchInput from "@/components/SearchInput";
 
 type Song = {
   id: string;
@@ -225,11 +226,11 @@ export default function AdminSongsTable() {
     <div className="space-y-2">
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
         <label className="block text-sm font-medium mb-1">Search</label>
-        <input
+        <SearchInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
           placeholder="Search by title, songwriter, artist, first line, or hook…"
-          className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
           autoComplete="off"
         />
         {query.trim() && (

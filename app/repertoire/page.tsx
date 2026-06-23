@@ -14,6 +14,7 @@ import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 import SongCard from "@/components/SongCard";
 import AddToSetPanel from "@/components/AddToSetPanel";
+import SearchInput from "@/components/SearchInput";
 
 const CONFIDENCE_LEVELS = [
   { key: "lead", label: "Lead" },
@@ -654,11 +655,11 @@ export default function RepertoirePage() {
       <div className="rounded-2xl border border-zinc-200 p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <input
+            <SearchInput
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onClear={() => setQuery("")}
               placeholder="Search by title, songwriter, or artist…"
-              className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
             />
           </div>
 
