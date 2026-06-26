@@ -23,6 +23,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@singjam/core": [
+        "../../packages/core/src/index.ts"
       ]
     },
     "plugins": [
