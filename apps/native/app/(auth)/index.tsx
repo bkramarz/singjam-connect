@@ -5,11 +5,16 @@ import { supabase } from '@/lib/supabase';
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit() {
+    if (mode === 'signup' && password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
     setLoading(true);
     setError(null);
     const { error } =
@@ -38,12 +43,21 @@ export default function AuthScreen() {
           onChangeText={setEmail}
         />
         <TextInput
-          className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
+          className={`border border-slate-200 rounded-lg px-4 py-3 text-slate-900 ${mode === 'signup' ? 'mb-3' : 'mb-4'}`}
           placeholder="Password"
           secureTextEntry
           value={password}
           onChangeText={setPassword}
         />
+        {mode === 'signup' && (
+          <TextInput
+            className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
+            placeholder="Confirm password"
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+        )}
 
         {error && <Text className="text-red-600 text-sm mb-3">{error}</Text>}
 
@@ -61,7 +75,7 @@ export default function AuthScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
+        <TouchableOpacity onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setConfirmPassword(''); setError(null); }}>
           <Text className="text-center text-slate-500 text-sm">
             {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
           </Text>
