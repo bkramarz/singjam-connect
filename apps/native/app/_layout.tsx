@@ -23,17 +23,29 @@ async function handleAuthDeepLink(url: string) {
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [initialised, setInitialised] = useState(false);
+  const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
+      if (session) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', session.user.id)
+          .single();
+        setProfileComplete(!!data?.display_name);
+      }
       setInitialised(true);
-    });
+    }
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (!session) setProfileComplete(null);
     });
 
     // Refresh session when app returns to foreground (mirrors web's visibilitychange handler)
@@ -56,15 +68,32 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!initialised) return;
-    const inAuthGroup = segments[0] === '(auth)';
-    if (!session && !inAuthGroup) router.replace('/(auth)');
-    if (session && inAuthGroup) router.replace('/(tabs)');
-  }, [session, initialised, segments]);
+
+    const inAuth = segments[0] === '(auth)';
+    const inSetup = segments[0] === 'setup';
+
+    if (!session) {
+      if (!inAuth) router.replace('/(auth)');
+      return;
+    }
+
+    // Still fetching profile completeness — hold
+    if (profileComplete === null) return;
+
+    // Authenticated — decide where to go from auth/setup screens only
+    // (once in tabs we don't redirect back to setup mid-session)
+    if (inAuth || inSetup) {
+      if (profileComplete) router.replace('/(tabs)');
+      else if (!inSetup) router.replace('/setup');
+    }
+  }, [session, initialised, profileComplete, segments]);
 
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="setup" options={{ headerShown: false }} />
+      <Stack.Screen name="profile-edit" options={{ presentation: 'modal', title: 'Edit Profile', headerTintColor: '#d97706' }} />
     </Stack>
   );
 }
