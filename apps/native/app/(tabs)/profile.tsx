@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Alert, Image, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 type Profile = {
