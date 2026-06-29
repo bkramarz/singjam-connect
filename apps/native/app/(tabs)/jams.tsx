@@ -41,8 +41,8 @@ export default function JamsScreen() {
         .from('jams')
         .select(`
           id, name, visibility, starts_at, ends_at, timezone,
-          neighborhood, notes, image_url, capacity, host,
-          profiles!jams_host_fkey ( display_name, username ),
+          neighborhood, notes, image_url, capacity, host_user_id,
+          profiles!host_user_id ( display_name, username ),
           jam_genres ( genres ( name ) )
         `)
         .gte('starts_at', thirtyDaysAgo.toISOString())
@@ -55,7 +55,7 @@ export default function JamsScreen() {
       supabase
         .from('jam_invites')
         .select('jam_id, status')
-        .eq('invitee_id', user.id),
+        .eq('invited_user_id', user.id),
     ]);
 
     const rsvpMap = new Map(
@@ -76,7 +76,7 @@ export default function JamsScreen() {
       notes: j.notes,
       image_url: j.image_url,
       capacity: j.capacity,
-      host_id: j.host,
+      host_id: j.host_user_id,
       host_display_name: j.profiles?.display_name ?? null,
       host_username: j.profiles?.username ?? null,
       genres: (j.jam_genres ?? []).map((jg: any) => jg.genres?.name).filter(Boolean),

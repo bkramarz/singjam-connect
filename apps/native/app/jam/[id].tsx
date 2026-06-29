@@ -89,15 +89,15 @@ export default function JamDetailScreen() {
         .from('jams')
         .select(`
           id, name, visibility, starts_at, ends_at, timezone,
-          neighborhood, full_address, notes, image_url, tickets_url, capacity, host,
-          profiles!jams_host_fkey ( display_name, username, avatar_url ),
+          neighborhood, full_address, notes, image_url, tickets_url, capacity, host_user_id,
+          profiles!host_user_id ( display_name, username, avatar_url ),
           jam_genres ( genres ( name ) )
         `)
         .eq('id', id)
         .single(),
       supabase
         .from('jam_rsvps')
-        .select('status, user_id, profiles ( display_name, username, avatar_url )')
+        .select('status, user_id, profiles!user_id ( display_name, username, avatar_url )')
         .eq('jam_id', id)
         .in('status', ['attending', 'waitlist'])
         .limit(30),
@@ -105,7 +105,7 @@ export default function JamDetailScreen() {
         .from('jam_invites')
         .select('status')
         .eq('jam_id', id)
-        .eq('invitee_id', user.id)
+        .eq('invited_user_id', user.id)
         .maybeSingle(),
     ]);
 
@@ -129,7 +129,7 @@ export default function JamDetailScreen() {
       image_url: j.image_url,
       tickets_url: j.tickets_url,
       capacity: j.capacity,
-      host_id: j.host,
+      host_id: j.host_user_id,
       host_display_name: j.profiles?.display_name ?? null,
       host_username: j.profiles?.username ?? null,
       host_avatar: j.profiles?.avatar_url ?? null,
