@@ -87,14 +87,19 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error: saveError } = await supabase.from('profiles').upsert({
-      id: user.id,
-      display_name: firstName.trim(),
-      last_name: lastName.trim() || null,
-      username: username.toLowerCase().trim(),
-      singing_voice: Array.from(singing).join(',') || null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+
+    const [{ error: saveError }] = await Promise.all([
+      supabase.from('profiles').upsert({
+        id: user.id,
+        display_name: firstName.trim(),
+        last_name: lastName.trim() || null,
+        username: username.toLowerCase().trim(),
+        singing_voice: Array.from(singing).join(',') || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' }),
+      supabase.auth.updateUser({ data: { name: firstName.trim(), full_name: fullName } }),
+    ]);
 
     setSaving(false);
     if (saveError) { setError(saveError.message); return; }
