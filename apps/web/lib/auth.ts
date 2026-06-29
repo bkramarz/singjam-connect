@@ -36,6 +36,20 @@ export async function requireRole(
   return { ok: true, supabase, user };
 }
 
+export async function requireAuth(): Promise<AuthSuccess | AuthFailure> {
+  const supabase = await supabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+  return { ok: true, supabase, user };
+}
+
 export function requireAdmin() {
   return requireRole("admin");
 }

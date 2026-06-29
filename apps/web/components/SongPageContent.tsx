@@ -53,6 +53,7 @@ function JammerRow({ label, jammers }: { label: string; jammers: { name: string;
 type SongData = {
   song: any;
   isAdmin: boolean;
+  isLoggedIn: boolean;
   singingVoice: string | null;
   userSongConfidence: string | null;
   popularity: number;
@@ -124,19 +125,21 @@ export default function SongPageContent() {
 
       const loadedConfidence = (userSongRes.data as any)?.confidence ?? null;
       const isAdmin = (profileRes.data as any)?.role === "admin";
+      const isLoggedIn = user !== null;
       setConfidence(loadedConfidence);
       setData({
         song,
         isAdmin,
+        isLoggedIn,
         singingVoice: (profileRes.data as any)?.singing_voice ?? null,
         userSongConfidence: loadedConfidence,
         popularity: popularityRes.count ?? 0,
       });
 
-      if (isAdmin) {
+      if (isLoggedIn) {
         setSongUsersLoading(true);
         try {
-          const res = await fetch(`/api/admin/songs/${song.id}/users`);
+          const res = await fetch(`/api/songs/${song.id}/users`);
           setSongUsers(await res.json());
         } finally {
           setSongUsersLoading(false);
@@ -182,7 +185,7 @@ export default function SongPageContent() {
     );
   }
 
-  const { song, isAdmin, singingVoice, userSongConfidence, popularity } = data;
+  const { song, isAdmin, isLoggedIn, singingVoice, userSongConfidence, popularity } = data;
 
   const byLastName = (a: string, b: string) => a.split(" ").at(-1)!.localeCompare(b.split(" ").at(-1)!);
   const composers = (song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean).sort(byLastName) as string[];
@@ -430,7 +433,7 @@ export default function SongPageContent() {
         </section>
       )}
 
-      {isAdmin && (
+      {isLoggedIn && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Jammers</h2>
           {songUsersLoading ? (
