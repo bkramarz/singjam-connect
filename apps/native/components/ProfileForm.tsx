@@ -98,7 +98,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
         singing_voice: Array.from(singing).join(',') || null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' }),
-      supabase.auth.updateUser({ data: { name: firstName.trim(), full_name: fullName } }),
+      supabase.auth.updateUser({ data: { name: fullName, full_name: fullName } }),
     ]);
 
     setSaving(false);
