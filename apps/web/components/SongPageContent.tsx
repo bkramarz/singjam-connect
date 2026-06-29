@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import RepertoireButton from "@/components/RepertoireButton";
@@ -70,6 +70,7 @@ export default function SongPageContent() {
   const params = useParams();
   const slug = params.slug as string;
   const router = useRouter();
+  const pathname = usePathname();
   const [data, setData] = useState<SongData | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [confidence, setConfidence] = useState<string | null>(null);
@@ -114,14 +115,14 @@ export default function SongPageContent() {
 
       const song = songRes.data;
 
-      const [profileRes, userSongRes, popularityRes] = await Promise.all([
+      const [profileRes, userSongRes, popularityJson] = await Promise.all([
         user
           ? supabase.from("profiles").select("role, singing_voice, display_name, last_name, username").eq("id", user.id).single()
           : Promise.resolve({ data: null }),
         user
           ? supabase.from("user_songs").select("confidence").eq("user_id", user.id).eq("song_id", song.id).maybeSingle()
           : Promise.resolve({ data: null }),
-        supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("song_id", song.id),
+        fetch(`/api/songs/${song.id}/count`).then((r) => r.json()),
       ]);
 
       const loadedConfidence = (userSongRes.data as any)?.confidence ?? null;
@@ -141,7 +142,7 @@ export default function SongPageContent() {
         isLoggedIn,
         singingVoice: (profileRes.data as any)?.singing_voice ?? null,
         userSongConfidence: loadedConfidence,
-        popularity: popularityRes.count ?? 0,
+        popularity: popularityJson.count ?? 0,
       });
 
       if (isLoggedIn) {
@@ -455,7 +456,7 @@ export default function SongPageContent() {
         </section>
       )}
 
-      {isLoggedIn && (
+      {isLoggedIn ? (
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Jammers</h2>
           {songUsersLoading ? (
@@ -473,6 +474,23 @@ export default function SongPageContent() {
             <p className="text-sm text-slate-400">No jammers have added this song yet.</p>
           )}
         </section>
+      ) : (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-base font-semibold text-zinc-900">
+            {popularity > 0
+              ? `${popularity} ${popularity === 1 ? "jammer knows" : "jammers know"} this song`
+              : "Find jammers who know this song"}
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            {popularity > 0 ? "Sign up to see who — and find your next jam." : "Sign up and be the first to add it."}
+          </p>
+          <Link
+            href={`/auth?next=${encodeURIComponent(pathname)}`}
+            className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500"
+          >
+            Sign in →
+          </Link>
+        </div>
       )}
 
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
