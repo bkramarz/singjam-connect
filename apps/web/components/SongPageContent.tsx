@@ -53,6 +53,7 @@ function JammerRow({ label, jammers }: { label: string; jammers: { name: string;
 type SongData = {
   song: any;
   isAdmin: boolean;
+  isLoggedIn: boolean;
   singingVoice: string | null;
   userSongConfidence: string | null;
   popularity: number;
@@ -74,6 +75,7 @@ export default function SongPageContent() {
   const [confidence, setConfidence] = useState<string | null>(null);
   const [songUsers, setSongUsers] = useState<SongUsers | null>(null);
   const [songUsersLoading, setSongUsersLoading] = useState(false);
+  const [currentUserEntry, setCurrentUserEntry] = useState<JammerEntry | null>(null);
   const [userSets, setUserSets] = useState<{ id: string; name: string }[] | null>(null);
   const [songInSets, setSongInSets] = useState<Set<string>>(new Set());
   const supabase = supabaseBrowser();
@@ -114,7 +116,7 @@ export default function SongPageContent() {
 
       const [profileRes, userSongRes, popularityRes] = await Promise.all([
         user
-          ? supabase.from("profiles").select("role, singing_voice").eq("id", user.id).single()
+          ? supabase.from("profiles").select("role, singing_voice, display_name, last_name, username").eq("id", user.id).single()
           : Promise.resolve({ data: null }),
         user
           ? supabase.from("user_songs").select("confidence").eq("user_id", user.id).eq("song_id", song.id).maybeSingle()
@@ -124,19 +126,28 @@ export default function SongPageContent() {
 
       const loadedConfidence = (userSongRes.data as any)?.confidence ?? null;
       const isAdmin = (profileRes.data as any)?.role === "admin";
+      const isLoggedIn = user !== null;
+      if (profileRes.data) {
+        const p = profileRes.data as any;
+        setCurrentUserEntry({
+          name: [p.display_name, p.last_name].filter(Boolean).join(" ") || "Unknown",
+          username: p.username ?? "",
+        });
+      }
       setConfidence(loadedConfidence);
       setData({
         song,
         isAdmin,
+        isLoggedIn,
         singingVoice: (profileRes.data as any)?.singing_voice ?? null,
         userSongConfidence: loadedConfidence,
         popularity: popularityRes.count ?? 0,
       });
 
-      if (isAdmin) {
+      if (isLoggedIn) {
         setSongUsersLoading(true);
         try {
-          const res = await fetch(`/api/admin/songs/${song.id}/users`);
+          const res = await fetch(`/api/songs/${song.id}/users`);
           setSongUsers(await res.json());
         } finally {
           setSongUsersLoading(false);
@@ -145,6 +156,20 @@ export default function SongPageContent() {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  function handleConfidenceChange(level: string | null) {
+    setConfidence(level);
+    if (!currentUserEntry) return;
+    setSongUsers((prev) => {
+      if (!prev) return prev;
+      const without = (arr: JammerEntry[]) => arr.filter((j) => j.username !== currentUserEntry.username);
+      const updated = { lead: without(prev.lead), support: without(prev.support), learn: without(prev.learn) };
+      if (level === "lead" || level === "support" || level === "learn") {
+        updated[level] = [...updated[level], currentUserEntry];
+      }
+      return updated;
+    });
+  }
 
   async function loadSetData() {
     const songId = data?.song?.id;
@@ -182,7 +207,7 @@ export default function SongPageContent() {
     );
   }
 
-  const { song, isAdmin, singingVoice, userSongConfidence, popularity } = data;
+  const { song, isAdmin, isLoggedIn, singingVoice, userSongConfidence, popularity } = data;
 
   const byLastName = (a: string, b: string) => a.split(" ").at(-1)!.localeCompare(b.split(" ").at(-1)!);
   const composers = (song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean).sort(byLastName) as string[];
@@ -234,7 +259,7 @@ export default function SongPageContent() {
             <p className="mt-1 text-sm text-slate-400">aka: {altTitles.join(" · ")}</p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence}>
+            <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={handleConfidenceChange}>
               {confidence && (
                 <AddToSetPanel
                   songId={song.id}
@@ -430,7 +455,7 @@ export default function SongPageContent() {
         </section>
       )}
 
-      {isAdmin && (
+      {isLoggedIn && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Jammers</h2>
           {songUsersLoading ? (
@@ -452,7 +477,7 @@ export default function SongPageContent() {
 
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={setConfidence}>
+          <RepertoireButton songId={song.id} initialConfidence={confidence} singingVoice={singingVoice} onConfidenceChange={handleConfidenceChange}>
             {confidence && (
               <AddToSetPanel
                 songId={song.id}
