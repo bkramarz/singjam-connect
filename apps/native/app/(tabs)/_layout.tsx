@@ -1,4 +1,13 @@
 import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function icon(outline: IoniconName, filled: IoniconName) {
+  return ({ color, focused }: { color: string; focused: boolean }) => (
+    <Ionicons name={focused ? filled : outline} size={22} color={color} />
+  );
+}
 
 export default function TabLayout() {
   return (
@@ -9,10 +18,26 @@ export default function TabLayout() {
         headerShown: false,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Repertoire' }} />
-      <Tabs.Screen name="jams" options={{ title: 'Jams' }} />
-      <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
-      <Tabs.Screen name="sets" options={{ title: 'Sets' }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'Repertoire', tabBarIcon: icon('musical-notes-outline', 'musical-notes') }}
+      />
+      <Tabs.Screen
+        name="jams"
+        options={{ title: 'Jams', tabBarIcon: icon('calendar-outline', 'calendar') }}
+      />
+      <Tabs.Screen
+        name="friends"
+        options={{ title: 'Friends', tabBarIcon: icon('people-outline', 'people') }}
+      />
+      <Tabs.Screen
+        name="sets"
+        options={{ title: 'Sets', tabBarIcon: icon('list-outline', 'list') }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{ title: 'Profile', tabBarIcon: icon('person-outline', 'person') }}
+      />
     </Tabs>
   );
 }
