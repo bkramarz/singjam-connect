@@ -63,6 +63,7 @@ function SectionHeader({ title }: { title: string }) {
 
 type Filters = {
   sortBy: SortBy;
+  hideMySongs: boolean;
   genres: Set<string>;
   cultures: Set<string>;
   languages: Set<string>;
@@ -75,6 +76,7 @@ type Filters = {
 function emptyFilters(): Filters {
   return {
     sortBy: 'popularity',
+    hideMySongs: false,
     genres: new Set(),
     cultures: new Set(),
     languages: new Set(),
@@ -87,6 +89,7 @@ function emptyFilters(): Filters {
 
 function countActiveFilters(f: Filters): number {
   return (
+    (f.hideMySongs ? 1 : 0) +
     f.genres.size +
     f.cultures.size +
     f.languages.size +
@@ -144,6 +147,17 @@ function FilterModal({
         </View>
 
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
+
+          {/* Hide my songs */}
+          <TouchableOpacity
+            onPress={() => set({ hideMySongs: !filters.hideMySongs })}
+            className="flex-row items-center justify-between py-3 border-b border-slate-100 mb-2"
+          >
+            <Text className="text-slate-900 font-medium">Hide songs I've already added</Text>
+            <View className={`w-11 h-6 rounded-full ${filters.hideMySongs ? 'bg-amber-500' : 'bg-slate-200'} items-center justify-center`}>
+              <View className={`w-5 h-5 rounded-full bg-white shadow-sm absolute ${filters.hideMySongs ? 'right-0.5' : 'left-0.5'}`} />
+            </View>
+          </TouchableOpacity>
 
           {/* Sort */}
           <SectionHeader title="Sort" />
@@ -250,7 +264,8 @@ function FilterModal({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function matchesFilters(song: SongMeta, f: Filters): boolean {
+function matchesFilters(song: SongMeta, f: Filters, myIds: Set<string>): boolean {
+  if (f.hideMySongs && myIds.has(song.song_id)) return false;
   if (f.genres.size > 0 && !song.genres.some(g => f.genres.has(g))) return false;
   if (f.cultures.size > 0 && !song.cultures.some(c => f.cultures.has(c))) return false;
   if (f.languages.size > 0 && !song.languages.some(l => f.languages.has(l))) return false;
@@ -373,9 +388,9 @@ export default function SongLibraryScreen() {
 
   const displayedSongs = useMemo(() => {
     const base = query.trim() ? searchResults : allSongs;
-    const filtered = base.filter(s => matchesFilters(s, filters));
+    const filtered = base.filter(s => matchesFilters(s, filters, myIds));
     return applySort(filtered, filters.sortBy);
-  }, [query, allSongs, searchResults, filters]);
+  }, [query, allSongs, searchResults, filters, myIds]);
 
   async function addSong(song: SongMeta, confidence: string) {
     if (!userId) return;
