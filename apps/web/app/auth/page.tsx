@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Sign In",
-  description: "Join SingJam to connect with singers and musicians through shared repertoire. Find jam partners in your community.",
+  description: "Create your SingJam account to connect with singers and musicians through shared repertoire. Find jam partners in your community.",
 };
 
 export default async function AuthPage({ searchParams }: { searchParams: Promise<{ invite?: string; next?: string; error?: string; mode?: string }> }) {
@@ -27,7 +27,7 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
         </>
       ) : isSignup ? (
         <>
-          <h1 className="text-xl font-semibold">Join SingJam</h1>
+          <h1 className="text-xl font-semibold">Create your SingJam account</h1>
           <p className="mt-2 text-sm text-zinc-600"><strong>Discover new music</strong> and <strong>new friends</strong>. Totally <strong>free</strong> — we&apos;ll only email you about <strong>cool music stuff</strong> 😎 🎸🥁</p>
         </>
       ) : (
