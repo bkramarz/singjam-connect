@@ -53,25 +53,9 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  async function handleAvatarPress() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow photo access to change your avatar.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets[0]) return;
-
+  async function uploadAvatar(asset: ImagePicker.ImagePickerAsset) {
     setUploadingAvatar(true);
     try {
-      const asset = result.assets[0];
       const ext = asset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -94,6 +78,43 @@ export default function ProfileScreen() {
     } finally {
       setUploadingAvatar(false);
     }
+  }
+
+  async function pickFromLibrary() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to change your avatar.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) await uploadAvatar(result.assets[0]);
+  }
+
+  async function takePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow camera access to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) await uploadAvatar(result.assets[0]);
+  }
+
+  function handleAvatarPress() {
+    Alert.alert('Change Photo', undefined, [
+      { text: 'Take Photo', onPress: takePhoto },
+      { text: 'Choose from Library', onPress: pickFromLibrary },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   function handleSignOut() {
