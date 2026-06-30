@@ -633,6 +633,37 @@ export default function JamDetailScreen() {
     );
   }
 
+  async function handleDuplicate() {
+    if (!jam || !myUserId) return;
+    const { data, error: insertError } = await supabase.from('jams').insert({
+      host_user_id: myUserId,
+      name: `${jam.name ?? 'Jam'} (copy)`,
+      starts_at: jam.starts_at,
+      ends_at: jam.ends_at,
+      neighborhood: jam.neighborhood,
+      full_address: jam.full_address,
+      notes: jam.notes,
+      visibility: jam.visibility === 'official' ? 'community' : jam.visibility,
+      capacity: jam.capacity,
+      timezone: jam.timezone,
+      created_at: new Date().toISOString(),
+    }).select('id').single();
+
+    if (insertError || !data?.id) { Alert.alert('Error', insertError?.message ?? 'Could not duplicate jam.'); return; }
+
+    if (jam.genres.length > 0) {
+      const { data: genreRows } = await supabase
+        .from('genres')
+        .select('id, name')
+        .in('name', jam.genres);
+      if (genreRows && genreRows.length > 0) {
+        await supabase.from('jam_genres').insert(genreRows.map((g: any) => ({ jam_id: data.id, genre_id: g.id })));
+      }
+    }
+
+    router.push({ pathname: '/jam/[id]' as any, params: { id: data.id } });
+  }
+
   const isHosting = jam.host_id === myUserId;
   const isFull = jam.capacity !== null && attendees.length >= jam.capacity;
   const timeStr = formatJamTime(jam.starts_at, jam.timezone);
@@ -655,12 +686,17 @@ export default function JamDetailScreen() {
           title: jam.name ?? 'Jam',
           headerTintColor: '#d97706',
           headerRight: isHosting ? () => (
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/jam/edit' as any, params: { id: jam.id } })}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="pencil-outline" size={20} color="#d97706" />
-            </TouchableOpacity>
+            <View className="flex-row gap-4">
+              <TouchableOpacity onPress={handleDuplicate} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="copy-outline" size={20} color="#64748b" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/jam/edit' as any, params: { id: jam.id } })}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="pencil-outline" size={20} color="#d97706" />
+              </TouchableOpacity>
+            </View>
           ) : undefined,
         }}
       />

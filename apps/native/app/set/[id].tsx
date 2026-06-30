@@ -234,10 +234,12 @@ function SongRow({
   displayPosition,
   isFirst,
   isLast,
+  myUserId,
   onRemove,
   onKeyChange,
   onMoveUp,
   onMoveDown,
+  onLeaderToggle,
 }: {
   song: SetSong;
   canEdit: boolean;
@@ -245,10 +247,12 @@ function SongRow({
   displayPosition: number;
   isFirst: boolean;
   isLast: boolean;
+  myUserId: string | null;
   onRemove: () => void;
   onKeyChange: (key: string | null) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onLeaderToggle: (newLeaderIds: string[]) => void;
 }) {
   const [keyPickerVisible, setKeyPickerVisible] = useState(false);
   const composerNames = (song.songs.song_composers ?? [])
@@ -317,6 +321,25 @@ function SongRow({
           <View className="mr-3 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50">
             <Text className="text-xs font-medium text-amber-700">{song.key_note}</Text>
           </View>
+        ) : null}
+        {canEdit && myUserId ? (
+          <TouchableOpacity
+            onPress={() => {
+              const isLeader = song.leader_user_ids.includes(myUserId);
+              const newIds = isLeader
+                ? song.leader_user_ids.filter(id => id !== myUserId)
+                : [...song.leader_user_ids, myUserId];
+              onLeaderToggle(newIds);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            className="mr-3"
+          >
+            <Ionicons
+              name={song.leader_user_ids.includes(myUserId ?? '') ? 'star' : 'star-outline'}
+              size={16}
+              color={song.leader_user_ids.includes(myUserId ?? '') ? '#d97706' : '#94a3b8'}
+            />
+          </TouchableOpacity>
         ) : null}
         {canEdit ? (
           <TouchableOpacity onPress={confirmRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -633,6 +656,15 @@ export default function SetDetailScreen() {
     setSongs((prev) => prev.map((s) => s.id === setsSongId ? { ...s, key_note: key } : s));
   }
 
+  async function handleLeaderToggle(setsSongId: string, newLeaderIds: string[]) {
+    const { error } = await supabase
+      .from('set_songs')
+      .update({ leader_user_ids: newLeaderIds })
+      .eq('id', setsSongId);
+    if (error) { Alert.alert('Error', error.message); return; }
+    setSongs((prev) => prev.map((s) => s.id === setsSongId ? { ...s, leader_user_ids: newLeaderIds } : s));
+  }
+
   async function handleSharingChange(mode: 'private' | 'link' | 'public') {
     if (!set) return;
     await supabase.from('sets').update({ link_sharing: mode }).eq('id', set.id);
@@ -803,10 +835,12 @@ export default function SetDetailScreen() {
                   displayPosition={index + 1}
                   isFirst={originalIndex === 0}
                   isLast={originalIndex === songs.length - 1}
+                  myUserId={myUserId}
                   onRemove={() => handleRemoveSong(song.id)}
                   onKeyChange={(key) => handleKeyChange(song.id, key)}
                   onMoveUp={() => handleMoveSong(originalIndex, 'up')}
                   onMoveDown={() => handleMoveSong(originalIndex, 'down')}
+                  onLeaderToggle={(newIds) => handleLeaderToggle(song.id, newIds)}
                 />
               );
             })

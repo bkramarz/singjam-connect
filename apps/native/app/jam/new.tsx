@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  ActivityIndicator, KeyboardAvoidingView, Platform, Modal, FlatList,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Modal, FlatList, Image, Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
@@ -209,6 +210,7 @@ export default function NewJamScreen() {
   const [genreModalVisible, setGenreModalVisible] = useState(false);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
 
+  const [coverAsset, setCoverAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -282,6 +284,7 @@ export default function NewJamScreen() {
     if (insertError || !data?.id) { setError(insertError?.message ?? 'Something went wrong.'); return; }
 
     const jamId = data.id;
+
     await Promise.all([
       selectedGenres.length > 0
         ? supabase.from('jam_genres').insert(selectedGenres.map(genre_id => ({ jam_id: jamId, genre_id })))
@@ -291,7 +294,36 @@ export default function NewJamScreen() {
         : Promise.resolve(),
     ]);
 
+    if (coverAsset) {
+      const ext = coverAsset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const path = `${jamId}.${ext}`;
+      const response = await fetch(coverAsset.uri);
+      const blob = await response.blob();
+      const { error: uploadError } = await supabase.storage
+        .from('jam-images')
+        .upload(path, blob, { contentType: coverAsset.mimeType ?? 'image/jpeg', upsert: true });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from('jam-images').getPublicUrl(path);
+        await supabase.from('jams').update({ image_url: publicUrl }).eq('id', jamId);
+      }
+    }
+
     router.replace({ pathname: '/jam/[id]' as any, params: { id: jamId } });
+  }
+
+  async function pickCoverImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to add a cover image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) setCoverAsset(result.assets[0]);
   }
 
   const selectedGenreNames = selectedGenres.map(id => genres.find(g => g.id === id)?.name).filter(Boolean).join(', ');
@@ -396,6 +428,26 @@ export default function NewJamScreen() {
       >
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-4 pt-4 pb-16">
+
+            {/* Cover image */}
+            <TouchableOpacity
+              onPress={pickCoverImage}
+              className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4"
+            >
+              {coverAsset ? (
+                <View>
+                  <Image source={{ uri: coverAsset.uri }} style={{ width: '100%', height: 160 }} resizeMode="cover" />
+                  <View className="absolute bottom-2 right-2 bg-black/50 rounded-full px-3 py-1">
+                    <Text className="text-white text-xs font-medium">Change</Text>
+                  </View>
+                </View>
+              ) : (
+                <View className="items-center justify-center py-8 gap-1">
+                  <Ionicons name="image-outline" size={28} color="#94a3b8" />
+                  <Text className="text-slate-400 text-sm mt-1">Add cover image (optional)</Text>
+                </View>
+              )}
+            </TouchableOpacity>
 
             {/* Name */}
             <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">
