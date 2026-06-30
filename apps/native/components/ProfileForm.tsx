@@ -300,6 +300,52 @@ function InstrumentModal({
   );
 }
 
+// ── Genre picker modal ────────────────────────────────────────────────────────
+
+function GenrePickerModal({
+  visible,
+  allGenres,
+  selected,
+  onClose,
+  onToggle,
+}: {
+  visible: boolean;
+  allGenres: string[];
+  selected: string[];
+  onClose: () => void;
+  onToggle: (genre: string) => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View className="flex-1 bg-white">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+          <View style={{ width: 48 }} />
+          <Text className="flex-1 text-center font-semibold text-slate-900">Favourite Genres</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text className="text-amber-600 font-medium">Done</Text>
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={allGenres}
+          keyExtractor={item => item}
+          renderItem={({ item }) => {
+            const checked = selected.includes(item);
+            return (
+              <TouchableOpacity
+                onPress={() => onToggle(item)}
+                className={`px-4 py-3 border-b border-slate-100 flex-row items-center justify-between ${checked ? 'bg-amber-50' : ''}`}
+              >
+                <Text className={`${checked ? 'text-amber-800 font-semibold' : 'text-slate-900'}`}>{item}</Text>
+                {checked && <Ionicons name="checkmark" size={16} color="#d97706" />}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+    </Modal>
+  );
+}
+
 // ── ProfileForm ───────────────────────────────────────────────────────────────
 
 export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Props) {
@@ -309,11 +355,14 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
   const [neighborhood, setNeighborhood] = useState('');
   const [singing, setSinging] = useState<Set<string>>(new Set());
   const [instruments, setInstruments] = useState<Record<string, string>>({});
+  const [favoriteGenres, setFavoriteGenres] = useState<string[]>([]);
+  const [allGenres, setAllGenres] = useState<string[]>([]);
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [instrumentModalVisible, setInstrumentModalVisible] = useState(false);
+  const [genrePickerVisible, setGenrePickerVisible] = useState(false);
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userId = useRef<string | null>(null);
 
@@ -322,11 +371,14 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       userId.current = user.id;
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name, last_name, username, singing_voice, neighborhood, instrument_levels')
-        .eq('id', user.id)
-        .single();
+      const [{ data }, { data: genreRows }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('display_name, last_name, username, singing_voice, neighborhood, instrument_levels, favorite_genres')
+          .eq('id', user.id)
+          .single(),
+        supabase.from('genres').select('name').order('name'),
+      ]);
       if (data?.display_name) setFirstName(data.display_name);
       if (data?.last_name) setLastName(data.last_name);
       if (data?.username) setUsername(data.username);
@@ -335,6 +387,8 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       if (data?.instrument_levels && typeof data.instrument_levels === 'object') {
         setInstruments(data.instrument_levels as Record<string, string>);
       }
+      if (data?.favorite_genres) setFavoriteGenres(data.favorite_genres as string[]);
+      setAllGenres((genreRows ?? []).map((g: any) => g.name));
     }
     load();
   }, []);
@@ -385,6 +439,12 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     setInstruments(prev => ({ ...prev, [name]: level }));
   }
 
+  function toggleFavoriteGenre(genre: string) {
+    setFavoriteGenres(prev =>
+      prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]
+    );
+  }
+
   async function handleSave() {
     setError(null);
     if (!firstName.trim()) { setError('First name is required.'); return; }
@@ -407,6 +467,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
         singing_voice: Array.from(singing).join(',') || null,
         neighborhood: neighborhood.trim() || null,
         instrument_levels: Object.keys(instruments).length > 0 ? instruments : null,
+        favorite_genres: favoriteGenres.length > 0 ? favoriteGenres : null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' }),
       supabase.auth.updateUser({ data: { name: fullName, full_name: fullName } }),
@@ -445,6 +506,13 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
         existing={instruments}
         onClose={() => setInstrumentModalVisible(false)}
         onAdd={addInstrument}
+      />
+      <GenrePickerModal
+        visible={genrePickerVisible}
+        allGenres={allGenres}
+        selected={favoriteGenres}
+        onClose={() => setGenrePickerVisible(false)}
+        onToggle={toggleFavoriteGenre}
       />
 
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -593,6 +661,34 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
               >
                 <Ionicons name="add" size={16} color="#94a3b8" />
                 <Text className="text-slate-400 font-medium ml-1 text-sm">Add instrument</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Favourite genres */}
+            <View className="mb-8">
+              <Text className="text-sm font-medium text-slate-700 mb-2">Favourite Genres</Text>
+              {favoriteGenres.length > 0 && (
+                <View className="flex-row flex-wrap gap-1.5 mb-3">
+                  {favoriteGenres.sort((a, b) => a.localeCompare(b)).map(g => (
+                    <TouchableOpacity
+                      key={g}
+                      onPress={() => toggleFavoriteGenre(g)}
+                      className="flex-row items-center bg-amber-50 border border-amber-200 rounded-full px-3 py-1"
+                    >
+                      <Text className="text-amber-800 text-sm mr-1">{g}</Text>
+                      <Ionicons name="close-circle" size={14} color="#d97706" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <TouchableOpacity
+                onPress={() => setGenrePickerVisible(true)}
+                className="border border-dashed border-slate-300 rounded-xl py-3 items-center flex-row justify-center"
+              >
+                <Ionicons name="add" size={16} color="#94a3b8" />
+                <Text className="text-slate-400 font-medium ml-1 text-sm">
+                  {favoriteGenres.length > 0 ? 'Edit genres' : 'Add genres'}
+                </Text>
               </TouchableOpacity>
             </View>
 

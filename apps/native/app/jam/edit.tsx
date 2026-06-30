@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  ActivityIndicator, KeyboardAvoidingView, Platform, Modal, FlatList, Alert,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Modal, FlatList, Alert, Image,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
@@ -219,6 +220,8 @@ export default function EditJamScreen() {
   const [genreModalVisible, setGenreModalVisible] = useState(false);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
 
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [coverAsset, setCoverAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -253,6 +256,7 @@ export default function EditJamScreen() {
       setFullAddress(isTbd ? '' : (j.full_address ?? j.neighborhood ?? ''));
       setNeighborhood(isTbd ? '' : (j.neighborhood ?? ''));
 
+      setExistingImageUrl(j.image_url ?? null);
       setGenres((genreResult.data as LookupItem[]) ?? []);
       setThemes((themeResult.data as LookupItem[]) ?? []);
       setSelectedGenres((jamGenresResult.data ?? []).map((r: any) => r.genre_id));
@@ -316,6 +320,20 @@ export default function EditJamScreen() {
         : Promise.resolve(),
     ]);
 
+    if (coverAsset) {
+      const ext = coverAsset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const path = `${id}.${ext}`;
+      const response = await fetch(coverAsset.uri);
+      const blob = await response.blob();
+      const { error: uploadError } = await supabase.storage
+        .from('jam-images')
+        .upload(path, blob, { contentType: coverAsset.mimeType ?? 'image/jpeg', upsert: true });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from('jam-images').getPublicUrl(path);
+        await supabase.from('jams').update({ image_url: publicUrl }).eq('id', id);
+      }
+    }
+
     setSaving(false);
     router.back();
   }
@@ -332,6 +350,27 @@ export default function EditJamScreen() {
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
+  }
+
+  async function pickCoverImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to change the cover image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) setCoverAsset(result.assets[0]);
+  }
+
+  async function removeCoverImage() {
+    await supabase.from('jams').update({ image_url: null }).eq('id', id);
+    setExistingImageUrl(null);
+    setCoverAsset(null);
   }
 
   const selectedGenreNames = selectedGenres.map(gid => genres.find(g => g.id === gid)?.name).filter(Boolean).join(', ');
@@ -439,6 +478,33 @@ export default function EditJamScreen() {
       >
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-4 pt-4 pb-16">
+
+            {/* Cover image */}
+            {(coverAsset || existingImageUrl) ? (
+              <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">
+                <Image
+                  source={{ uri: coverAsset?.uri ?? existingImageUrl ?? undefined }}
+                  style={{ width: '100%', height: 160 }}
+                  resizeMode="cover"
+                />
+                <View className="flex-row border-t border-slate-100">
+                  <TouchableOpacity onPress={pickCoverImage} className="flex-1 py-3 items-center border-r border-slate-100">
+                    <Text className="text-amber-600 text-sm font-medium">Change</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={removeCoverImage} className="flex-1 py-3 items-center">
+                    <Text className="text-red-500 text-sm font-medium">Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={pickCoverImage}
+                className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4 items-center justify-center py-8"
+              >
+                <Ionicons name="image-outline" size={28} color="#94a3b8" />
+                <Text className="text-slate-400 text-sm mt-1">Add cover image (optional)</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Name */}
             <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">

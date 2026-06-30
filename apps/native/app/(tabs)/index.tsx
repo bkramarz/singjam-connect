@@ -17,10 +17,11 @@ type RichUserSong = UserSong & {
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
+  popularity: number;
 };
 
 type ConfidenceFilter = 'all' | 'lead' | 'support' | 'learn';
-type SortOrder = 'title_asc' | 'title_desc' | 'recent';
+type SortOrder = 'title_asc' | 'title_desc' | 'recent' | 'popular';
 
 type ExtFilters = {
   sortBy: SortOrder;
@@ -46,6 +47,7 @@ const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
   { key: 'title_asc', label: 'A → Z' },
   { key: 'title_desc', label: 'Z → A' },
   { key: 'recent', label: 'Recent' },
+  { key: 'popular', label: 'Popular' },
 ];
 
 function emptyExtFilters(): ExtFilters {
@@ -205,24 +207,30 @@ function FilterModal({
 // ── Data loading ──────────────────────────────────────────────────────────────
 
 async function fetchRichUserSongs(userId: string): Promise<RichUserSong[]> {
-  const { data, error } = await supabase
-    .from('user_songs')
-    .select(`
-      song_id, confidence, updated_at,
-      songs (
-        title, slug, display_artist, vibe, tonality, meter,
-        song_composers ( people ( name ) ),
-        song_lyricists ( people ( name ) ),
-        song_cultures ( cultures ( name ) ),
-        song_genres ( genres ( name ) ),
-        song_languages ( languages ( name ) ),
-        song_themes ( themes ( name ) )
-      )
-    `)
-    .eq('user_id', userId)
-    .limit(1000);
+  const [{ data, error }, { data: popData }] = await Promise.all([
+    supabase
+      .from('user_songs')
+      .select(`
+        song_id, confidence, updated_at,
+        songs (
+          title, slug, display_artist, vibe, tonality, meter,
+          song_composers ( people ( name ) ),
+          song_lyricists ( people ( name ) ),
+          song_cultures ( cultures ( name ) ),
+          song_genres ( genres ( name ) ),
+          song_languages ( languages ( name ) ),
+          song_themes ( themes ( name ) )
+        )
+      `)
+      .eq('user_id', userId)
+      .limit(1000),
+    supabase.rpc('song_popularity_counts'),
+  ]);
 
   if (error) throw error;
+
+  const popularityMap = new Map<string, number>();
+  (popData ?? []).forEach((row: any) => popularityMap.set(row.song_id, Number(row.user_count)));
 
   return ((data ?? []) as any[])
     .filter(row => row.songs)
@@ -244,6 +252,7 @@ async function fetchRichUserSongs(userId: string): Promise<RichUserSong[]> {
       vibe: row.songs.vibe ?? null,
       tonality: row.songs.tonality ?? null,
       meter: row.songs.meter ?? null,
+      popularity: popularityMap.get(row.song_id) ?? 0,
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -323,6 +332,7 @@ export default function RepertoireScreen() {
       if (!b.updated_at) return -1;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
+    if (extFilters.sortBy === 'popular') return [...result].sort((a, b) => b.popularity - a.popularity);
     return result;
   }, [songs, query, confidenceFilter, extFilters]);
 
