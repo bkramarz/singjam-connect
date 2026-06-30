@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Sign In",
-  description: "Join SingJam to connect with singers and musicians through shared repertoire. Find jam partners in your community.",
+  description: "Create your SingJam account to connect with singers and musicians through shared repertoire. Find jam partners in your community.",
 };
 
 export default async function AuthPage({ searchParams }: { searchParams: Promise<{ invite?: string; next?: string; error?: string; mode?: string }> }) {

@@ -164,8 +164,8 @@ export default function SetsContent() {
           <p className="mt-2 text-sm text-zinc-500">
             Sign up to build your own sets, track your repertoire, and find jam partners who know the same songs.
           </p>
-          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
-            Sign in →
+          <Link href="/auth?mode=signup" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+            Sign up →
           </Link>
         </div>
       )}
