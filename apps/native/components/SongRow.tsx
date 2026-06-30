@@ -18,9 +18,10 @@ type Props = {
   onConfidenceChange: (songId: string, confidence: string) => void;
   onRemove: (songId: string) => void;
   onAddToSet?: (songId: string) => void;
+  onPress?: () => void;
 };
 
-export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet }: Props) {
+export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet, onPress }: Props) {
   const subtitle = [
     formatComposers(song.composers, song.cultures),
     song.display_artist,
@@ -65,7 +66,12 @@ export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet
 
   return (
     <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
-      <View className="flex-1 mr-3">
+      <TouchableOpacity
+        className="flex-1 mr-3"
+        onPress={onPress}
+        disabled={!onPress}
+        activeOpacity={onPress ? 0.6 : 1}
+      >
         <Text className="text-slate-900 font-medium" numberOfLines={1}>
           {song.title}
         </Text>
@@ -74,7 +80,7 @@ export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet
             {subtitle}
           </Text>
         ) : null}
-      </View>
+      </TouchableOpacity>
 
       <TouchableOpacity
         onPress={handleConfidenceTap}

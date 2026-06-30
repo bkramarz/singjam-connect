@@ -103,6 +103,7 @@ export default function RootLayout() {
       <Stack.Screen name="songs" options={{ title: 'Song Library', headerTintColor: '#d97706' }} />
       <Stack.Screen name="set/[id]" options={{ headerTintColor: '#d97706' }} />
       <Stack.Screen name="set/new" options={{ presentation: 'modal', title: 'New Set', headerTintColor: '#d97706' }} />
+      <Stack.Screen name="song/[id]" options={{ headerTintColor: '#d97706' }} />
     </Stack>
   );
 }

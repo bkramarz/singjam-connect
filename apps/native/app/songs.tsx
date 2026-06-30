@@ -4,7 +4,7 @@ import {
   ActivityIndicator, ActionSheetIOS, Alert, Platform,
   KeyboardAvoidingView, Modal, ScrollView,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 
@@ -285,6 +285,7 @@ function applySort(songs: SongMeta[], sortBy: SortBy): SongMeta[] {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function SongLibraryScreen() {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [allSongs, setAllSongs] = useState<SongMeta[]>([]);
   const [searchResults, setSearchResults] = useState<SongMeta[]>([]);
@@ -426,12 +427,16 @@ export default function SongLibraryScreen() {
     const pending = pendingId === item.song_id;
     return (
       <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
-        <View className="flex-1 mr-3">
+        <TouchableOpacity
+          className="flex-1 mr-3"
+          onPress={() => router.push(`/song/${item.song_id}` as any)}
+          activeOpacity={0.6}
+        >
           <Text className="text-slate-900 font-medium" numberOfLines={1}>{item.title}</Text>
           {item.display_artist ? (
             <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{item.display_artist}</Text>
           ) : null}
-        </View>
+        </TouchableOpacity>
         {added ? (
           <Text className="text-slate-400 text-sm">Added</Text>
         ) : pending ? (
