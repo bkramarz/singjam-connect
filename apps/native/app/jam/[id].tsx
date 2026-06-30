@@ -3,7 +3,8 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Image,
 } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { formatJamTime } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 
@@ -65,6 +66,7 @@ function InfoRow({ icon, children }: { icon: string; children: React.ReactNode }
 
 export default function JamDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const [jam, setJam] = useState<JamDetail | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [myRsvpStatus, setMyRsvpStatus] = useState<string | null>(null);
@@ -246,7 +248,20 @@ export default function JamDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: jam.name ?? 'Jam', headerTintColor: '#d97706' }} />
+      <Stack.Screen
+        options={{
+          title: jam.name ?? 'Jam',
+          headerTintColor: '#d97706',
+          headerRight: isHosting ? () => (
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/jam/edit' as any, params: { id: jam.id } })}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="pencil-outline" size={20} color="#d97706" />
+            </TouchableOpacity>
+          ) : undefined,
+        }}
+      />
       <ScrollView className="flex-1 bg-white">
 
         {/* Header image or date block */}
