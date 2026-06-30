@@ -153,7 +153,7 @@ function FilterModal({
             onPress={() => set({ hideMySongs: !filters.hideMySongs })}
             className="flex-row items-center justify-between py-3 border-b border-slate-100 mb-2"
           >
-            <Text className="text-slate-900 font-medium">Hide songs I've already added</Text>
+            <Text className="text-slate-900 font-medium">Hide my songs</Text>
             <View className={`w-11 h-6 rounded-full ${filters.hideMySongs ? 'bg-amber-500' : 'bg-slate-200'} items-center justify-center`}>
               <View className={`w-5 h-5 rounded-full bg-white shadow-sm absolute ${filters.hideMySongs ? 'right-0.5' : 'left-0.5'}`} />
             </View>
