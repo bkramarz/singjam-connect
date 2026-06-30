@@ -95,6 +95,8 @@ export default function RootLayout() {
       <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="profile-edit" options={{ presentation: 'modal', title: 'Edit Profile', headerTintColor: '#d97706' }} />
       <Stack.Screen name="jam/[id]" options={{ headerTintColor: '#d97706' }} />
+      <Stack.Screen name="set/[id]" options={{ headerTintColor: '#d97706' }} />
+      <Stack.Screen name="set/new" options={{ presentation: 'modal', title: 'New Set', headerTintColor: '#d97706' }} />
     </Stack>
   );
 }

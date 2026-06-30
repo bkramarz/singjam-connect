@@ -2,13 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   ActivityIndicator, KeyboardAvoidingView, Platform,
+  Modal, FlatList,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+
+const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 
 const RESERVED = new Set(['admin', 'support', 'help', 'singjam', 'sing', 'jam', 'connect', 'api', 'www', 'mail']);
 const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+
+type PlaceSuggestion = { description: string; placeId: string };
 
 type Props = {
   title: string;
@@ -17,14 +22,123 @@ type Props = {
   onSave: () => void;
 };
 
+function LocationModal({
+  visible,
+  initial,
+  onClose,
+  onSelect,
+}: {
+  visible: boolean;
+  initial: string;
+  onClose: () => void;
+  onSelect: (value: string) => void;
+}) {
+  const [query, setQuery] = useState(initial);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [searching, setSearching] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (visible) setQuery(initial);
+  }, [visible, initial]);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    if (query.trim().length < 2) { setSuggestions([]); return; }
+    timer.current = setTimeout(() => fetchSuggestions(query.trim()), 300);
+  }, [query]);
+
+  async function fetchSuggestions(q: string) {
+    setSearching(true);
+    try {
+      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(q)}&key=${PLACES_KEY}&types=(cities)&language=en`;
+      const res = await fetch(url);
+      const json = await res.json();
+      setSuggestions(
+        (json.predictions ?? []).map((p: any) => ({
+          description: p.description,
+          placeId: p.place_id,
+        }))
+      );
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-slate-100">
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text className="text-amber-600 font-medium">Cancel</Text>
+          </TouchableOpacity>
+          <Text className="flex-1 text-center font-semibold text-slate-900">Your Location</Text>
+          <View style={{ width: 50 }} />
+        </View>
+
+        <View className="px-4 py-3 border-b border-slate-100">
+          <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
+            <Text className="text-slate-400 mr-2">🔍</Text>
+            <TextInput
+              className="flex-1 text-slate-900"
+              placeholder="Search city or neighborhood…"
+              placeholderTextColor="#94a3b8"
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+              autoCapitalize="words"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
+                <Text className="text-slate-400 ml-2">✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {searching ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color="#d97706" />
+          </View>
+        ) : (
+          <FlatList
+            data={suggestions}
+            keyExtractor={(item) => item.placeId}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => { onSelect(item.description); onClose(); }}
+                className="px-4 py-3 border-b border-slate-100"
+              >
+                <Text className="text-slate-900">📍 {item.description}</Text>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              query.length >= 2 ? (
+                <View className="items-center justify-center pt-12">
+                  <Text className="text-slate-400">No results found</Text>
+                </View>
+              ) : null
+            }
+          />
+        )}
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Props) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [singing, setSinging] = useState<Set<string>>(new Set());
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userId = useRef<string | null>(null);
 
@@ -35,12 +149,13 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       userId.current = user.id;
       const { data } = await supabase
         .from('profiles')
-        .select('display_name, last_name, username, singing_voice')
+        .select('display_name, last_name, username, singing_voice, neighborhood')
         .eq('id', user.id)
         .single();
       if (data?.display_name) setFirstName(data.display_name);
       if (data?.last_name) setLastName(data.last_name);
       if (data?.username) setUsername(data.username);
+      if (data?.neighborhood) setNeighborhood(data.neighborhood);
       if (data?.singing_voice) setSinging(new Set(data.singing_voice.split(',').filter(Boolean)));
     }
     load();
@@ -96,6 +211,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
         last_name: lastName.trim() || null,
         username: username.toLowerCase().trim(),
         singing_voice: Array.from(singing).join(',') || null,
+        neighborhood: neighborhood.trim() || null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' }),
       supabase.auth.updateUser({ data: { name: fullName, full_name: fullName } }),
@@ -120,104 +236,135 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     'text-slate-400';
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-        <View className="px-6 pt-16 pb-10">
-          <Text className="text-3xl font-bold text-slate-900 mb-1">{title}</Text>
-          <Text className="text-slate-400 mb-8">{subtitle}</Text>
+    <>
+      <LocationModal
+        visible={locationModalVisible}
+        initial={neighborhood}
+        onClose={() => setLocationModalVisible(false)}
+        onSelect={setNeighborhood}
+      />
 
-          {/* Name row */}
-          <View className="flex-row mb-4">
-            <View className="flex-1 mr-2">
-              <Text className="text-sm font-medium text-slate-700 mb-1">First name</Text>
-              <TextInput
-                className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
-                placeholder="Jane"
-                value={firstName}
-                onChangeText={setFirstName}
-                autoCapitalize="words"
-              />
-            </View>
-            <View className="flex-1 ml-2">
-              <Text className="text-sm font-medium text-slate-700 mb-1">Last name</Text>
-              <TextInput
-                className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
-                placeholder="Smith"
-                value={lastName}
-                onChangeText={setLastName}
-                autoCapitalize="words"
-              />
-            </View>
-          </View>
+      <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+          <View className="px-6 pt-16 pb-10">
+            <Text className="text-3xl font-bold text-slate-900 mb-1">{title}</Text>
+            <Text className="text-slate-400 mb-8">{subtitle}</Text>
 
-          {/* Username */}
-          <View className="mb-4">
-            <Text className="text-sm font-medium text-slate-700 mb-1">Username</Text>
-            <View className="flex-row items-center border border-slate-200 rounded-xl px-4 py-3">
-              <Text className="text-slate-400 mr-1">@</Text>
-              <TextInput
-                className="flex-1 text-slate-900"
-                placeholder="yourname"
-                value={username}
-                onChangeText={handleUsernameChange}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {usernameStatus === 'checking' && <ActivityIndicator size="small" color="#94a3b8" />}
+            {/* Name row */}
+            <View className="flex-row mb-4">
+              <View className="flex-1 mr-2">
+                <Text className="text-sm font-medium text-slate-700 mb-1">First name</Text>
+                <TextInput
+                  className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                  placeholder="Jane"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoCapitalize="words"
+                />
+              </View>
+              <View className="flex-1 ml-2">
+                <Text className="text-sm font-medium text-slate-700 mb-1">Last name</Text>
+                <TextInput
+                  className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                  placeholder="Smith"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  autoCapitalize="words"
+                />
+              </View>
             </View>
-            {usernameHint ? (
-              <Text className={`text-xs mt-1 ${usernameHintColor}`}>{usernameHint}</Text>
-            ) : null}
-          </View>
 
-          {/* Singing voice */}
-          <View className="mb-8">
-            <Text className="text-sm font-medium text-slate-700 mb-2">Singing</Text>
-            <View className="flex-row mb-3">
-              {(['lead', 'backup'] as const).map((voice, i) => {
-                const active = singing.has(voice);
-                return (
+            {/* Username */}
+            <View className="mb-4">
+              <Text className="text-sm font-medium text-slate-700 mb-1">Username</Text>
+              <View className="flex-row items-center border border-slate-200 rounded-xl px-4 py-3">
+                <Text className="text-slate-400 mr-1">@</Text>
+                <TextInput
+                  className="flex-1 text-slate-900"
+                  placeholder="yourname"
+                  value={username}
+                  onChangeText={handleUsernameChange}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {usernameStatus === 'checking' && <ActivityIndicator size="small" color="#94a3b8" />}
+              </View>
+              {usernameHint ? (
+                <Text className={`text-xs mt-1 ${usernameHintColor}`}>{usernameHint}</Text>
+              ) : null}
+            </View>
+
+            {/* Location */}
+            <View className="mb-4">
+              <Text className="text-sm font-medium text-slate-700 mb-1">Location</Text>
+              <TouchableOpacity
+                onPress={() => setLocationModalVisible(true)}
+                className="border border-slate-200 rounded-xl px-4 py-3 flex-row items-center"
+              >
+                <Text className="text-slate-400 mr-2">📍</Text>
+                <Text className={`flex-1 ${neighborhood ? 'text-slate-900' : 'text-slate-400'}`}>
+                  {neighborhood || 'City or neighborhood'}
+                </Text>
+                {neighborhood ? (
                   <TouchableOpacity
-                    key={voice}
-                    onPress={() => toggleSinging(voice)}
-                    className={`flex-1 rounded-xl py-3 items-center border ${i === 0 ? 'mr-2' : 'ml-2'} ${
-                      active ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'
-                    }`}
+                    onPress={() => setNeighborhood('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text className={`font-medium text-sm ${active ? 'text-white' : 'text-slate-600'}`}>
-                      {voice === 'lead' ? 'Lead vocals' : 'Backup vocals'}
-                    </Text>
+                    <Text className="text-slate-400">✕</Text>
                   </TouchableOpacity>
-                );
-              })}
+                ) : null}
+              </TouchableOpacity>
             </View>
+
+            {/* Singing voice */}
+            <View className="mb-8">
+              <Text className="text-sm font-medium text-slate-700 mb-2">Singing</Text>
+              <View className="flex-row mb-3">
+                {(['lead', 'backup'] as const).map((voice, i) => {
+                  const active = singing.has(voice);
+                  return (
+                    <TouchableOpacity
+                      key={voice}
+                      onPress={() => toggleSinging(voice)}
+                      className={`flex-1 rounded-xl py-3 items-center border ${i === 0 ? 'mr-2' : 'ml-2'} ${
+                        active ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <Text className={`font-medium text-sm ${active ? 'text-white' : 'text-slate-600'}`}>
+                        {voice === 'lead' ? 'Lead vocals' : 'Backup vocals'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <TouchableOpacity
+                onPress={() => setSinging(new Set())}
+                className={`rounded-xl py-3 items-center border ${
+                  singing.size === 0 ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-200'
+                }`}
+              >
+                <Text className={`font-medium text-sm ${singing.size === 0 ? 'text-slate-700' : 'text-slate-400'}`}>
+                  I don't sing
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {error ? <Text className="text-red-500 text-sm mb-3">{error}</Text> : null}
+
             <TouchableOpacity
-              onPress={() => setSinging(new Set())}
-              className={`rounded-xl py-3 items-center border ${
-                singing.size === 0 ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-200'
-              }`}
+              onPress={handleSave}
+              disabled={saving}
+              className="bg-amber-500 rounded-xl py-4 items-center"
             >
-              <Text className={`font-medium text-sm ${singing.size === 0 ? 'text-slate-700' : 'text-slate-400'}`}>
-                I don't sing
-              </Text>
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-white font-semibold text-base">{submitLabel}</Text>
+              )}
             </TouchableOpacity>
           </View>
-
-          {error ? <Text className="text-red-500 text-sm mb-3">{error}</Text> : null}
-
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={saving}
-            className="bg-amber-500 rounded-xl py-4 items-center"
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text className="text-white font-semibold text-base">{submitLabel}</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }

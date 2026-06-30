@@ -1,9 +1,320 @@
-import { View, Text } from 'react-native';
+import { useState, useCallback, useRef } from 'react';
+import {
+  View, Text, FlatList, TextInput, TouchableOpacity,
+  RefreshControl, ActivityIndicator, Image,
+} from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+
+type Match = {
+  user_id: string;
+  display_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  neighborhood: string | null;
+  shared_count: number;
+  top_shared: string[];
+  shared_genres: string[];
+  singing_voice: string | null;
+  instrument_levels: Record<string, string> | null;
+};
+
+type SearchResult = {
+  id: string;
+  display_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+};
+
+const SINGING_LABEL: Record<string, string> = { lead: 'Lead vocals', backup: 'Backup vocals' };
+const SINGING_ORDER = ['lead', 'backup'];
+const INSTRUMENT_ORDER = ['Professional', 'Advanced', 'Intermediate', 'Beginner'];
+
+function singingBadgeStyle(voice: string) {
+  return voice === 'lead'
+    ? 'bg-amber-50 border-amber-200'
+    : 'bg-slate-100 border-slate-200';
+}
+function singingTextStyle(voice: string) {
+  return voice === 'lead' ? 'text-amber-700' : 'text-slate-600';
+}
+
+function Avatar({ uri, name }: { uri: string | null; name: string }) {
+  const initial = name[0]?.toUpperCase() ?? '?';
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        className="w-10 h-10 rounded-full"
+      />
+    );
+  }
+  return (
+    <View className="w-10 h-10 rounded-full bg-slate-200 items-center justify-center">
+      <Text className="text-slate-600 font-semibold text-sm">{initial}</Text>
+    </View>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <View className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4">
+      <View className="flex-row items-center">
+        <View className="w-10 h-10 rounded-full bg-slate-200" />
+        <View className="flex-1 ml-3 gap-1.5">
+          <View className="h-4 w-32 bg-slate-200 rounded" />
+          <View className="h-3 w-20 bg-slate-100 rounded" />
+        </View>
+        <View className="items-end gap-1">
+          <View className="h-4 w-6 bg-slate-200 rounded" />
+          <View className="h-3 w-16 bg-slate-100 rounded" />
+        </View>
+      </View>
+      <View className="flex-row gap-1.5 mt-3">
+        <View className="h-5 w-20 bg-slate-100 rounded-full" />
+        <View className="h-5 w-16 bg-slate-100 rounded-full" />
+      </View>
+    </View>
+  );
+}
+
+function MatchCard({ match }: { match: Match }) {
+  const fullName = [match.display_name, match.last_name].filter(Boolean).join(' ');
+  const displayName = fullName || match.username || 'Someone';
+
+  const singingVoices = (match.singing_voice ?? '')
+    .split(',')
+    .filter((v) => v && v !== 'none')
+    .sort((a, b) => SINGING_ORDER.indexOf(a) - SINGING_ORDER.indexOf(b));
+
+  const topInstruments = Object.entries(match.instrument_levels ?? {})
+    .sort(([, a], [, b]) => INSTRUMENT_ORDER.indexOf(a) - INSTRUMENT_ORDER.indexOf(b))
+    .slice(0, 3)
+    .map(([name]) => name);
+
+  const topShared = (match.top_shared ?? []).slice(0, 5);
+  const sharedGenres = (match.shared_genres ?? []).slice(0, 5);
+
+  return (
+    <View className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4">
+      <View className="flex-row items-center">
+        <Avatar uri={match.avatar_url} name={displayName} />
+        <View className="flex-1 ml-3 min-w-0">
+          <Text className="font-semibold text-slate-900" numberOfLines={1}>{displayName}</Text>
+          {match.username ? (
+            <Text className="text-xs text-slate-400" numberOfLines={1}>@{match.username}</Text>
+          ) : null}
+          {match.neighborhood ? (
+            <Text className="text-xs text-slate-500" numberOfLines={1}>{match.neighborhood}</Text>
+          ) : null}
+        </View>
+        <View className="items-end ml-3">
+          <Text className="text-sm font-semibold text-slate-900">{match.shared_count}</Text>
+          <Text className="text-xs text-slate-400">shared songs</Text>
+        </View>
+      </View>
+
+      {(singingVoices.length > 0 || topInstruments.length > 0) ? (
+        <View className="flex-row flex-wrap gap-1.5 mt-3">
+          {singingVoices.map((v) => (
+            <View key={v} className={`rounded-full border px-2.5 py-0.5 ${singingBadgeStyle(v)}`}>
+              <Text className={`text-xs ${singingTextStyle(v)}`}>{SINGING_LABEL[v] ?? v}</Text>
+            </View>
+          ))}
+          {topInstruments.map((name) => (
+            <View key={name} className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5">
+              <Text className="text-xs text-slate-600">{name}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {topShared.length > 0 ? (
+        <Text className="text-xs text-slate-500 mt-2" numberOfLines={2}>
+          <Text className="font-medium text-slate-700">Shared songs: </Text>
+          {topShared.join(', ')}
+          {match.shared_count > 5 ? ` +${match.shared_count - 5} more` : ''}
+        </Text>
+      ) : null}
+
+      {sharedGenres.length > 0 ? (
+        <Text className="text-xs text-slate-500 mt-1" numberOfLines={1}>
+          <Text className="font-medium text-slate-700">Shared genres: </Text>
+          {sharedGenres.join(', ')}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function SearchResultCard({ user }: { user: SearchResult }) {
+  const fullName = [user.display_name, user.last_name].filter(Boolean).join(' ');
+  const displayName = fullName || user.username || 'Someone';
+
+  return (
+    <View className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4">
+      <View className="flex-row items-center">
+        <Avatar uri={user.avatar_url} name={displayName} />
+        <View className="flex-1 ml-3 min-w-0">
+          <Text className="font-semibold text-slate-900" numberOfLines={1}>{displayName}</Text>
+          {user.username ? (
+            <Text className="text-xs text-slate-400">@{user.username}</Text>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
 
 export default function FriendsScreen() {
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [myId, setMyId] = useState('');
+  const [hasRepertoire, setHasRepertoire] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    setError(null);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); setRefreshing(false); return; }
+    setMyId(user.id);
+
+    const [matchRes, repertoireRes] = await Promise.all([
+      supabase.rpc('match_jammers', { for_user_id: user.id, limit_n: 30 }),
+      supabase.from('user_songs').select('song_id', { count: 'exact', head: true }).eq('user_id', user.id),
+    ]);
+
+    if (matchRes.error) setError('Could not load matches.');
+    setMatches((matchRes.data ?? []) as Match[]);
+    setHasRepertoire((repertoireRes.count ?? 0) > 0);
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  function handleSearchChange(text: string) {
+    setQuery(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (text.trim().length < 2) { setSearchResults([]); return; }
+    searchTimer.current = setTimeout(() => runSearch(text.trim()), 300);
+  }
+
+  async function runSearch(q: string) {
+    setSearching(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSearching(false); return; }
+    const { data } = await supabase.rpc('search_users', {
+      search_query: q.startsWith('@') ? q.slice(1) : q,
+      exclude_user_id: user.id,
+    });
+    setSearchResults((data ?? []) as SearchResult[]);
+    setSearching(false);
+  }
+
+  const isSearching = query.trim().length >= 2;
+
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-slate-400">Friends — coming soon</Text>
+    <View className="flex-1 bg-slate-50">
+      <View className="px-4 pt-14 pb-3 bg-white border-b border-slate-100">
+        <Text className="text-2xl font-bold text-slate-900 mb-3">Find Jammers</Text>
+        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
+          <Text className="text-slate-400 mr-2">🔍</Text>
+          <TextInput
+            className="flex-1 text-slate-900"
+            placeholder="Search by name or @username…"
+            placeholderTextColor="#94a3b8"
+            value={query}
+            onChangeText={handleSearchChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {query.length > 0 ? (
+            <TouchableOpacity onPress={() => { setQuery(''); setSearchResults([]); }}>
+              <Text className="text-slate-400 ml-2">✕</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
+      {loading ? (
+        <View className="pt-3">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-red-500 text-sm text-center">{error}</Text>
+        </View>
+      ) : isSearching && searching ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#d97706" />
+        </View>
+      ) : isSearching ? (
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <SearchResultCard user={item} />}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
+          ListEmptyComponent={
+            <View className="items-center justify-center pt-16 px-8">
+              <Text className="text-slate-500 font-medium mb-1">No users found</Text>
+              <Text className="text-slate-400 text-sm text-center">
+                Try searching by first name or @username
+              </Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={matches}
+          keyExtractor={(item) => item.user_id}
+          renderItem={({ item }) => <MatchCard match={item} />}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => load(true)}
+              tintColor="#d97706"
+            />
+          }
+          ListHeaderComponent={
+            matches.length > 0 ? (
+              <Text className="px-4 pb-2 text-xs text-slate-400">
+                Ranked by shared songs and genre overlap
+              </Text>
+            ) : null
+          }
+          ListEmptyComponent={
+            !hasRepertoire ? (
+              <View className="mx-4 rounded-2xl border border-slate-200 bg-white p-6 items-center">
+                <Text className="font-semibold text-slate-900 mb-1">Your repertoire is empty</Text>
+                <Text className="text-slate-400 text-sm text-center">
+                  Add songs to your repertoire and SingJam will match you with musicians who know the same songs.
+                </Text>
+              </View>
+            ) : (
+              <View className="mx-4 rounded-2xl border border-slate-200 bg-white p-6 items-center">
+                <Text className="font-semibold text-slate-900 mb-1">No matches yet</Text>
+                <Text className="text-slate-400 text-sm text-center">
+                  As more musicians join and add songs, you'll see matches here.
+                </Text>
+              </View>
+            )
+          }
+        />
+      )}
     </View>
   );
 }
