@@ -155,22 +155,94 @@ export default function JamDetailScreen() {
 
   async function handleRsvp() {
     if (!myUserId || !jam) return;
+    if (jam.visibility === 'official') {
+      Alert.alert('External ticketing', 'Official SingJam events use external ticketing.');
+      return;
+    }
     setRsvpLoading(true);
-    const isFull = jam.capacity !== null && attendees.length >= jam.capacity;
-    const newStatus = isFull ? 'waitlist' : 'attending';
-    const { error } = await supabase
+
+    const { count: attendingCount } = await supabase
       .from('jam_rsvps')
-      .upsert({ jam_id: jam.id, user_id: myUserId, status: newStatus }, { onConflict: 'jam_id,user_id' });
+      .select('id', { count: 'exact', head: true })
+      .eq('jam_id', jam.id)
+      .eq('status', 'attending');
+
+    const isFull = jam.capacity !== null && (attendingCount ?? 0) >= jam.capacity;
+    const newStatus: 'attending' | 'waitlist' = isFull ? 'waitlist' : 'attending';
+
+    let waitlistPosition: number | null = null;
+    if (isFull) {
+      const { count: waitlistCount } = await supabase
+        .from('jam_rsvps')
+        .select('id', { count: 'exact', head: true })
+        .eq('jam_id', jam.id)
+        .eq('status', 'waitlist');
+      waitlistPosition = (waitlistCount ?? 0) + 1;
+    }
+
+    const { data: existing } = await supabase
+      .from('jam_rsvps')
+      .select('id')
+      .eq('jam_id', jam.id)
+      .eq('user_id', myUserId)
+      .maybeSingle();
+
+    const rsvpMutation = existing
+      ? supabase.from('jam_rsvps').update({ status: newStatus, waitlist_position: waitlistPosition }).eq('id', existing.id)
+      : supabase.from('jam_rsvps').insert({ jam_id: jam.id, user_id: myUserId, status: newStatus, waitlist_position: waitlistPosition });
+
+    const { error } = await rsvpMutation;
     if (error) {
       Alert.alert('Error', error.message);
-    } else {
-      setMyRsvpStatus(newStatus);
-      if (newStatus === 'attending') {
-        setAttendees(prev => [
-          ...prev.filter(a => a.user_id !== myUserId),
-          { user_id: myUserId, status: 'attending', display_name: null, username: null, avatar_url: null },
-        ]);
+      setRsvpLoading(false);
+      return;
+    }
+
+    if (newStatus === 'attending') {
+      const { data: linkedSet } = await supabase
+        .from('sets')
+        .select('id, owner_user_id')
+        .eq('jam_id', jam.id)
+        .maybeSingle();
+      if (linkedSet && linkedSet.owner_user_id !== myUserId) {
+        const { data: existingCollab } = await supabase
+          .from('set_collaborators')
+          .select('id')
+          .eq('set_id', linkedSet.id)
+          .eq('user_id', myUserId)
+          .maybeSingle();
+        if (!existingCollab) {
+          await supabase.from('set_collaborators').insert({
+            set_id: linkedSet.id,
+            user_id: myUserId,
+            invited_by: linkedSet.owner_user_id,
+            status: 'accepted',
+          });
+        }
       }
+    }
+
+    if (jam.host_id && jam.host_id !== myUserId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, username')
+        .eq('id', myUserId)
+        .maybeSingle();
+      const name = (profile as any)?.display_name ?? (profile as any)?.username ?? 'Someone';
+      await supabase.from('notifications').insert({
+        user_id: jam.host_id,
+        type: 'jam_rsvp',
+        title: `${name} is ${newStatus === 'waitlist' ? 'on the waitlist for' : 'going to'} ${jam.name ?? 'your jam'}`,
+        link: `/jam/${jam.id}`,
+      });
+    }
+
+    setMyRsvpStatus(newStatus);
+    if (newStatus === 'attending') {
+      setAttendees(prev => [
+        ...prev.filter(a => a.user_id !== myUserId),
+        { user_id: myUserId, status: 'attending', display_name: null, username: null, avatar_url: null },
+      ]);
     }
     setRsvpLoading(false);
   }
@@ -183,17 +255,54 @@ export default function JamDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           setRsvpLoading(true);
+
+          const { data: rsvp } = await supabase
+            .from('jam_rsvps')
+            .select('id, status')
+            .eq('jam_id', jam.id)
+            .eq('user_id', myUserId)
+            .maybeSingle();
+
+          if (!rsvp) { setRsvpLoading(false); return; }
+
           const { error } = await supabase
             .from('jam_rsvps')
-            .update({ status: 'cancelled' })
-            .eq('jam_id', jam.id)
-            .eq('user_id', myUserId);
+            .update({ status: 'cancelled', waitlist_position: null })
+            .eq('id', rsvp.id);
+
           if (error) {
             Alert.alert('Error', error.message);
-          } else {
-            setMyRsvpStatus('cancelled');
-            setAttendees(prev => prev.filter(a => a.user_id !== myUserId));
+            setRsvpLoading(false);
+            return;
           }
+
+          setMyRsvpStatus('cancelled');
+          setAttendees(prev => prev.filter(a => a.user_id !== myUserId));
+
+          if (rsvp.status === 'attending') {
+            const { data: next } = await supabase
+              .from('jam_rsvps')
+              .select('id, user_id')
+              .eq('jam_id', jam.id)
+              .eq('status', 'waitlist')
+              .order('waitlist_position', { ascending: true })
+              .limit(1)
+              .maybeSingle();
+
+            if (next) {
+              await supabase
+                .from('jam_rsvps')
+                .update({ status: 'attending', waitlist_position: null })
+                .eq('id', next.id);
+              await supabase.from('notifications').insert({
+                user_id: next.user_id,
+                type: 'jam_rsvp',
+                title: `A spot opened up at ${jam.name ?? 'the jam'} — you're in!`,
+                link: `/jam/${jam.id}`,
+              });
+            }
+          }
+
           setRsvpLoading(false);
         },
       },
@@ -204,18 +313,104 @@ export default function JamDetailScreen() {
   async function handleInviteResponse(response: 'accepted' | 'declined') {
     if (!myUserId || !jam) return;
     setRsvpLoading(true);
-    await supabase
+
+    const { data: invite } = await supabase
       .from('jam_invites')
-      .update({ status: response })
+      .select('id, invited_by')
       .eq('jam_id', jam.id)
-      .eq('invitee_id', myUserId);
+      .eq('invited_user_id', myUserId)
+      .maybeSingle();
+
+    if (!invite) { setRsvpLoading(false); return; }
+
+    await supabase.from('jam_invites').update({ status: response }).eq('id', invite.id);
+
     if (response === 'accepted') {
-      await supabase
+      const { count: attendingCount } = await supabase
         .from('jam_rsvps')
-        .upsert({ jam_id: jam.id, user_id: myUserId, status: 'attending' }, { onConflict: 'jam_id,user_id' });
+        .select('id', { count: 'exact', head: true })
+        .eq('jam_id', jam.id)
+        .eq('status', 'attending');
+
+      const isFull = jam.capacity !== null && (attendingCount ?? 0) >= jam.capacity;
+      let waitlistPosition: number | null = null;
+      if (isFull) {
+        const { count: waitlistCount } = await supabase
+          .from('jam_rsvps')
+          .select('id', { count: 'exact', head: true })
+          .eq('jam_id', jam.id)
+          .eq('status', 'waitlist');
+        waitlistPosition = (waitlistCount ?? 0) + 1;
+      }
+      const rsvpStatus: 'attending' | 'waitlist' = isFull ? 'waitlist' : 'attending';
+
+      const { data: existingRsvp } = await supabase
+        .from('jam_rsvps')
+        .select('id')
+        .eq('jam_id', jam.id)
+        .eq('user_id', myUserId)
+        .maybeSingle();
+
+      if (existingRsvp) {
+        await supabase.from('jam_rsvps').update({ status: rsvpStatus, waitlist_position: waitlistPosition }).eq('id', existingRsvp.id);
+      } else {
+        await supabase.from('jam_rsvps').insert({ jam_id: jam.id, user_id: myUserId, status: rsvpStatus, waitlist_position: waitlistPosition });
+      }
+
+      if (rsvpStatus === 'attending') {
+        const { data: linkedSet } = await supabase
+          .from('sets')
+          .select('id, owner_user_id')
+          .eq('jam_id', jam.id)
+          .maybeSingle();
+        if (linkedSet && linkedSet.owner_user_id !== myUserId) {
+          const { data: existingCollab } = await supabase
+            .from('set_collaborators')
+            .select('id')
+            .eq('set_id', linkedSet.id)
+            .eq('user_id', myUserId)
+            .maybeSingle();
+          if (!existingCollab) {
+            await supabase.from('set_collaborators').insert({
+              set_id: linkedSet.id,
+              user_id: myUserId,
+              invited_by: linkedSet.owner_user_id,
+              status: 'accepted',
+            });
+          }
+        }
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, username')
+        .eq('id', myUserId)
+        .maybeSingle();
+      const accepterName = (profile as any)?.display_name ?? (profile as any)?.username ?? 'Someone';
+
+      await Promise.all([
+        invite.invited_by && invite.invited_by !== jam.host_id
+          ? supabase.from('notifications').insert({
+              user_id: invite.invited_by,
+              type: 'invite_accepted',
+              title: `${accepterName} accepted your invite to ${jam.name ?? 'your jam'}`,
+              link: `/jam/${jam.id}`,
+            })
+          : Promise.resolve(),
+        jam.host_id && jam.host_id !== myUserId
+          ? supabase.from('notifications').insert({
+              user_id: jam.host_id,
+              type: 'jam_rsvp',
+              title: `${accepterName} is going to ${jam.name ?? 'your jam'}`,
+              link: `/jam/${jam.id}`,
+            })
+          : Promise.resolve(),
+      ]);
+
+      setMyRsvpStatus(rsvpStatus);
     }
+
     setMyInviteStatus(response);
-    if (response === 'accepted') setMyRsvpStatus('attending');
     setRsvpLoading(false);
   }
 
@@ -245,6 +440,7 @@ export default function JamDetailScreen() {
   const isFull = jam.capacity !== null && attendees.length >= jam.capacity;
   const timeStr = formatJamTime(jam.starts_at, jam.timezone);
   const isPast = jam.starts_at ? new Date(jam.starts_at) < new Date() : false;
+  const hasFullAccess = isHosting || myRsvpStatus === 'attending' || myInviteStatus === 'accepted' || jam.visibility === 'official' || jam.visibility === 'private';
 
   return (
     <>
@@ -320,8 +516,10 @@ export default function JamDetailScreen() {
               {jam.neighborhood ? (
                 <Text className="text-slate-700 font-medium">{jam.neighborhood}</Text>
               ) : null}
-              {jam.full_address ? (
+              {jam.full_address && hasFullAccess ? (
                 <Text className="text-slate-400 text-sm mt-0.5">{jam.full_address}</Text>
+              ) : jam.full_address && !hasFullAccess ? (
+                <Text className="text-slate-400 text-sm mt-0.5 italic">Full address shown after RSVP</Text>
               ) : null}
             </InfoRow>
           ) : null}
