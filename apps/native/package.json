@@ -9,6 +9,7 @@
     "android": "expo start --android"
   },
   "dependencies": {
+    "@singjam/core": "*",
     "@expo/metro-runtime": "~56.0.15",
     "@expo/ui": "~56.0.18",
     "@expo/vector-icons": "^15.0.2",
