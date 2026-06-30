@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, ScrollView } from 'react-native';
 import { fetchUserSongs, matchesSearch, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import SongRow from '@/components/SongRow';
@@ -14,12 +14,30 @@ function SkeletonRow() {
   );
 }
 
+type ConfidenceFilter = 'all' | 'lead' | 'support' | 'learn';
+type SortOrder = 'title_asc' | 'title_desc' | 'recent';
+
+const CONFIDENCE_CHIPS: { key: ConfidenceFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'lead', label: 'Lead' },
+  { key: 'support', label: 'Support' },
+  { key: 'learn', label: 'Learn' },
+];
+
+const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
+  { key: 'title_asc', label: 'A → Z' },
+  { key: 'title_desc', label: 'Z → A' },
+  { key: 'recent', label: 'Recent' },
+];
+
 export default function RepertoireScreen() {
   const [songs, setSongs] = useState<UserSong[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
+  const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('title_asc');
   const [showAdd, setShowAdd] = useState(false);
 
   async function load(showRefresh = false) {
@@ -41,11 +59,27 @@ export default function RepertoireScreen() {
   useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return songs;
-    return songs.filter((s) =>
-      matchesSearch([s.title, s.display_artist ?? ''].join(' '), query)
-    );
-  }, [songs, query]);
+    let result = songs;
+    if (query.trim()) {
+      result = result.filter(s =>
+        matchesSearch([s.title, s.display_artist ?? ''].join(' '), query)
+      );
+    }
+    if (confidenceFilter !== 'all') {
+      result = result.filter(s => s.confidence === confidenceFilter);
+    }
+    if (sortOrder === 'title_desc') {
+      result = [...result].sort((a, b) => b.title.localeCompare(a.title));
+    } else if (sortOrder === 'recent') {
+      result = [...result].sort((a, b) => {
+        if (!a.updated_at && !b.updated_at) return 0;
+        if (!a.updated_at) return 1;
+        if (!b.updated_at) return -1;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+    }
+    return result;
+  }, [songs, query, confidenceFilter, sortOrder]);
 
   const existingIds = useMemo(() => new Set(songs.map((s) => s.song_id)), [songs]);
 
@@ -114,8 +148,8 @@ export default function RepertoireScreen() {
       </View>
 
       {/* Search */}
-      <View className="px-4 py-2 border-b border-slate-100">
-        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
+      <View className="px-4 pt-2 pb-1 border-b border-slate-100">
+        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2 mb-2">
           <Text className="text-slate-400 mr-2">🔍</Text>
           <TextInput
             className="flex-1 text-slate-900"
@@ -132,6 +166,35 @@ export default function RepertoireScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Confidence filter chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1.5">
+          <View className="flex-row gap-2 pb-1">
+            {CONFIDENCE_CHIPS.map(chip => (
+              <TouchableOpacity
+                key={chip.key}
+                onPress={() => setConfidenceFilter(chip.key)}
+                className={`px-3 py-1 rounded-full border ${confidenceFilter === chip.key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+              >
+                <Text className={`text-sm font-medium ${confidenceFilter === chip.key ? 'text-white' : 'text-slate-600'}`}>
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View className="w-px bg-slate-200 mx-1" />
+            {SORT_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => setSortOrder(opt.key)}
+                className={`px-3 py-1 rounded-full border ${sortOrder === opt.key ? 'bg-slate-700 border-slate-700' : 'bg-white border-slate-200'}`}
+              >
+                <Text className={`text-sm font-medium ${sortOrder === opt.key ? 'text-white' : 'text-slate-500'}`}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
       </View>
 
       {/* List */}
