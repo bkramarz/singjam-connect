@@ -25,6 +25,23 @@ export default function AuthPanel({
   const [signedUp, setSignedUp] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
+  function switchToSignup() {
+    setMode("signup");
+    setStatus(null);
+    const p = new URLSearchParams(window.location.search);
+    p.set("mode", "signup");
+    router.replace(`/auth?${p.toString()}`, { scroll: false });
+  }
+
+  function switchToSignin() {
+    setMode("signin");
+    setStatus(null);
+    const p = new URLSearchParams(window.location.search);
+    p.delete("mode");
+    const qs = p.toString();
+    router.replace(`/auth${qs ? `?${qs}` : ""}`, { scroll: false });
+  }
+
   async function resolveDestination(): Promise<string> {
     if (next) return inviteToken ? `${next}?invite=${inviteToken}` : next;
     if (inviteToken) {
@@ -205,9 +222,9 @@ export default function AuthPanel({
     <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
       <p className="text-sm text-slate-500">
         {mode === "signin" ? (
-          <>No account? <button onClick={() => { setMode("signup"); setStatus(null); const p = new URLSearchParams(window.location.search); p.set("mode", "signup"); router.replace(`/auth?${p.toString()}`, { scroll: false }); }} className="text-amber-600 hover:underline">Create one</button></>
+          <>No account? <button onClick={switchToSignup} className="text-amber-600 hover:underline">Create one</button></>
         ) : (
-          <>Already have an account? <button onClick={() => { setMode("signin"); setStatus(null); const p = new URLSearchParams(window.location.search); p.delete("mode"); const qs = p.toString(); router.replace(`/auth${qs ? `?${qs}` : ""}`, { scroll: false }); }} className="text-amber-600 hover:underline">Sign in</button></>
+          <>Already have an account? <button onClick={switchToSignin} className="text-amber-600 hover:underline">Sign in</button></>
         )}
       </p>
 
