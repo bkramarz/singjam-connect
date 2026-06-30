@@ -6,6 +6,7 @@ import { matchesSearch, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import SongRow from '@/components/SongRow';
 import AddSongModal from '@/components/AddSongModal';
+import AddToSetModal from '@/components/AddToSetModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -260,6 +261,7 @@ export default function RepertoireScreen() {
   const [extFilters, setExtFilters] = useState<ExtFilters>(emptyExtFilters());
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [addToSetSong, setAddToSetSong] = useState<{ id: string; title: string } | null>(null);
 
   async function load(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
@@ -337,11 +339,21 @@ export default function RepertoireScreen() {
 
   function handleAdded() { setShowAdd(false); load(); }
 
+  function handleAddToSet(songId: string) {
+    const song = songs.find(s => s.song_id === songId);
+    setAddToSetSong({ id: songId, title: song?.title ?? '' });
+  }
+
   const renderItem = useCallback(
     ({ item }: { item: RichUserSong }) => (
-      <SongRow song={item} onConfidenceChange={handleConfidenceChange} onRemove={handleRemove} />
+      <SongRow
+        song={item}
+        onConfidenceChange={handleConfidenceChange}
+        onRemove={handleRemove}
+        onAddToSet={handleAddToSet}
+      />
     ),
-    [userId]
+    [userId, songs]
   );
 
   return (
@@ -467,6 +479,15 @@ export default function RepertoireScreen() {
           existingIds={existingIds}
           onClose={() => setShowAdd(false)}
           onAdded={handleAdded}
+        />
+      )}
+
+      {addToSetSong && (
+        <AddToSetModal
+          visible={!!addToSetSong}
+          songId={addToSetSong.id}
+          songTitle={addToSetSong.title}
+          onClose={() => setAddToSetSong(null)}
         />
       )}
     </View>

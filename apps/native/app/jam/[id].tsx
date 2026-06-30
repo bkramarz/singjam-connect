@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Image,
+  ActivityIndicator, Alert, Image, Modal, TextInput, FlatList,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +36,194 @@ type Attendee = {
   username: string | null;
   avatar_url: string | null;
 };
+
+type JamSet = {
+  id: string;
+  name: string;
+};
+
+type UserSearchResult = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+};
+
+function InviteUsersModal({
+  visible,
+  jamId,
+  jamName,
+  attendeeIds,
+  onClose,
+}: {
+  visible: boolean;
+  jamId: string;
+  jamName: string;
+  attendeeIds: Set<string>;
+  onClose: () => void;
+}) {
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [sent, setSent] = useState<Set<string>>(new Set());
+  const [pending, setPending] = useState<string | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setQuery('');
+    setResults([]);
+    setSent(new Set());
+    supabase.auth.getUser().then(({ data: { user } }) => setMyUserId(user?.id ?? null));
+  }, [visible]);
+
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    searchTimer.current = setTimeout(() => runSearch(q), 300);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [query]);
+
+  async function runSearch(q: string) {
+    if (!myUserId) return;
+    setSearching(true);
+    const { data } = await supabase.rpc('search_users', {
+      search_query: q.startsWith('@') ? q.slice(1) : q,
+      exclude_user_id: myUserId,
+    });
+    setResults(data ?? []);
+    setSearching(false);
+  }
+
+  async function handleInvite(userId: string) {
+    setPending(userId);
+    const { error } = await supabase
+      .from('jam_invites')
+      .insert({ jam_id: jamId, invited_user_id: userId, status: 'pending' });
+
+    if (error && !error.message.includes('duplicate')) {
+      Alert.alert('Error', error.message);
+    } else {
+      setSent(prev => new Set([...prev, userId]));
+      if (myUserId) {
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          type: 'jam_invite',
+          title: `You've been invited to ${jamName}`,
+          link: `/jam/${jamId}`,
+        });
+      }
+    }
+    setPending(null);
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        className="flex-1 bg-white"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text className="text-amber-600 font-medium">Done</Text>
+          </TouchableOpacity>
+          <Text className="flex-1 text-center font-semibold text-slate-900">Invite people</Text>
+          <View style={{ width: 50 }} />
+        </View>
+
+        <View className="px-4 py-3 border-b border-slate-100">
+          <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
+            <Text className="text-slate-400 mr-2">🔍</Text>
+            <TextInput
+              className="flex-1 text-slate-900"
+              placeholder="Search by name or @username…"
+              placeholderTextColor="#94a3b8"
+              value={query}
+              onChangeText={setQuery}
+              autoCapitalize="none"
+              autoFocus
+              returnKeyType="search"
+            />
+            {query.length > 0 ? (
+              <TouchableOpacity onPress={() => setQuery('')}>
+                <Text className="text-slate-400 ml-2">✕</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        {searching ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color="#d97706" />
+          </View>
+        ) : (
+          <FlatList
+            data={results}
+            keyExtractor={item => item.id}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 40 }}
+            ListEmptyComponent={
+              query.trim().length >= 2 ? (
+                <View className="items-center pt-12">
+                  <Text className="text-slate-400 text-sm">No results for "{query}"</Text>
+                </View>
+              ) : (
+                <View className="items-center pt-12">
+                  <Text className="text-slate-400 text-sm">Search for a jammer to invite</Text>
+                </View>
+              )
+            }
+            renderItem={({ item }) => {
+              const isAttending = attendeeIds.has(item.id);
+              const isSent = sent.has(item.id);
+              const isPending = pending === item.id;
+              const name = item.display_name ?? item.username ?? 'Unknown';
+              const initial = name[0]?.toUpperCase() ?? '?';
+
+              return (
+                <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
+                  {item.avatar_url ? (
+                    <Image
+                      source={{ uri: item.avatar_url }}
+                      className="w-9 h-9 rounded-full mr-3"
+                    />
+                  ) : (
+                    <View className="w-9 h-9 rounded-full bg-slate-200 items-center justify-center mr-3">
+                      <Text className="text-slate-600 font-semibold text-sm">{initial}</Text>
+                    </View>
+                  )}
+                  <View className="flex-1 mr-3">
+                    <Text className="text-slate-900 font-medium" numberOfLines={1}>{name}</Text>
+                    {item.username ? (
+                      <Text className="text-slate-400 text-sm mt-0.5">@{item.username}</Text>
+                    ) : null}
+                  </View>
+                  {isAttending ? (
+                    <Text className="text-slate-400 text-xs">Attending</Text>
+                  ) : isPending ? (
+                    <ActivityIndicator size="small" color="#d97706" />
+                  ) : isSent ? (
+                    <Text className="text-green-600 text-sm font-semibold">Sent ✓</Text>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => handleInvite(item.id)}
+                      className="bg-amber-500 rounded-full px-4 py-1.5"
+                    >
+                      <Text className="text-white text-sm font-semibold">Invite</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            }}
+          />
+        )}
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
 
 function AttendeeAvatar({ attendee, isMe }: { attendee: Attendee; isMe: boolean }) {
   const name = attendee.display_name ?? attendee.username ?? '?';
@@ -72,6 +261,8 @@ export default function JamDetailScreen() {
   const [myRsvpStatus, setMyRsvpStatus] = useState<string | null>(null);
   const [myInviteStatus, setMyInviteStatus] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [jamSets, setJamSets] = useState<JamSet[]>([]);
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rsvpLoading, setRsvpLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -86,7 +277,7 @@ export default function JamDetailScreen() {
     if (!user) return;
     setMyUserId(user.id);
 
-    const [jamResult, rsvpsResult, inviteResult] = await Promise.all([
+    const [jamResult, rsvpsResult, inviteResult, setsResult] = await Promise.all([
       supabase
         .from('jams')
         .select(`
@@ -109,6 +300,11 @@ export default function JamDetailScreen() {
         .eq('jam_id', id)
         .eq('invited_user_id', user.id)
         .maybeSingle(),
+      supabase
+        .from('sets')
+        .select('id, name')
+        .eq('jam_id', id)
+        .limit(10),
     ]);
 
     if (!jamResult.data) {
@@ -150,6 +346,7 @@ export default function JamDetailScreen() {
     const myRsvp = rawRsvps.find(r => r.user_id === user.id);
     setMyRsvpStatus(myRsvp?.status ?? null);
     setMyInviteStatus(inviteResult.data?.status ?? null);
+    setJamSets((setsResult.data ?? []).map((s: any) => ({ id: s.id, name: s.name })));
     setLoading(false);
   }
 
@@ -442,8 +639,17 @@ export default function JamDetailScreen() {
   const isPast = jam.starts_at ? new Date(jam.starts_at) < new Date() : false;
   const hasFullAccess = isHosting || myRsvpStatus === 'attending' || myInviteStatus === 'accepted' || jam.visibility === 'official' || jam.visibility === 'private';
 
+  const attendeeIds = new Set(attendees.map(a => a.user_id));
+
   return (
     <>
+      <InviteUsersModal
+        visible={inviteModalVisible}
+        jamId={jam.id}
+        jamName={jam.name ?? 'this jam'}
+        attendeeIds={attendeeIds}
+        onClose={() => setInviteModalVisible(false)}
+      />
       <Stack.Screen
         options={{
           title: jam.name ?? 'Jam',
@@ -566,8 +772,17 @@ export default function JamDetailScreen() {
         {!isPast ? (
           <View className="px-4 mb-6">
             {isHosting ? (
-              <View className="bg-amber-50 rounded-xl py-3 items-center border border-amber-200">
-                <Text className="text-amber-700 font-semibold">You're hosting this jam</Text>
+              <View className="gap-2">
+                <View className="bg-amber-50 rounded-xl py-3 items-center border border-amber-200">
+                  <Text className="text-amber-700 font-semibold">You're hosting this jam</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setInviteModalVisible(true)}
+                  className="border border-amber-300 rounded-xl py-3 flex-row items-center justify-center gap-2"
+                >
+                  <Ionicons name="person-add-outline" size={16} color="#d97706" />
+                  <Text className="text-amber-700 font-medium">Invite people</Text>
+                </TouchableOpacity>
               </View>
             ) : myInviteStatus === 'pending' ? (
               <View className="flex-row gap-3">
@@ -626,7 +841,7 @@ export default function JamDetailScreen() {
 
         {/* Attendees */}
         {attendees.length > 0 ? (
-          <View className="px-4 mb-10">
+          <View className="px-4 mb-6">
             <Text className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-3">
               Attending ({attendees.length})
             </Text>
@@ -642,6 +857,26 @@ export default function JamDetailScreen() {
                 </View>
               ) : null}
             </View>
+          </View>
+        ) : null}
+
+        {/* Associated sets */}
+        {jamSets.length > 0 ? (
+          <View className="px-4 mb-10">
+            <Text className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-3">
+              Sets
+            </Text>
+            {jamSets.map(s => (
+              <TouchableOpacity
+                key={s.id}
+                onPress={() => router.push(`/set/${s.id}` as any)}
+                className="flex-row items-center py-3 border-b border-slate-100"
+              >
+                <Ionicons name="list-outline" size={16} color="#94a3b8" style={{ marginRight: 10 }} />
+                <Text className="flex-1 text-slate-900">{s.name}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            ))}
           </View>
         ) : null}
       </ScrollView>
