@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { fetchUserSongs, matchesSearch, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import SongRow from '@/components/SongRow';
@@ -31,6 +33,7 @@ const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
 ];
 
 export default function RepertoireScreen() {
+  const router = useRouter();
   const [songs, setSongs] = useState<UserSong[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,12 +142,20 @@ export default function RepertoireScreen() {
             </Text>
           )}
         </View>
-        <TouchableOpacity
-          onPress={() => setShowAdd(true)}
-          className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
-        >
-          <Text className="text-white text-xl leading-none font-light">+</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity
+            onPress={() => router.push('/songs' as any)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="search" size={22} color="#94a3b8" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowAdd(true)}
+            className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
+          >
+            <Text className="text-white text-xl leading-none font-light">+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
