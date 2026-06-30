@@ -228,13 +228,21 @@ function KeyPicker({
 function SongRow({
   song,
   canEdit,
+  isFirst,
+  isLast,
   onRemove,
   onKeyChange,
+  onMoveUp,
+  onMoveDown,
 }: {
   song: SetSong;
   canEdit: boolean;
+  isFirst: boolean;
+  isLast: boolean;
   onRemove: () => void;
   onKeyChange: (key: string | null) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const [keyPickerVisible, setKeyPickerVisible] = useState(false);
   const composerNames = (song.songs.song_composers ?? [])
@@ -262,9 +270,28 @@ function SongRow({
         onSelect={onKeyChange}
       />
       <View className="flex-row items-center px-4 py-3 border-b border-slate-100 bg-white">
-        <View className="w-7 items-center mr-2">
-          <Text className="text-slate-300 text-sm font-medium">{song.position}</Text>
-        </View>
+        {canEdit ? (
+          <View className="mr-2 items-center gap-0.5">
+            <TouchableOpacity
+              onPress={onMoveUp}
+              disabled={isFirst}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Ionicons name="chevron-up" size={14} color={isFirst ? '#e2e8f0' : '#94a3b8'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onMoveDown}
+              disabled={isLast}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Ionicons name="chevron-down" size={14} color={isLast ? '#e2e8f0' : '#94a3b8'} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View className="w-7 items-center mr-2">
+            <Text className="text-slate-300 text-sm font-medium">{song.position}</Text>
+          </View>
+        )}
         <View className="flex-1 min-w-0">
           <Text className="text-slate-900 font-medium" numberOfLines={1}>{song.songs.title}</Text>
           {artist ? (
@@ -295,6 +322,203 @@ function SongRow({
   );
 }
 
+type Collaborator = { id: string; user_id: string; role: string; display_name: string | null; username: string | null };
+
+function SetSettingsModal({
+  visible,
+  setId,
+  isOwner,
+  linkSharing,
+  collaborators,
+  onClose,
+  onSharingChange,
+  onCollaboratorAdded,
+  onCollaboratorRemoved,
+}: {
+  visible: boolean;
+  setId: string;
+  isOwner: boolean;
+  linkSharing: string;
+  collaborators: Collaborator[];
+  onClose: () => void;
+  onSharingChange: (mode: 'private' | 'link' | 'public') => void;
+  onCollaboratorAdded: (c: Collaborator) => void;
+  onCollaboratorRemoved: (id: string) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ id: string; display_name: string | null; last_name: string | null; username: string | null }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!visible) { setSearchQuery(''); setSearchResults([]); setAddedIds(new Set()); }
+  }, [visible]);
+
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) { setSearchResults([]); return; }
+    const timer = setTimeout(() => runSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  async function runSearch(q: string) {
+    setSearching(true);
+    const { data } = await supabase.rpc('search_users', {
+      search_query: q.startsWith('@') ? q.slice(1) : q,
+      exclude_user_id: '',
+    });
+    const existing = new Set(collaborators.map(c => c.user_id));
+    setSearchResults(((data ?? []) as any[]).filter((u: any) => !existing.has(u.id)));
+    setSearching(false);
+  }
+
+  async function handleAddCollaborator(user: { id: string; display_name: string | null; last_name: string | null; username: string | null }) {
+    const { data, error } = await supabase
+      .from('set_collaborators')
+      .insert({ set_id: setId, user_id: user.id, role: 'editor', status: 'accepted' })
+      .select('id, user_id, role')
+      .single();
+    if (error && !error.message.includes('duplicate')) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    setAddedIds(prev => new Set([...prev, user.id]));
+    if (data) {
+      onCollaboratorAdded({
+        id: data.id,
+        user_id: data.user_id,
+        role: data.role,
+        display_name: user.display_name,
+        username: user.username,
+      });
+    }
+    setSearchQuery('');
+    setSearchResults([]);
+  }
+
+  async function handleRemoveCollaborator(collab: Collaborator) {
+    Alert.alert(
+      'Remove collaborator',
+      `Remove ${collab.display_name ?? collab.username ?? 'this person'}?`,
+      [
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.from('set_collaborators').delete().eq('id', collab.id);
+            onCollaboratorRemoved(collab.id);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }
+
+  const SHARING_OPTIONS: { value: 'private' | 'link' | 'public'; label: string; desc: string }[] = [
+    { value: 'private', label: 'Private', desc: 'Only you and collaborators' },
+    { value: 'link', label: 'Open link', desc: 'Anyone with the link can join as viewer' },
+    { value: 'public', label: 'Public', desc: 'Visible to everyone on SingJam' },
+  ];
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text className="text-amber-600 font-medium">Done</Text>
+          </TouchableOpacity>
+          <Text className="flex-1 text-center font-semibold text-slate-900">Set Settings</Text>
+          <View style={{ width: 48 }} />
+        </View>
+
+        <ScrollView keyboardShouldPersistTaps="handled">
+          {/* Sharing controls (owner only) */}
+          {isOwner && (
+            <View className="px-4 pt-5 pb-2">
+              <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Sharing</Text>
+              {SHARING_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  onPress={() => onSharingChange(opt.value)}
+                  className={`flex-row items-center px-4 py-3 mb-2 rounded-xl border ${linkSharing === opt.value ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                >
+                  <View className="flex-1">
+                    <Text className={`font-semibold ${linkSharing === opt.value ? 'text-amber-800' : 'text-slate-900'}`}>{opt.label}</Text>
+                    <Text className="text-xs text-slate-400 mt-0.5">{opt.desc}</Text>
+                  </View>
+                  {linkSharing === opt.value && <Ionicons name="checkmark" size={18} color="#d97706" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Collaborators */}
+          <View className="px-4 pt-4 pb-8">
+            <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Collaborators</Text>
+
+            {collaborators.length === 0 ? (
+              <Text className="text-slate-400 text-sm mb-4">No collaborators yet.</Text>
+            ) : (
+              collaborators.map(c => (
+                <View key={c.id} className="flex-row items-center py-2 border-b border-slate-50">
+                  <View className="flex-1">
+                    <Text className="text-slate-900 font-medium">{c.display_name ?? c.username ?? 'Unknown'}</Text>
+                    {c.username ? <Text className="text-xs text-slate-400">@{c.username}</Text> : null}
+                  </View>
+                  <Text className="text-xs text-slate-400 mr-3 capitalize">{c.role}</Text>
+                  {isOwner && (
+                    <TouchableOpacity onPress={() => handleRemoveCollaborator(c)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle-outline" size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))
+            )}
+
+            {isOwner && (
+              <View className="mt-4">
+                <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2 mb-2">
+                  <Ionicons name="search" size={14} color="#94a3b8" style={{ marginRight: 6 }} />
+                  <TextInput
+                    className="flex-1 text-slate-900"
+                    placeholder="Search by name or @username…"
+                    placeholderTextColor="#94a3b8"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {searching && <ActivityIndicator size="small" color="#94a3b8" />}
+                </View>
+                {searchResults.map(user => {
+                  const name = [user.display_name, user.last_name].filter(Boolean).join(' ') || user.username || 'Unknown';
+                  const isAdded = addedIds.has(user.id);
+                  return (
+                    <View key={user.id} className="flex-row items-center py-2 border-b border-slate-50">
+                      <View className="flex-1">
+                        <Text className="text-slate-900 font-medium">{name}</Text>
+                        {user.username ? <Text className="text-xs text-slate-400">@{user.username}</Text> : null}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleAddCollaborator(user)}
+                        disabled={isAdded}
+                        className={`rounded-full px-3 py-1 ${isAdded ? 'bg-green-100' : 'bg-amber-500'}`}
+                      >
+                        <Text className={`text-xs font-semibold ${isAdded ? 'text-green-700' : 'text-white'}`}>
+                          {isAdded ? 'Added' : 'Add'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 export default function SetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -305,6 +529,8 @@ export default function SetDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [collaborators, setCollaborators] = useState<{ id: string; user_id: string; role: string; display_name: string | null; username: string | null }[]>([]);
 
   useEffect(() => {
     if (id) load();
@@ -315,7 +541,7 @@ export default function SetDetailScreen() {
     if (!user) return;
     setMyUserId(user.id);
 
-    const [setRes, songsRes, collabRes] = await Promise.all([
+    const [setRes, songsRes, collabRes, allCollabRes] = await Promise.all([
       supabase
         .from('sets')
         .select('id, name, description, owner_user_id, link_sharing')
@@ -333,6 +559,11 @@ export default function SetDetailScreen() {
         .eq('user_id', user.id)
         .eq('status', 'accepted')
         .maybeSingle(),
+      supabase
+        .from('set_collaborators')
+        .select('id, user_id, role, profiles(display_name, username)')
+        .eq('set_id', id)
+        .eq('status', 'accepted'),
     ]);
 
     if (!setRes.data) { setNotFound(true); setLoading(false); return; }
@@ -344,6 +575,15 @@ export default function SetDetailScreen() {
     const isOwner = s.owner_user_id === user.id;
     const isEditor = collabRes.data?.role === 'editor';
     setCanEdit(isOwner || isEditor);
+
+    const collabs: Collaborator[] = ((allCollabRes.data ?? []) as any[]).map((c: any) => ({
+      id: c.id,
+      user_id: c.user_id,
+      role: c.role,
+      display_name: c.profiles?.display_name ?? null,
+      username: c.profiles?.username ?? null,
+    }));
+    setCollaborators(collabs);
     setLoading(false);
   }
 
@@ -360,6 +600,22 @@ export default function SetDetailScreen() {
     });
   }
 
+  async function handleMoveSong(index: number, direction: 'up' | 'down') {
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= songs.length) return;
+
+    const newSongs = [...songs];
+    [newSongs[index], newSongs[swapIndex]] = [newSongs[swapIndex], newSongs[index]];
+    const reordered = newSongs.map((s, i) => ({ ...s, position: i + 1 }));
+    setSongs(reordered);
+
+    // Persist the two swapped rows
+    await Promise.all([
+      supabase.from('set_songs').update({ position: reordered[index].position }).eq('id', reordered[index].id),
+      supabase.from('set_songs').update({ position: reordered[swapIndex].position }).eq('id', reordered[swapIndex].id),
+    ]);
+  }
+
   async function handleKeyChange(setsSongId: string, key: string | null) {
     const { error } = await supabase
       .from('set_songs')
@@ -367,6 +623,12 @@ export default function SetDetailScreen() {
       .eq('id', setsSongId);
     if (error) { Alert.alert('Error', error.message); return; }
     setSongs((prev) => prev.map((s) => s.id === setsSongId ? { ...s, key_note: key } : s));
+  }
+
+  async function handleSharingChange(mode: 'private' | 'link' | 'public') {
+    if (!set) return;
+    await supabase.from('sets').update({ link_sharing: mode }).eq('id', set.id);
+    setSet(prev => prev ? { ...prev, link_sharing: mode } : prev);
   }
 
   function confirmDeleteSet() {
@@ -419,13 +681,20 @@ export default function SetDetailScreen() {
         options={{
           title: set.name,
           headerTintColor: '#d97706',
-          headerRight: isOwner
-            ? () => (
+          headerRight: () => (
+            <View className="flex-row gap-4">
+              {canEdit && (
+                <TouchableOpacity onPress={() => setSettingsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="settings-outline" size={20} color="#64748b" />
+                </TouchableOpacity>
+              )}
+              {isOwner && (
                 <TouchableOpacity onPress={confirmDeleteSet} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name="trash-outline" size={20} color="#ef4444" />
                 </TouchableOpacity>
-              )
-            : undefined,
+              )}
+            </View>
+          ),
         }}
       />
 
@@ -434,6 +703,18 @@ export default function SetDetailScreen() {
         existingIds={existingIds}
         onClose={() => setAddModalVisible(false)}
         onAdded={handleSongAdded}
+      />
+
+      <SetSettingsModal
+        visible={settingsVisible}
+        setId={id}
+        isOwner={isOwner}
+        linkSharing={set.link_sharing ?? 'private'}
+        collaborators={collaborators}
+        onClose={() => setSettingsVisible(false)}
+        onSharingChange={handleSharingChange}
+        onCollaboratorAdded={(c) => setCollaborators(prev => [...prev, c])}
+        onCollaboratorRemoved={(cid) => setCollaborators(prev => prev.filter(c => c.id !== cid))}
       />
 
       <View className="flex-1 bg-white">
@@ -452,13 +733,17 @@ export default function SetDetailScreen() {
               </Text>
             </View>
           ) : (
-            songs.map((song) => (
+            songs.map((song, index) => (
               <SongRow
                 key={song.id}
                 song={song}
                 canEdit={canEdit}
+                isFirst={index === 0}
+                isLast={index === songs.length - 1}
                 onRemove={() => handleRemoveSong(song.id)}
                 onKeyChange={(key) => handleKeyChange(song.id, key)}
+                onMoveUp={() => handleMoveSong(index, 'up')}
+                onMoveDown={() => handleMoveSong(index, 'down')}
               />
             ))
           )}

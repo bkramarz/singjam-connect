@@ -3,8 +3,9 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   RefreshControl, ActivityIndicator, Image,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import InviteToJamModal from '@/components/InviteToJamModal';
 
 type Match = {
   user_id: string;
@@ -80,7 +81,7 @@ function SkeletonCard() {
   );
 }
 
-function MatchCard({ match }: { match: Match }) {
+function MatchCard({ match, onPress, onInvite }: { match: Match; onPress: () => void; onInvite: () => void }) {
   const fullName = [match.display_name, match.last_name].filter(Boolean).join(' ');
   const displayName = fullName || match.username || 'Someone';
 
@@ -98,7 +99,10 @@ function MatchCard({ match }: { match: Match }) {
   const sharedGenres = (match.shared_genres ?? []).slice(0, 5);
 
   return (
-    <View className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4">
+    <TouchableOpacity
+      onPress={onPress}
+      className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4 active:bg-slate-50"
+    >
       <View className="flex-row items-center">
         <Avatar uri={match.avatar_url} name={displayName} />
         <View className="flex-1 ml-3 min-w-0">
@@ -145,16 +149,26 @@ function MatchCard({ match }: { match: Match }) {
           {sharedGenres.join(', ')}
         </Text>
       ) : null}
-    </View>
+
+      <TouchableOpacity
+        onPress={onInvite}
+        className="mt-3 border border-amber-300 rounded-full py-1.5 items-center"
+      >
+        <Text className="text-amber-700 text-xs font-semibold">Invite to jam</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
   );
 }
 
-function SearchResultCard({ user }: { user: SearchResult }) {
+function SearchResultCard({ user, onPress }: { user: SearchResult; onPress: () => void }) {
   const fullName = [user.display_name, user.last_name].filter(Boolean).join(' ');
   const displayName = fullName || user.username || 'Someone';
 
   return (
-    <View className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4">
+    <TouchableOpacity
+      onPress={onPress}
+      className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4 active:bg-slate-50"
+    >
       <View className="flex-row items-center">
         <Avatar uri={user.avatar_url} name={displayName} />
         <View className="flex-1 ml-3 min-w-0">
@@ -164,7 +178,7 @@ function SearchResultCard({ user }: { user: SearchResult }) {
           ) : null}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -175,6 +189,8 @@ export default function FriendsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteTarget, setInviteTarget] = useState<{ id: string; name: string } | null>(null);
+  const router = useRouter();
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -226,6 +242,13 @@ export default function FriendsScreen() {
 
   return (
     <View className="flex-1 bg-slate-50">
+      <InviteToJamModal
+        visible={!!inviteTarget}
+        inviteeUserId={inviteTarget?.id ?? ''}
+        inviteeName={inviteTarget?.name ?? ''}
+        onClose={() => setInviteTarget(null)}
+      />
+
       <View className="px-4 pt-14 pb-3 bg-white border-b border-slate-100">
         <Text className="text-2xl font-bold text-slate-900 mb-3">Find Jammers</Text>
         <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
@@ -263,7 +286,12 @@ export default function FriendsScreen() {
         <FlatList
           data={searchResults}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <SearchResultCard user={item} />}
+          renderItem={({ item }) => (
+            <SearchResultCard
+              user={item}
+              onPress={() => router.push({ pathname: '/profile/[id]' as any, params: { id: item.id } })}
+            />
+          )}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
           ListEmptyComponent={
@@ -279,7 +307,17 @@ export default function FriendsScreen() {
         <FlatList
           data={matches}
           keyExtractor={(item) => item.user_id}
-          renderItem={({ item }) => <MatchCard match={item} />}
+          renderItem={({ item }) => {
+            const fullName = [item.display_name, item.last_name].filter(Boolean).join(' ');
+            const displayName = fullName || item.username || 'Someone';
+            return (
+              <MatchCard
+                match={item}
+                onPress={() => router.push({ pathname: '/profile/[id]' as any, params: { id: item.user_id } })}
+                onInvite={() => setInviteTarget({ id: item.user_id, name: displayName })}
+              />
+            );
+          }}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
           refreshControl={

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
-import { View, Text, SectionList, RefreshControl } from 'react-native';
+import { View, Text, SectionList, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import JamCard, { type JamItem } from '@/components/JamCard';
 
@@ -110,8 +111,15 @@ export default function JamsScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <View className="px-4 pt-14 pb-3 border-b border-slate-100">
+      <View className="px-4 pt-14 pb-3 border-b border-slate-100 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-slate-900">Jams</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/jam/new' as any)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          className="w-8 h-8 rounded-full bg-amber-500 items-center justify-center"
+        >
+          <Ionicons name="add" size={20} color="white" />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
