@@ -351,6 +351,7 @@ export default function RepertoireScreen() {
         onConfidenceChange={handleConfidenceChange}
         onRemove={handleRemove}
         onAddToSet={handleAddToSet}
+        onPress={item.song_id ? () => router.push(`/song/${item.song_id}` as any) : undefined}
       />
     ),
     [userId, songs]
