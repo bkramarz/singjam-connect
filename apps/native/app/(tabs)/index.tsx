@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, ScrollView, Modal } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { matchesSearch, type UserSong } from '@singjam/core';
@@ -22,6 +22,7 @@ type ConfidenceFilter = 'all' | 'lead' | 'support' | 'learn';
 type SortOrder = 'title_asc' | 'title_desc' | 'recent';
 
 type ExtFilters = {
+  sortBy: SortOrder;
   genres: Set<string>;
   cultures: Set<string>;
   languages: Set<string>;
@@ -47,7 +48,7 @@ const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
 ];
 
 function emptyExtFilters(): ExtFilters {
-  return { genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '' };
+  return { sortBy: 'title_asc', genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '' };
 }
 
 function countExtFilters(f: ExtFilters): number {
@@ -125,6 +126,13 @@ function FilterModal({
         </View>
 
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
+          <SectionLabel title="Sort" />
+          <View className="flex-row flex-wrap">
+            {SORT_OPTIONS.map(opt => (
+              <Chip key={opt.key} label={opt.label} selected={filters.sortBy === opt.key} onPress={() => set({ sortBy: opt.key })} />
+            ))}
+          </View>
+
           {options.genres.length > 0 && (
             <>
               <SectionLabel title="Genre" />
@@ -249,7 +257,6 @@ export default function RepertoireScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('title_asc');
   const [extFilters, setExtFilters] = useState<ExtFilters>(emptyExtFilters());
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -303,15 +310,15 @@ export default function RepertoireScreen() {
     if (extFilters.meter) result = result.filter(s => s.meter === extFilters.meter);
 
     // Sort
-    if (sortOrder === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
-    if (sortOrder === 'recent') return [...result].sort((a, b) => {
+    if (extFilters.sortBy === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
+    if (extFilters.sortBy === 'recent') return [...result].sort((a, b) => {
       if (!a.updated_at && !b.updated_at) return 0;
       if (!a.updated_at) return 1;
       if (!b.updated_at) return -1;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
     return result;
-  }, [songs, query, confidenceFilter, sortOrder, extFilters]);
+  }, [songs, query, confidenceFilter, extFilters]);
 
   const existingIds = useMemo(() => new Set(songs.map(s => s.song_id)), [songs]);
   const extFilterCount = countExtFilters(extFilters);
@@ -404,30 +411,18 @@ export default function RepertoireScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Confidence + sort chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1.5">
-          <View className="flex-row gap-2 pb-1">
-            {CONFIDENCE_CHIPS.map(chip => (
-              <TouchableOpacity
-                key={chip.key}
-                onPress={() => setConfidenceFilter(chip.key)}
-                className={`px-3 py-1 rounded-full border ${confidenceFilter === chip.key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
-              >
-                <Text className={`text-sm font-medium ${confidenceFilter === chip.key ? 'text-white' : 'text-slate-600'}`}>{chip.label}</Text>
-              </TouchableOpacity>
-            ))}
-            <View className="w-px bg-slate-200 mx-1" />
-            {SORT_OPTIONS.map(opt => (
-              <TouchableOpacity
-                key={opt.key}
-                onPress={() => setSortOrder(opt.key)}
-                className={`px-3 py-1 rounded-full border ${sortOrder === opt.key ? 'bg-slate-700 border-slate-700' : 'bg-white border-slate-200'}`}
-              >
-                <Text className={`text-sm font-medium ${sortOrder === opt.key ? 'text-white' : 'text-slate-500'}`}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
+        {/* Confidence chips */}
+        <View className="flex-row gap-2 pb-1 mb-1">
+          {CONFIDENCE_CHIPS.map(chip => (
+            <TouchableOpacity
+              key={chip.key}
+              onPress={() => setConfidenceFilter(chip.key)}
+              className={`px-3 py-1 rounded-full border ${confidenceFilter === chip.key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+            >
+              <Text className={`text-sm font-medium ${confidenceFilter === chip.key ? 'text-white' : 'text-slate-600'}`}>{chip.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* List */}
