@@ -17,9 +17,10 @@ type Props = {
   song: UserSong;
   onConfidenceChange: (songId: string, confidence: string) => void;
   onRemove: (songId: string) => void;
+  onAddToSet?: (songId: string) => void;
 };
 
-export default function SongRow({ song, onConfidenceChange, onRemove }: Props) {
+export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet }: Props) {
   const subtitle = [
     formatComposers(song.composers, song.cultures),
     song.display_artist,
@@ -28,20 +29,27 @@ export default function SongRow({ song, onConfidenceChange, onRemove }: Props) {
     .join(' · ');
 
   function handleConfidenceTap() {
-    const options = ['Lead', 'Support', 'Learn', 'Cancel'];
+    const options = onAddToSet
+      ? ['Lead', 'Support', 'Learn', 'Add to set', 'Cancel']
+      : ['Lead', 'Support', 'Learn', 'Cancel'];
     const values = ['lead', 'support', 'learn'];
+    const cancelIndex = onAddToSet ? 4 : 3;
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 3, title: 'Change role for ' + song.title },
-        (index) => { if (index < 3) onConfidenceChange(song.song_id, values[index]); }
+        { options, cancelButtonIndex: cancelIndex, title: song.title },
+        (index) => {
+          if (index < 3) onConfidenceChange(song.song_id, values[index]);
+          else if (onAddToSet && index === 3) onAddToSet(song.song_id);
+        }
       );
     } else {
-      Alert.alert('Change role', song.title, [
+      Alert.alert('Song options', song.title, [
         { text: 'Lead', onPress: () => onConfidenceChange(song.song_id, 'lead') },
         { text: 'Support', onPress: () => onConfidenceChange(song.song_id, 'support') },
         { text: 'Learn', onPress: () => onConfidenceChange(song.song_id, 'learn') },
-        { text: 'Cancel', style: 'cancel' },
+        ...(onAddToSet ? [{ text: 'Add to set', onPress: () => onAddToSet(song.song_id) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
       ]);
     }
   }

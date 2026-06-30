@@ -3,10 +3,10 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   ActivityIndicator, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
-type Section = 'none' | 'email' | 'password';
+type Section = 'none' | 'email' | 'password' | 'delete';
 
 export default function AccountScreen() {
   const [open, setOpen] = useState<Section>('none');
@@ -25,16 +25,51 @@ export default function AccountScreen() {
   const [passwordDone, setPasswordDone] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+  // Delete account state
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const router = useRouter();
+
   function openSection(section: Section) {
     setOpen(section);
     setEmailError(null);
     setPasswordError(null);
+    setDeleteError(null);
     setEmailSent(false);
     setPasswordDone(false);
     setNewEmail('');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete account',
+      'This will permanently delete your account and all your data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete my account',
+          style: 'destructive',
+          onPress: deleteAccount,
+        },
+      ]
+    );
+  }
+
+  async function deleteAccount() {
+    setDeleting(true);
+    setDeleteError(null);
+    const { error } = await supabase.rpc('delete_own_account');
+    if (error) {
+      setDeleting(false);
+      setDeleteError(error.message);
+      return;
+    }
+    await supabase.auth.signOut();
+    router.replace('/(auth)' as any);
   }
 
   async function handleChangeEmail() {
@@ -200,6 +235,39 @@ export default function AccountScreen() {
                     </TouchableOpacity>
                   </>
                 )}
+              </View>
+            )}
+          </View>
+
+          {/* Danger zone */}
+          <View className="mx-4 mt-6 mb-10 rounded-xl border border-red-200 overflow-hidden">
+            <TouchableOpacity
+              onPress={() => openSection(open === 'delete' ? 'none' : 'delete')}
+              className="px-4 py-4 flex-row items-center justify-between"
+            >
+              <Text className="text-red-600 font-medium">Delete account</Text>
+              <Text className="text-slate-400 text-sm">{open === 'delete' ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {open === 'delete' && (
+              <View className="px-4 pb-4 bg-red-50">
+                <Text className="text-red-700 text-sm mb-4">
+                  Permanently deletes your account and all your data. This cannot be undone.
+                </Text>
+                {deleteError ? (
+                  <Text className="text-red-500 text-sm mb-3">{deleteError}</Text>
+                ) : null}
+                <TouchableOpacity
+                  onPress={confirmDeleteAccount}
+                  disabled={deleting}
+                  className="bg-red-600 rounded-xl py-3 items-center"
+                >
+                  {deleting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text className="text-white font-semibold">Delete my account</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             )}
           </View>
