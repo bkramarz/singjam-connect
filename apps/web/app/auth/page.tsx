@@ -27,7 +27,7 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
         </>
       ) : isSignup ? (
         <>
-          <h1 className="text-xl font-semibold">Join SingJam</h1>
+          <h1 className="text-xl font-semibold">Create your SingJam account</h1>
           <p className="mt-2 text-sm text-zinc-600"><strong>Discover new music</strong> and <strong>new friends</strong>. Totally <strong>free</strong> — we&apos;ll only email you about <strong>cool music stuff</strong> 😎 🎸🥁</p>
         </>
       ) : (

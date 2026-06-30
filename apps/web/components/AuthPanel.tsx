@@ -205,9 +205,9 @@ export default function AuthPanel({
     <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
       <p className="text-sm text-slate-500">
         {mode === "signin" ? (
-          <>No account? <button onClick={() => { setMode("signup"); setStatus(null); }} className="text-amber-600 hover:underline">Create one</button></>
+          <>No account? <button onClick={() => { setMode("signup"); setStatus(null); router.replace("/auth?mode=signup", { scroll: false }); }} className="text-amber-600 hover:underline">Create one</button></>
         ) : (
-          <>Already have an account? <button onClick={() => { setMode("signin"); setStatus(null); }} className="text-amber-600 hover:underline">Sign in</button></>
+          <>Already have an account? <button onClick={() => { setMode("signin"); setStatus(null); router.replace("/auth", { scroll: false }); }} className="text-amber-600 hover:underline">Sign in</button></>
         )}
       </p>
 

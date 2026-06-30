@@ -162,7 +162,7 @@ export default function SetsContent() {
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
           <p className="text-base font-semibold text-zinc-900">Build sets for your jams and gigs</p>
           <p className="mt-2 text-sm text-zinc-500">
-            Join SingJam to build your own sets, track your repertoire, and find jam partners who know the same songs.
+            Sign up to build your own sets, track your repertoire, and find jam partners who know the same songs.
           </p>
           <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
             Sign in →
