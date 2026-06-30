@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Alert,
   ActivityIndicator, Modal, FlatList, TextInput,
-  KeyboardAvoidingView, Platform, ActionSheetIOS,
+  KeyboardAvoidingView, Platform, ActionSheetIOS, Linking,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { supabase } from '@/lib/supabase';
 import { formatComposers } from '@singjam/core';
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 const MUSICAL_KEYS = ['A', 'Bb', 'B', 'C', 'C#', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab'];
 
@@ -19,6 +22,7 @@ type SetData = {
   description: string | null;
   owner_user_id: string;
   link_sharing: 'private' | 'link' | 'public';
+  spotify_playlist_id: string | null;
 };
 
 type SetSong = {
@@ -230,28 +234,22 @@ function KeyPicker({
 function SongRow({
   song,
   canEdit,
-  showReorder = true,
   displayPosition,
-  isFirst,
-  isLast,
+  drag,
+  isActive,
   myUserId,
   onRemove,
   onKeyChange,
-  onMoveUp,
-  onMoveDown,
   onLeaderToggle,
 }: {
   song: SetSong;
   canEdit: boolean;
-  showReorder?: boolean;
   displayPosition: number;
-  isFirst: boolean;
-  isLast: boolean;
+  drag?: () => void;
+  isActive?: boolean;
   myUserId: string | null;
   onRemove: () => void;
   onKeyChange: (key: string | null) => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onLeaderToggle: (newLeaderIds: string[]) => void;
 }) {
   const [keyPickerVisible, setKeyPickerVisible] = useState(false);
@@ -279,24 +277,16 @@ function SongRow({
         onClose={() => setKeyPickerVisible(false)}
         onSelect={onKeyChange}
       />
-      <View className="flex-row items-center px-4 py-3 border-b border-slate-100 bg-white">
-        {canEdit && showReorder ? (
-          <View className="mr-2 items-center gap-0.5">
-            <TouchableOpacity
-              onPress={onMoveUp}
-              disabled={isFirst}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Ionicons name="chevron-up" size={14} color={isFirst ? '#e2e8f0' : '#94a3b8'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onMoveDown}
-              disabled={isLast}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Ionicons name="chevron-down" size={14} color={isLast ? '#e2e8f0' : '#94a3b8'} />
-            </TouchableOpacity>
-          </View>
+      <View className={`flex-row items-center px-4 py-3 border-b border-slate-100 ${isActive ? 'bg-amber-50' : 'bg-white'}`}>
+        {canEdit && drag ? (
+          <TouchableOpacity
+            onLongPress={drag}
+            delayLongPress={150}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            className="mr-3"
+          >
+            <Ionicons name="reorder-three-outline" size={20} color="#94a3b8" />
+          </TouchableOpacity>
         ) : (
           <View className="w-7 items-center mr-2">
             <Text className="text-slate-300 text-sm font-medium">{displayPosition}</Text>
@@ -562,6 +552,7 @@ export default function SetDetailScreen() {
   const [collaborators, setCollaborators] = useState<{ id: string; user_id: string; role: string; display_name: string | null; username: string | null }[]>([]);
   const [sortBy, setSortBy] = useState<SetSortOrder>('custom');
   const [filterQuery, setFilterQuery] = useState('');
+  const [spotifyExporting, setSpotifyExporting] = useState(false);
 
   useEffect(() => {
     if (id) load();
@@ -575,7 +566,7 @@ export default function SetDetailScreen() {
     const [setRes, songsRes, collabRes, allCollabRes] = await Promise.all([
       supabase
         .from('sets')
-        .select('id, name, description, owner_user_id, link_sharing')
+        .select('id, name, description, owner_user_id, link_sharing, spotify_playlist_id')
         .eq('id', id)
         .single(),
       supabase
@@ -631,22 +622,6 @@ export default function SetDetailScreen() {
     });
   }
 
-  async function handleMoveSong(index: number, direction: 'up' | 'down') {
-    const swapIndex = direction === 'up' ? index - 1 : index + 1;
-    if (swapIndex < 0 || swapIndex >= songs.length) return;
-
-    const newSongs = [...songs];
-    [newSongs[index], newSongs[swapIndex]] = [newSongs[swapIndex], newSongs[index]];
-    const reordered = newSongs.map((s, i) => ({ ...s, position: i + 1 }));
-    setSongs(reordered);
-
-    // Persist the two swapped rows
-    await Promise.all([
-      supabase.from('set_songs').update({ position: reordered[index].position }).eq('id', reordered[index].id),
-      supabase.from('set_songs').update({ position: reordered[swapIndex].position }).eq('id', reordered[swapIndex].id),
-    ]);
-  }
-
   async function handleKeyChange(setsSongId: string, key: string | null) {
     const { error } = await supabase
       .from('set_songs')
@@ -663,6 +638,50 @@ export default function SetDetailScreen() {
       .eq('id', setsSongId);
     if (error) { Alert.alert('Error', error.message); return; }
     setSongs((prev) => prev.map((s) => s.id === setsSongId ? { ...s, leader_user_ids: newLeaderIds } : s));
+  }
+
+  async function handleReorder(data: SetSong[]) {
+    const reordered = data.map((s, i) => ({ ...s, position: i + 1 }));
+    setSongs(reordered);
+    await Promise.all(
+      reordered.map(s => supabase.from('set_songs').update({ position: s.position }).eq('id', s.id))
+    );
+  }
+
+  async function handleSpotifyExport() {
+    setSpotifyExporting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${WEB_URL}/api/sets/${id}/playlists/spotify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ songOrder: songs.map(s => s.song_id) }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        Alert.alert('Export failed', json.error === 'spotify_auth_expired'
+          ? 'The Spotify connection has expired. An admin has been notified.'
+          : json.error ?? 'Something went wrong.');
+        return;
+      }
+      setSet(prev => prev ? { ...prev, spotify_playlist_id: json.url } : prev);
+      Alert.alert(
+        'Exported to Spotify',
+        `${json.added} of ${json.total} songs added.`,
+        [
+          { text: 'Open playlist', onPress: () => Linking.openURL(json.url) },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+    } catch {
+      Alert.alert('Error', 'Could not reach the server.');
+    } finally {
+      setSpotifyExporting(false);
+    }
   }
 
   async function handleSharingChange(mode: 'private' | 'link' | 'public') {
@@ -714,6 +733,7 @@ export default function SetDetailScreen() {
 
   const isOwner = set.owner_user_id === myUserId;
   const existingIds = new Set(songs.map((s) => s.song_id));
+  const canDrag = canEdit && sortBy === 'custom' && !filterQuery.trim();
 
   const displayedSongs = useMemo(() => {
     let result = songs;
@@ -811,45 +831,82 @@ export default function SetDetailScreen() {
           </View>
         )}
 
-        <ScrollView className="flex-1">
-          {songs.length === 0 ? (
-            <View className="items-center justify-center py-20 px-8">
-              <Text className="text-slate-900 font-semibold mb-1">No songs yet</Text>
-              <Text className="text-slate-400 text-sm text-center">
-                {canEdit ? 'Tap "Add Song" to start building this set.' : 'This set has no songs yet.'}
-              </Text>
-            </View>
-          ) : displayedSongs.length === 0 ? (
-            <View className="items-center justify-center py-16 px-8">
-              <Text className="text-slate-400 text-sm">No songs match this filter</Text>
-            </View>
-          ) : (
-            displayedSongs.map((song, index) => {
-              const originalIndex = songs.indexOf(song);
-              return (
+        {songs.length === 0 ? (
+          <View className="flex-1 items-center justify-center py-20 px-8">
+            <Text className="text-slate-900 font-semibold mb-1">No songs yet</Text>
+            <Text className="text-slate-400 text-sm text-center">
+              {canEdit ? 'Tap "Add Song" to start building this set.' : 'This set has no songs yet.'}
+            </Text>
+          </View>
+        ) : canDrag ? (
+          <DraggableFlatList
+            data={songs}
+            keyExtractor={(item) => item.id}
+            onDragEnd={({ data }) => handleReorder(data)}
+            contentContainerStyle={{ paddingBottom: canEdit ? 140 : 40 }}
+            renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<SetSong>) => (
+              <ScaleDecorator>
                 <SongRow
-                  key={song.id}
-                  song={song}
+                  song={item}
                   canEdit={canEdit}
-                  showReorder={sortBy === 'custom'}
-                  displayPosition={index + 1}
-                  isFirst={originalIndex === 0}
-                  isLast={originalIndex === songs.length - 1}
+                  displayPosition={(getIndex() ?? 0) + 1}
+                  drag={drag}
+                  isActive={isActive}
                   myUserId={myUserId}
-                  onRemove={() => handleRemoveSong(song.id)}
-                  onKeyChange={(key) => handleKeyChange(song.id, key)}
-                  onMoveUp={() => handleMoveSong(originalIndex, 'up')}
-                  onMoveDown={() => handleMoveSong(originalIndex, 'down')}
-                  onLeaderToggle={(newIds) => handleLeaderToggle(song.id, newIds)}
+                  onRemove={() => handleRemoveSong(item.id)}
+                  onKeyChange={(key) => handleKeyChange(item.id, key)}
+                  onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
                 />
-              );
-            })
-          )}
-          <View style={{ height: 80 }} />
-        </ScrollView>
+              </ScaleDecorator>
+            )}
+          />
+        ) : (
+          <FlatList
+            data={displayedSongs}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingBottom: canEdit ? 140 : 40 }}
+            ListEmptyComponent={
+              <View className="items-center justify-center py-16 px-8">
+                <Text className="text-slate-400 text-sm">No songs match this filter</Text>
+              </View>
+            }
+            renderItem={({ item, index }) => (
+              <SongRow
+                song={item}
+                canEdit={canEdit}
+                displayPosition={index + 1}
+                myUserId={myUserId}
+                onRemove={() => handleRemoveSong(item.id)}
+                onKeyChange={(key) => handleKeyChange(item.id, key)}
+                onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
+              />
+            )}
+          />
+        )}
 
         {canEdit ? (
           <View className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-2 bg-white border-t border-slate-100">
+            {isOwner && (
+              <TouchableOpacity
+                onPress={spotifyExporting ? undefined : handleSpotifyExport}
+                disabled={spotifyExporting}
+                className="flex-row items-center justify-center gap-2 py-2.5 mb-2 rounded-xl border border-slate-200"
+              >
+                {spotifyExporting ? (
+                  <ActivityIndicator size="small" color="#1db954" />
+                ) : (
+                  <Ionicons name="musical-notes-outline" size={16} color="#1db954" />
+                )}
+                <Text className="text-slate-700 text-sm font-medium">
+                  {set.spotify_playlist_id
+                    ? (spotifyExporting ? 'Syncing…' : 'Sync Spotify playlist')
+                    : (spotifyExporting ? 'Exporting…' : 'Export to Spotify')}
+                </Text>
+                {set.spotify_playlist_id && !spotifyExporting ? (
+                  <Ionicons name="open-outline" size={13} color="#94a3b8" />
+                ) : null}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => setAddModalVisible(true)}
               className="bg-amber-500 rounded-xl py-3.5 items-center flex-row justify-center gap-2"

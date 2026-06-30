@@ -1,6 +1,7 @@
 import '../global.css';
 
 import * as Linking from 'expo-linking';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
@@ -89,6 +90,7 @@ export default function RootLayout() {
   }, [session, initialised, profileComplete, segments]);
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -105,5 +107,6 @@ export default function RootLayout() {
       <Stack.Screen name="set/new" options={{ presentation: 'modal', title: 'New Set', headerTintColor: '#d97706' }} />
       <Stack.Screen name="song/[id]" options={{ headerTintColor: '#d97706' }} />
     </Stack>
+    </GestureHandlerRootView>
   );
 }

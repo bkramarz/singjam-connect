@@ -71,7 +71,11 @@ export async function POST(
 ) {
   const { id: setId } = await params;
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = (await supabase.auth.getUser()).data.user ?? null;
+  if (!user) {
+    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (bearer) user = (await supabaseAdmin().auth.getUser(bearer)).data.user ?? null;
+  }
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let songOrder: string[] | null = null;
@@ -80,7 +84,8 @@ export async function POST(
     if (Array.isArray(body.songOrder)) songOrder = body.songOrder;
   } catch { /* no body */ }
 
-  const { data: setOwner } = await supabase.from("sets").select("owner_user_id").eq("id", setId).single();
+  const admin = supabaseAdmin();
+  const { data: setOwner } = await admin.from("sets").select("owner_user_id").eq("id", setId).single();
   if (!setOwner || setOwner.owner_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { token: access_token, authExpired } = await getAccessToken();
@@ -92,7 +97,6 @@ export async function POST(
     return NextResponse.json({ error: "Could not authenticate with Spotify" }, { status: 500 });
   }
 
-  const admin = supabaseAdmin();
   const [setRes, songsRes] = await Promise.all([
     admin.from("sets").select("name, spotify_playlist_id").eq("id", setId).single(),
     admin
