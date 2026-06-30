@@ -9,14 +9,15 @@ type UserSet = {
   name: string;
 };
 
+type SongEntry = { id: string; title: string };
+
 type Props = {
   visible: boolean;
-  songId: string;
-  songTitle: string;
+  songs: SongEntry[];
   onClose: () => void;
 };
 
-export default function AddToSetModal({ visible, songId, songTitle, onClose }: Props) {
+export default function AddToSetModal({ visible, songs, onClose }: Props) {
   const [sets, setSets] = useState<UserSet[]>([]);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -55,17 +56,21 @@ export default function AddToSetModal({ visible, songId, songTitle, onClose }: P
       .limit(1)
       .maybeSingle();
 
-    const nextPosition = (existing?.position ?? 0) + 1;
+    let nextPosition = (existing?.position ?? 0) + 1;
 
-    const { error } = await supabase
-      .from('set_songs')
-      .insert({ set_id: setId, song_id: songId, position: nextPosition, leader_user_ids: [] });
+    for (const song of songs) {
+      const { error } = await supabase
+        .from('set_songs')
+        .insert({ set_id: setId, song_id: song.id, position: nextPosition, leader_user_ids: [] });
+      if (error && !error.message.includes('duplicate')) {
+        Alert.alert('Error', error.message);
+        setPending(null);
+        return;
+      }
+      nextPosition++;
+    }
 
     setPending(null);
-    if (error && !error.message.includes('duplicate')) {
-      Alert.alert('Error', error.message);
-      return;
-    }
     setAdded(prev => new Set([...prev, setId]));
   }
 
@@ -81,7 +86,9 @@ export default function AddToSetModal({ visible, songId, songTitle, onClose }: P
         </View>
 
         <View className="px-4 py-2 bg-slate-50 border-b border-slate-100">
-          <Text className="text-slate-500 text-sm" numberOfLines={1}>"{songTitle}"</Text>
+          <Text className="text-slate-500 text-sm" numberOfLines={1}>
+            {songs.length === 1 ? `"${songs[0].title}"` : `${songs.length} songs selected`}
+          </Text>
         </View>
 
         {loading ? (

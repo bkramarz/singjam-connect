@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, Alert, ActionSheetIOS, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { formatComposers, type UserSong } from '@singjam/core';
 
 const CONFIDENCE_LABELS: Record<string, string> = {
@@ -19,9 +20,12 @@ type Props = {
   onRemove: (songId: string) => void;
   onAddToSet?: (songId: string) => void;
   onPress?: () => void;
+  bulkMode?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
 };
 
-export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet, onPress }: Props) {
+export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet, onPress, bulkMode, selected, onToggle }: Props) {
   const subtitle = [
     formatComposers(song.composers, song.cultures),
     song.display_artist,
@@ -63,6 +67,29 @@ export default function SongRow({ song, onConfidenceChange, onRemove, onAddToSet
   }
 
   const badgeStyle = CONFIDENCE_STYLE[song.confidence] ?? CONFIDENCE_STYLE.learn;
+
+  if (bulkMode) {
+    return (
+      <TouchableOpacity
+        className="flex-row items-center px-4 py-3 border-b border-slate-100"
+        onPress={onToggle}
+        activeOpacity={0.6}
+      >
+        <Ionicons
+          name={selected ? 'checkbox' : 'checkbox-outline'}
+          size={22}
+          color={selected ? '#d97706' : '#94a3b8'}
+          style={{ marginRight: 12 }}
+        />
+        <View className="flex-1">
+          <Text className="text-slate-900 font-medium" numberOfLines={1}>{song.title}</Text>
+          {subtitle ? (
+            <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{subtitle}</Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <View className="flex-row items-center px-4 py-3 border-b border-slate-100">

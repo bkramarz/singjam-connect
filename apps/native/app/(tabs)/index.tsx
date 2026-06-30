@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView, ActionSheetIOS, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { matchesSearch, type UserSong } from '@singjam/core';
@@ -261,7 +261,11 @@ export default function RepertoireScreen() {
   const [extFilters, setExtFilters] = useState<ExtFilters>(emptyExtFilters());
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [addToSetSong, setAddToSetSong] = useState<{ id: string; title: string } | null>(null);
+  const [addToSetSongs, setAddToSetSongs] = useState<{ id: string; title: string }[] | null>(null);
+
+  // Bulk selection
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   async function load(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
@@ -325,6 +329,11 @@ export default function RepertoireScreen() {
   const existingIds = useMemo(() => new Set(songs.map(s => s.song_id)), [songs]);
   const extFilterCount = countExtFilters(extFilters);
 
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
   async function handleConfidenceChange(songId: string, confidence: string) {
     setSongs(prev => prev.map(s => s.song_id === songId ? { ...s, confidence } : s));
     const { error } = await supabase.from('user_songs').update({ confidence }).eq('user_id', userId).eq('song_id', songId);
@@ -341,7 +350,65 @@ export default function RepertoireScreen() {
 
   function handleAddToSet(songId: string) {
     const song = songs.find(s => s.song_id === songId);
-    setAddToSetSong({ id: songId, title: song?.title ?? '' });
+    setAddToSetSongs([{ id: songId, title: song?.title ?? '' }]);
+  }
+
+  // ── Bulk actions ─────────────────────────────────────────────────────────────
+
+  function handleBulkAddToSet() {
+    const selected = songs.filter(s => selectedIds.has(s.song_id)).map(s => ({ id: s.song_id, title: s.title }));
+    setAddToSetSongs(selected);
+    exitSelectMode();
+  }
+
+  function handleBulkConfidence() {
+    const ids = Array.from(selectedIds);
+    const options = ['Lead', 'Support', 'Learn', 'Cancel'];
+    const values = ['lead', 'support', 'learn'];
+
+    const apply = async (confidence: string) => {
+      setSongs(prev => prev.map(s => selectedIds.has(s.song_id) ? { ...s, confidence } : s));
+      exitSelectMode();
+      for (const songId of ids) {
+        await supabase.from('user_songs').update({ confidence }).eq('user_id', userId).eq('song_id', songId);
+      }
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: 3, title: `Change level for ${ids.length} songs` },
+        (index) => { if (index < 3) apply(values[index]); }
+      );
+    } else {
+      Alert.alert(`Change level for ${ids.length} songs`, undefined, [
+        { text: 'Lead', onPress: () => apply('lead') },
+        { text: 'Support', onPress: () => apply('support') },
+        { text: 'Learn', onPress: () => apply('learn') },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  }
+
+  function handleBulkRemove() {
+    const ids = Array.from(selectedIds);
+    Alert.alert(
+      'Remove songs',
+      `Remove ${ids.length} ${ids.length === 1 ? 'song' : 'songs'} from your repertoire?`,
+      [
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setSongs(prev => prev.filter(s => !selectedIds.has(s.song_id)));
+            exitSelectMode();
+            for (const songId of ids) {
+              await supabase.from('user_songs').delete().eq('user_id', userId).eq('song_id', songId);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   }
 
   const renderItem = useCallback(
@@ -351,10 +418,17 @@ export default function RepertoireScreen() {
         onConfidenceChange={handleConfidenceChange}
         onRemove={handleRemove}
         onAddToSet={handleAddToSet}
-        onPress={item.song_id ? () => router.push(`/song/${item.song_id}` as any) : undefined}
+        onPress={!selectMode && item.song_id ? () => router.push(`/song/${item.song_id}` as any) : undefined}
+        bulkMode={selectMode}
+        selected={selectedIds.has(item.song_id)}
+        onToggle={() => setSelectedIds(prev => {
+          const next = new Set(prev);
+          next.has(item.song_id) ? next.delete(item.song_id) : next.add(item.song_id);
+          return next;
+        })}
       />
     ),
-    [userId, songs]
+    [userId, songs, selectMode, selectedIds]
   );
 
   return (
@@ -369,74 +443,103 @@ export default function RepertoireScreen() {
 
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-14 pb-3 border-b border-slate-100">
-        <View>
-          <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
-          {!loading && (
-            <Text className="text-slate-400 text-sm mt-0.5">
-              {songs.length} {songs.length === 1 ? 'song' : 'songs'}
-            </Text>
-          )}
-        </View>
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => router.push('/songs' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="search" size={22} color="#94a3b8" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowAdd(true)}
-            className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
-          >
-            <Text className="text-white text-xl leading-none font-light">+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Search + filter icon */}
-      <View className="px-4 pt-2 pb-1 border-b border-slate-100">
-        <View className="flex-row items-center gap-2 mb-2">
-          <View className="flex-1 flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-            <Text className="text-slate-400 mr-2">🔍</Text>
-            <TextInput
-              className="flex-1 text-slate-900"
-              placeholder="Search your repertoire…"
-              placeholderTextColor="#94a3b8"
-              value={query}
-              onChangeText={setQuery}
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery('')}>
-                <Text className="text-slate-400 ml-2">✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            onPress={() => setFilterModalVisible(true)}
-            className="relative"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="options-outline" size={22} color={extFilterCount > 0 ? '#d97706' : '#64748b'} />
-            {extFilterCount > 0 && (
-              <View className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 items-center justify-center">
-                <Text className="text-white text-xs font-bold leading-none">{extFilterCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Confidence chips */}
-        <View className="flex-row gap-2 pb-1 mb-1">
-          {CONFIDENCE_CHIPS.map(chip => (
-            <TouchableOpacity
-              key={chip.key}
-              onPress={() => setConfidenceFilter(chip.key)}
-              className={`px-3 py-1 rounded-full border ${confidenceFilter === chip.key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
-            >
-              <Text className={`text-sm font-medium ${confidenceFilter === chip.key ? 'text-white' : 'text-slate-600'}`}>{chip.label}</Text>
+        {selectMode ? (
+          <>
+            <TouchableOpacity onPress={exitSelectMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text className="text-amber-600 font-medium">Cancel</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+            <Text className="text-base font-semibold text-slate-900">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select songs'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setSelectedIds(new Set(filtered.map(s => s.song_id)))}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text className="text-amber-600 font-medium">All</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <View>
+              <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
+              {!loading && (
+                <Text className="text-slate-400 text-sm mt-0.5">
+                  {songs.length} {songs.length === 1 ? 'song' : 'songs'}
+                </Text>
+              )}
+            </View>
+            <View className="flex-row items-center gap-3">
+              {songs.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSelectMode(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text className="text-amber-600 font-medium text-sm">Select</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={() => router.push('/songs' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="search" size={22} color="#94a3b8" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowAdd(true)}
+                className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
+              >
+                <Text className="text-white text-xl leading-none font-light">+</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
+
+      {/* Search + filter icon — hidden in select mode */}
+      {!selectMode && (
+        <View className="px-4 pt-2 pb-1 border-b border-slate-100">
+          <View className="flex-row items-center gap-2 mb-2">
+            <View className="flex-1 flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
+              <Text className="text-slate-400 mr-2">🔍</Text>
+              <TextInput
+                className="flex-1 text-slate-900"
+                placeholder="Search your repertoire…"
+                placeholderTextColor="#94a3b8"
+                value={query}
+                onChangeText={setQuery}
+                autoCapitalize="none"
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <TouchableOpacity onPress={() => setQuery('')}>
+                  <Text className="text-slate-400 ml-2">✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={() => setFilterModalVisible(true)}
+              className="relative"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="options-outline" size={22} color={extFilterCount > 0 ? '#d97706' : '#64748b'} />
+              {extFilterCount > 0 && (
+                <View className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 items-center justify-center">
+                  <Text className="text-white text-xs font-bold leading-none">{extFilterCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Confidence chips */}
+          <View className="flex-row gap-2 pb-1 mb-1">
+            {CONFIDENCE_CHIPS.map(chip => (
+              <TouchableOpacity
+                key={chip.key}
+                onPress={() => setConfidenceFilter(chip.key)}
+                className={`px-3 py-1 rounded-full border ${confidenceFilter === chip.key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+              >
+                <Text className={`text-sm font-medium ${confidenceFilter === chip.key ? 'text-white' : 'text-slate-600'}`}>{chip.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* List */}
       {loading ? (
@@ -451,7 +554,7 @@ export default function RepertoireScreen() {
           data={filtered}
           keyExtractor={item => item.song_id}
           renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#d97706" />}
+          refreshControl={!selectMode ? <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#d97706" /> : undefined}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center pt-24">
               <Text className="text-slate-400 text-base">
@@ -470,7 +573,32 @@ export default function RepertoireScreen() {
               ) : null}
             </View>
           }
+          contentContainerStyle={selectMode && selectedIds.size > 0 ? { paddingBottom: 100 } : undefined}
         />
+      )}
+
+      {/* Bulk action bar */}
+      {selectMode && selectedIds.size > 0 && (
+        <View className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-3 bg-white border-t border-slate-100 flex-row gap-2">
+          <TouchableOpacity
+            onPress={handleBulkAddToSet}
+            className="flex-1 py-2.5 rounded-xl border border-amber-400 items-center"
+          >
+            <Text className="text-amber-600 text-sm font-semibold">Add to set</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleBulkConfidence}
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 items-center"
+          >
+            <Text className="text-slate-700 text-sm font-semibold">Change level</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleBulkRemove}
+            className="flex-1 py-2.5 rounded-xl border border-red-200 items-center"
+          >
+            <Text className="text-red-500 text-sm font-semibold">Remove</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {userId && (
@@ -483,12 +611,11 @@ export default function RepertoireScreen() {
         />
       )}
 
-      {addToSetSong && (
+      {addToSetSongs && (
         <AddToSetModal
-          visible={!!addToSetSong}
-          songId={addToSetSong.id}
-          songTitle={addToSetSong.title}
-          onClose={() => setAddToSetSong(null)}
+          visible={!!addToSetSongs}
+          songs={addToSetSongs}
+          onClose={() => setAddToSetSongs(null)}
         />
       )}
     </View>

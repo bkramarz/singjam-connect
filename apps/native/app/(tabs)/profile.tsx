@@ -11,6 +11,17 @@ type Profile = {
   username: string | null;
   avatar_url: string | null;
   singing_voice: string | null;
+  neighborhood: string | null;
+  instrument_levels: Record<string, string> | null;
+};
+
+type InstrumentLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Professional';
+
+const LEVEL_STYLE: Record<InstrumentLevel, string> = {
+  Beginner: 'bg-slate-100 text-slate-500',
+  Intermediate: 'bg-sky-50 text-sky-700',
+  Advanced: 'bg-amber-50 text-amber-700',
+  Professional: 'bg-green-50 text-green-700',
 };
 
 const SINGING_LABEL: Record<string, string> = {
@@ -43,7 +54,7 @@ export default function ProfileScreen() {
         setEmail(user.email ?? null);
         const { data } = await supabase
           .from('profiles')
-          .select('display_name, last_name, username, avatar_url, singing_voice')
+          .select('display_name, last_name, username, avatar_url, singing_voice, neighborhood, instrument_levels')
           .eq('id', user.id)
           .single();
         setProfile(data);
@@ -132,6 +143,10 @@ export default function ProfileScreen() {
     ? profile.singing_voice.split(',').filter(Boolean).map(v => SINGING_LABEL[v] ?? v)
     : [];
 
+  const instrumentEntries = profile?.instrument_levels
+    ? Object.entries(profile.instrument_levels).filter(([, level]) => level)
+    : [];
+
   return (
     <ScrollView className="flex-1 bg-white">
       <View className="flex-row justify-end px-4 pt-14 pb-0">
@@ -171,6 +186,25 @@ export default function ProfileScreen() {
           ) : null}
           {singingLabels.length > 0 ? (
             <Text className="text-slate-400 text-sm mt-1">{singingLabels.join(' · ')}</Text>
+          ) : null}
+          {profile?.neighborhood ? (
+            <View className="flex-row items-center mt-1 gap-1">
+              <Ionicons name="location-outline" size={13} color="#94a3b8" />
+              <Text className="text-slate-400 text-sm">{profile.neighborhood}</Text>
+            </View>
+          ) : null}
+          {instrumentEntries.length > 0 ? (
+            <View className="flex-row flex-wrap justify-center gap-2 mt-3 px-2">
+              {instrumentEntries.map(([name, level]) => {
+                const style = LEVEL_STYLE[level as InstrumentLevel] ?? 'bg-slate-100 text-slate-500';
+                const [bgStyle, textStyle] = style.split(' ');
+                return (
+                  <View key={name} className={`flex-row items-center px-2.5 py-1 rounded-full ${bgStyle}`}>
+                    <Text className={`text-xs font-medium ${textStyle}`}>{name} · {level}</Text>
+                  </View>
+                );
+              })}
+            </View>
           ) : null}
         </View>
       )}

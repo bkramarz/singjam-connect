@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Alert,
   ActivityIndicator, Modal, FlatList, TextInput,
@@ -10,6 +10,8 @@ import { supabase } from '@/lib/supabase';
 import { formatComposers } from '@singjam/core';
 
 const MUSICAL_KEYS = ['A', 'Bb', 'B', 'C', 'C#', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab'];
+
+type SetSortOrder = 'custom' | 'title_asc' | 'title_desc';
 
 type SetData = {
   id: string;
@@ -228,6 +230,8 @@ function KeyPicker({
 function SongRow({
   song,
   canEdit,
+  showReorder = true,
+  displayPosition,
   isFirst,
   isLast,
   onRemove,
@@ -237,6 +241,8 @@ function SongRow({
 }: {
   song: SetSong;
   canEdit: boolean;
+  showReorder?: boolean;
+  displayPosition: number;
   isFirst: boolean;
   isLast: boolean;
   onRemove: () => void;
@@ -270,7 +276,7 @@ function SongRow({
         onSelect={onKeyChange}
       />
       <View className="flex-row items-center px-4 py-3 border-b border-slate-100 bg-white">
-        {canEdit ? (
+        {canEdit && showReorder ? (
           <View className="mr-2 items-center gap-0.5">
             <TouchableOpacity
               onPress={onMoveUp}
@@ -289,7 +295,7 @@ function SongRow({
           </View>
         ) : (
           <View className="w-7 items-center mr-2">
-            <Text className="text-slate-300 text-sm font-medium">{song.position}</Text>
+            <Text className="text-slate-300 text-sm font-medium">{displayPosition}</Text>
           </View>
         )}
         <View className="flex-1 min-w-0">
@@ -531,6 +537,8 @@ export default function SetDetailScreen() {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [collaborators, setCollaborators] = useState<{ id: string; user_id: string; role: string; display_name: string | null; username: string | null }[]>([]);
+  const [sortBy, setSortBy] = useState<SetSortOrder>('custom');
+  const [filterQuery, setFilterQuery] = useState('');
 
   useEffect(() => {
     if (id) load();
@@ -675,6 +683,17 @@ export default function SetDetailScreen() {
   const isOwner = set.owner_user_id === myUserId;
   const existingIds = new Set(songs.map((s) => s.song_id));
 
+  const displayedSongs = useMemo(() => {
+    let result = songs;
+    if (filterQuery.trim()) {
+      const q = filterQuery.trim().toLowerCase();
+      result = result.filter(s => s.songs.title.toLowerCase().includes(q) || (s.songs.display_artist ?? '').toLowerCase().includes(q));
+    }
+    if (sortBy === 'title_asc') return [...result].sort((a, b) => a.songs.title.localeCompare(b.songs.title));
+    if (sortBy === 'title_desc') return [...result].sort((a, b) => b.songs.title.localeCompare(a.songs.title));
+    return result;
+  }, [songs, sortBy, filterQuery]);
+
   return (
     <>
       <Stack.Screen
@@ -724,6 +743,42 @@ export default function SetDetailScreen() {
           </View>
         ) : null}
 
+        {/* Sort tabs + filter */}
+        {songs.length > 0 && (
+          <View className="px-4 pt-2 pb-2 border-b border-slate-100">
+            <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2 mb-2">
+              <Ionicons name="search" size={16} color="#94a3b8" style={{ marginRight: 8 }} />
+              <TextInput
+                className="flex-1 text-slate-900 text-sm"
+                placeholder="Filter songs…"
+                placeholderTextColor="#94a3b8"
+                value={filterQuery}
+                onChangeText={setFilterQuery}
+                autoCapitalize="none"
+                returnKeyType="search"
+              />
+              {filterQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setFilterQuery('')}>
+                  <Text className="text-slate-400 ml-2">✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View className="flex-row gap-2">
+              {(['custom', 'title_asc', 'title_desc'] as SetSortOrder[]).map(key => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setSortBy(key)}
+                  className={`px-3 py-1 rounded-full border ${sortBy === key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+                >
+                  <Text className={`text-xs font-medium ${sortBy === key ? 'text-white' : 'text-slate-600'}`}>
+                    {key === 'custom' ? 'Custom' : key === 'title_asc' ? 'A → Z' : 'Z → A'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         <ScrollView className="flex-1">
           {songs.length === 0 ? (
             <View className="items-center justify-center py-20 px-8">
@@ -732,20 +787,29 @@ export default function SetDetailScreen() {
                 {canEdit ? 'Tap "Add Song" to start building this set.' : 'This set has no songs yet.'}
               </Text>
             </View>
+          ) : displayedSongs.length === 0 ? (
+            <View className="items-center justify-center py-16 px-8">
+              <Text className="text-slate-400 text-sm">No songs match this filter</Text>
+            </View>
           ) : (
-            songs.map((song, index) => (
-              <SongRow
-                key={song.id}
-                song={song}
-                canEdit={canEdit}
-                isFirst={index === 0}
-                isLast={index === songs.length - 1}
-                onRemove={() => handleRemoveSong(song.id)}
-                onKeyChange={(key) => handleKeyChange(song.id, key)}
-                onMoveUp={() => handleMoveSong(index, 'up')}
-                onMoveDown={() => handleMoveSong(index, 'down')}
-              />
-            ))
+            displayedSongs.map((song, index) => {
+              const originalIndex = songs.indexOf(song);
+              return (
+                <SongRow
+                  key={song.id}
+                  song={song}
+                  canEdit={canEdit}
+                  showReorder={sortBy === 'custom'}
+                  displayPosition={index + 1}
+                  isFirst={originalIndex === 0}
+                  isLast={originalIndex === songs.length - 1}
+                  onRemove={() => handleRemoveSong(song.id)}
+                  onKeyChange={(key) => handleKeyChange(song.id, key)}
+                  onMoveUp={() => handleMoveSong(originalIndex, 'up')}
+                  onMoveDown={() => handleMoveSong(originalIndex, 'down')}
+                />
+              );
+            })
           )}
           <View style={{ height: 80 }} />
         </ScrollView>

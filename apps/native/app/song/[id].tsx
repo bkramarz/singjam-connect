@@ -397,8 +397,7 @@ export default function SongDetailScreen() {
       {song && (
         <AddToSetModal
           visible={addToSetVisible}
-          songId={song.id}
-          songTitle={song.title}
+          songs={[{ id: song.id, title: song.title }]}
           onClose={() => setAddToSetVisible(false)}
         />
       )}
