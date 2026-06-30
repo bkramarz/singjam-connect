@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Linking, Alert, ActionSheetIOS, Platform,
+  Linking, Alert, ActionSheetIOS, Platform, Image,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import { supabase } from '@/lib/supabase';
 import AddToSetModal from '@/components/AddToSetModal';
 
@@ -134,6 +135,56 @@ function JammerRow({ label, jammers, onTap }: {
 
 function SkeletonBlock({ w, h }: { w: string; h: number }) {
   return <View className={`${w} bg-slate-200 rounded`} style={{ height: h }} />;
+}
+
+function extractYouTubeId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('?')[0] || null;
+    if (u.hostname.includes('youtube.com')) {
+      return u.searchParams.get('v')
+        ?? u.pathname.match(/\/(?:embed|v|shorts)\/([^/?]+)/)?.[1]
+        ?? null;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function YouTubePlayer({ videoId, label }: { videoId: string; label: string }) {
+  const [playing, setPlaying] = useState(false);
+  const embedHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}iframe{width:100%;height:100%;display:block}</style></head><body><iframe src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></body></html>`;
+
+  return (
+    <View className="mb-3 rounded-xl overflow-hidden bg-black" style={{ aspectRatio: 16 / 9 }}>
+      {playing ? (
+        <WebView
+          source={{ html: embedHtml }}
+          style={{ flex: 1 }}
+          allowsInlineMediaPlayback
+          allowsFullscreenVideo
+          mediaPlaybackRequiresUserAction={false}
+          scrollEnabled={false}
+        />
+      ) : (
+        <TouchableOpacity onPress={() => setPlaying(true)} className="flex-1">
+          <Image
+            source={{ uri: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` }}
+            className="w-full h-full"
+            resizeMode="cover"
+          />
+          <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
+            <View className="w-14 h-14 rounded-full items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
+              <Ionicons name="play" size={26} color="white" style={{ marginLeft: 3 }} />
+            </View>
+          </View>
+          <View className="absolute bottom-0 left-0 right-0 px-3 py-2" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <Text className="text-white text-xs" numberOfLines={1}>{label}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -372,19 +423,19 @@ export default function SongDetailScreen() {
   const tonalityPills = song.tonality ? song.tonality.split(',').map(s => s.trim()).filter(Boolean) : [];
   const meterPills = song.meter ? song.meter.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-  // Collect YouTube/Spotify links to surface
-  const mediaLinks: { label: string; url: string; icon: 'logo-youtube' | 'musical-notes-outline' }[] = [];
-  for (const ra of song.recordingArtists) {
-    if (ra.youtube_url) {
-      mediaLinks.push({ label: `${ra.name}${ra.year ? ` (${ra.year})` : ''} — YouTube`, url: ra.youtube_url, icon: 'logo-youtube' });
-    }
-    if (ra.spotify_url) {
-      mediaLinks.push({ label: `${ra.name}${ra.year ? ` (${ra.year})` : ''} — Spotify`, url: ra.spotify_url, icon: 'musical-notes-outline' });
-    }
+  // Build per-artist media entries for the recordings section
+  type MediaEntry = { label: string; youtubeId: string | null; spotifyUrl: string | null };
+  const mediaEntries: MediaEntry[] = song.recordingArtists
+    .filter(ra => ra.youtube_url || ra.spotify_url)
+    .map(ra => ({
+      label: `${ra.name}${ra.year ? ` (${ra.year})` : ''}`,
+      youtubeId: extractYouTubeId(ra.youtube_url),
+      spotifyUrl: ra.spotify_url ?? null,
+    }));
+  if (mediaEntries.length === 0 && song.youtube_url) {
+    mediaEntries.push({ label: song.display_artist ?? song.title, youtubeId: extractYouTubeId(song.youtube_url), spotifyUrl: null });
   }
-  if (mediaLinks.length === 0 && song.youtube_url) {
-    mediaLinks.push({ label: 'Watch on YouTube', url: song.youtube_url, icon: 'logo-youtube' });
-  }
+  const hasMedia = mediaEntries.length > 0;
 
   const hasMusicalProps = tonalityPills.length > 0 || meterPills.length > 0 || !!song.vibe;
   const hasTags = song.genres.length > 0 || song.themes.length > 0 || song.cultures.length > 0 || song.languages.length > 0;
@@ -489,25 +540,26 @@ export default function SongDetailScreen() {
           </View>
         ) : null}
 
-        {/* Media links */}
-        {mediaLinks.length > 0 ? (
+        {/* Media — YouTube embeds + Spotify links */}
+        {hasMedia ? (
           <View className="px-4 py-4 border-b border-slate-100">
             <SectionHeader title="Listen / Watch" />
-            {mediaLinks.map((link, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => openUrl(link.url)}
-                className="flex-row items-center py-2"
-              >
-                <Ionicons
-                  name={link.icon}
-                  size={18}
-                  color={link.icon === 'logo-youtube' ? '#ef4444' : '#1db954'}
-                  style={{ marginRight: 10 }}
-                />
-                <Text className="flex-1 text-slate-700 text-sm">{link.label}</Text>
-                <Ionicons name="open-outline" size={14} color="#94a3b8" />
-              </TouchableOpacity>
+            {mediaEntries.map((entry, i) => (
+              <View key={i}>
+                {entry.youtubeId ? (
+                  <YouTubePlayer videoId={entry.youtubeId} label={entry.label} />
+                ) : null}
+                {entry.spotifyUrl ? (
+                  <TouchableOpacity
+                    onPress={() => openUrl(entry.spotifyUrl!)}
+                    className="flex-row items-center py-2 mb-1"
+                  >
+                    <Ionicons name="musical-notes-outline" size={18} color="#1db954" style={{ marginRight: 10 }} />
+                    <Text className="flex-1 text-slate-700 text-sm">{entry.label} — Spotify</Text>
+                    <Ionicons name="open-outline" size={14} color="#94a3b8" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             ))}
           </View>
         ) : null}
