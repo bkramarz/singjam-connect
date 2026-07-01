@@ -52,6 +52,32 @@ export default function SongHistoryTable({ stats }: { stats: SongPlayStat[] }) {
 
   return (
     <div className="space-y-2">
+      {/* Mobile sort controls */}
+      <div className="sm:hidden flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <label htmlFor="song-history-sort" className="text-xs font-medium text-slate-500">
+          Sort by
+        </label>
+        <select
+          id="song-history-sort"
+          value={sort.col}
+          onChange={(e) => toggleSort(e.target.value as SortCol)}
+          className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-700"
+        >
+          {COLUMNS.map((col) => (
+            <option key={col.key} value={col.key}>
+              {col.label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => setSort((prev) => ({ ...prev, dir: prev.dir === "asc" ? "desc" : "asc" }))}
+          className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-500"
+          aria-label={sort.dir === "asc" ? "Sort ascending" : "Sort descending"}
+        >
+          {sort.dir === "asc" ? "↑" : "↓"}
+        </button>
+      </div>
+
       {/* Mobile card list */}
       <div className="sm:hidden space-y-2">
         {sorted.map((s) => (

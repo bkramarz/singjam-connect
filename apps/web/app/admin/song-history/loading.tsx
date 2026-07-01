@@ -6,6 +6,9 @@ export default function SongHistoryLoading() {
         <div className="h-4 w-80 animate-pulse rounded bg-zinc-100" />
       </div>
 
+      {/* Mobile sort controls skeleton */}
+      <div className="sm:hidden h-9 animate-pulse rounded-xl border border-slate-200 bg-white" />
+
       {/* Mobile card skeleton */}
       <div className="sm:hidden space-y-2">
         {[0, 1, 2, 3].map((i) => (
