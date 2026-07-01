@@ -16,7 +16,10 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "org.singjam.app"
+      "bundleIdentifier": "org.singjam.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
