@@ -5,5 +5,8 @@
     "apps/web",
     "apps/native",
     "packages/*"
-  ]
+  ],
+  "overrides": {
+    "react-native-css-interop": "0.2.6"
+  }
 }
