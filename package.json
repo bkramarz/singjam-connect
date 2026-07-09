@@ -5,5 +5,11 @@
     "apps/web",
     "apps/native",
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "postinstall": "node scripts/fix-css-interop-dedupe.js"
+  },
+  "overrides": {
+    "react-native-css-interop": "0.2.6"
+  }
 }
