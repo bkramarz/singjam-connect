@@ -13,14 +13,16 @@ export async function POST(req: Request) {
   const { inviteToken } = await req.json().catch(() => ({}));
   const admin = supabaseAdmin();
 
-  // Create profile if it doesn't exist yet
+  // Finish setup if this profile doesn't have a username yet — the
+  // handle_new_user() DB trigger already inserted a bare profiles row (id
+  // only) on signup, so checking row existence here would never be true.
   const { data: existing } = await admin
     .from("profiles")
-    .select("id")
+    .select("username")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!existing) {
+  if (!existing?.username) {
     const emailLocal = (user.email ?? "")
       .split("@")[0]
       .toLowerCase()
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
       if (!taken) { username = candidate; break; }
     }
     if (!username) username = `singer${Date.now()}`;
-    await admin.from("profiles").insert({ id: user.id, username });
+    await admin.from("profiles").upsert({ id: user.id, username });
 
     if (user.email) syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
   }
