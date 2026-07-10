@@ -62,8 +62,11 @@ export async function GET(request: Request) {
         !!user.last_sign_in_at &&
         Math.abs(new Date(user.last_sign_in_at).getTime() - new Date(user.created_at).getTime()) < 10_000;
 
-      if (!profile) {
-        // New user — create profile with a unique auto-generated username
+      if (!profile?.username) {
+        // New user — the handle_new_user() DB trigger already inserted a bare
+        // profiles row (id only) on signup, so this finishes setup: generate a
+        // unique username, sync/welcome, link any invite, and preserve the
+        // intended destination for after they save their profile.
         const emailLocal = (user.email ?? "")
           .split("@")[0]
           .toLowerCase()
@@ -80,7 +83,7 @@ export async function GET(request: Request) {
           if (!taken) { username = candidate; break; }
         }
         if (!username) username = `singer${Date.now()}`;
-        await supabaseAdmin().from("profiles").insert({ id: user.id, username });
+        await supabaseAdmin().from("profiles").upsert({ id: user.id, username });
 
         if (user.email) {
           syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
@@ -92,19 +95,15 @@ export async function GET(request: Request) {
           }).catch(() => {});
         }
 
-        // Link non-member invite to this new user
+        // Link non-member invite to this new user, and resolve the jam so we
+        // can send them there after account setup
+        let inviteJamId: string | null = null;
         if (inviteToken) {
           const admin = supabaseAdmin();
           await admin.from("jam_invites")
             .update({ invited_user_id: user.id, invitee_email: null })
             .eq("token", inviteToken)
             .is("invited_user_id", null);
-        }
-
-        // Resolve jam from invite token so we can send them there after account setup
-        let inviteJamId: string | null = null;
-        if (inviteToken) {
-          const admin = supabaseAdmin();
           const { data: invite } = await admin
             .from("jam_invites")
             .select("jam_id")
@@ -113,8 +112,6 @@ export async function GET(request: Request) {
           inviteJamId = invite?.jam_id ?? null;
         }
 
-        // New users always go through account setup first — preserve their intended
-        // destination (invite jam or the next param) for after they save their profile
         const postSetup = inviteJamId ? `/jam/${inviteJamId}` : next ?? "/repertoire";
         destination = `/account?next=${encodeURIComponent(postSetup)}`;
       } else {
@@ -127,9 +124,7 @@ export async function GET(request: Request) {
           }).catch(() => {});
         }
 
-        if (!profile.username) {
-          destination = next ? `/account?next=${encodeURIComponent(next)}` : "/account";
-        } else if (inviteToken) {
+        if (inviteToken) {
           const admin = supabaseAdmin();
           // Link link-based invites (no recipient yet) to this returning user
           await admin
