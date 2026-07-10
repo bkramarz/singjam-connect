@@ -129,4 +129,9 @@ export async function POST(
 
     return NextResponse.json({ ok: true });
   }
+
+  // The validation above rejects requests without either invite target. Keep
+  // an explicit fallback so this handler remains exhaustive if the parsing or
+  // validation logic changes later.
+  return NextResponse.json({ error: "Provide inviteeUserId or inviteeEmail" }, { status: 400 });
 }
