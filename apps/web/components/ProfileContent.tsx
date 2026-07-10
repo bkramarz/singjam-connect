@@ -13,7 +13,7 @@ export default function ProfileContent() {
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.push("/auth"); return; }
+      if (!session) { router.push("/auth?next=/profile"); return; }
 
       const { data } = await supabase
         .from("profiles")

@@ -94,7 +94,7 @@ export default function MatchesPage() {
           <p className="mt-2 text-sm text-zinc-500">
             SingJam matches you with musicians who know the same songs as you. Add songs to your repertoire and we&apos;ll rank your best potential jam partners.
           </p>
-          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+          <Link href="/auth?next=/friends" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
             Sign in →
           </Link>
         </div>

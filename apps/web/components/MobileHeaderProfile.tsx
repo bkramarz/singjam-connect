@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useProfile } from "@/components/ProfileProvider";
 import NotificationBell from "./NotificationBell";
 
 export default function MobileHeaderProfile() {
   const { signedIn, profile } = useProfile();
+  const pathname = usePathname();
 
   if (signedIn) {
     return (
@@ -52,7 +54,7 @@ export default function MobileHeaderProfile() {
         </svg>
       </Link>
       <Link
-        href="/auth"
+        href={pathname === "/" ? "/auth" : `/auth?next=${encodeURIComponent(pathname)}`}
         className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 transition-colors"
       >
         Sign in

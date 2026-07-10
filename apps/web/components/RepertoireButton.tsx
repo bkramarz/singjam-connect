@@ -40,7 +40,7 @@ export default function RepertoireButton({
 
   async function getSession() {
     const { data } = await supabase.auth.getSession();
-    if (!data.session) { router.push("/auth"); return null; }
+    if (!data.session) { router.push(`/auth?next=${encodeURIComponent(window.location.pathname)}`); return null; }
     return data.session;
   }
 

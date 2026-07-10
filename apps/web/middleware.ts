@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
   );
 
   const { pathname } = request.nextUrl;
-  const authRequired = ["/admin", "/notifications", "/profile", "/account"];
+  const authRequired = ["/admin", "/notifications", "/profile", "/account", "/u"];
   const needsAuthCheck = authRequired.some((p) => pathname.startsWith(p));
   // Only call getUser() (a Supabase network round-trip) when the path requires
   // auth, or when the request already carries session cookies and needs refreshing.
@@ -40,8 +40,10 @@ export async function middleware(request: NextRequest) {
     const user = data?.claims ?? null;
 
     if (!user && needsAuthCheck) {
+      const next = pathname + request.nextUrl.search;
       const url = request.nextUrl.clone();
       url.pathname = "/auth";
+      url.search = `?next=${encodeURIComponent(next)}`;
       return NextResponse.redirect(url);
     }
   }
