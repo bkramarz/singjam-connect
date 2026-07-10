@@ -35,6 +35,12 @@ export function displayedSongs(
       const diff = (b.popularity ?? 0) - (a.popularity ?? 0);
       return diff !== 0 ? diff : a.title.localeCompare(b.title);
     }
+    // Songs nobody else shares (who_else empty) always sort after shared
+    // songs, regardless of popularity — they're the viewer's own repertoire
+    // shown for completeness, not ranked against songs others know too.
+    const aShared = a.who_else.length > 0;
+    const bShared = b.who_else.length > 0;
+    if (aShared !== bShared) return aShared ? -1 : 1;
     const aTotal = a.who_else.length + (a.viewer_has ? 1 : 0);
     const bTotal = b.who_else.length + (b.viewer_has ? 1 : 0);
     return bTotal !== aTotal ? bTotal - aTotal : a.title.localeCompare(b.title);

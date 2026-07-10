@@ -706,6 +706,7 @@ export default function SetDetail({
   const [collaborators, setCollaborators] = useState(initialCollaborators);
   const [accessRequests, setAccessRequests] = useState(initialAccessRequests);
   const [editingName, setEditingName] = useState(false);
+  const editingNameRef = useRef(editingName);
   const [nameValue, setNameValue] = useState(set.name);
   const [descValue, setDescValue] = useState(set.description ?? "");
   const [songListFilter, setSongListFilter] = useState("");
@@ -725,6 +726,8 @@ export default function SetDetail({
     new Set([set.owner_user_id, ...initialCollaborators.map((c) => c.user_id).filter((id): id is string => Boolean(id))])
   );
   const songIdsRef = useRef<Set<string>>(new Set(initialSongs.map((s) => s.song_id)));
+  const pendingSongRefreshRef = useRef<Set<string>>(new Set());
+  const songRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [creatingPlaylist, setCreatingPlaylist] = useState<"youtube" | "spotify" | null>(null);
   const [lastSyncedYoutubeFingerprint, setLastSyncedYoutubeFingerprint] = useState<string | null>(set.youtube_playlist_fingerprint ?? null);
   const [lastSyncedSpotifyFingerprint, setLastSyncedSpotifyFingerprint] = useState<string | null>(set.spotify_playlist_fingerprint ?? null);
@@ -804,6 +807,35 @@ export default function SetDetail({
   }, [songs]);
 
   useEffect(() => {
+    editingNameRef.current = editingName;
+  }, [editingName]);
+
+  useEffect(() => {
+    function scheduleSongRefresh(songId: string) {
+      if (!songIdsRef.current.has(songId)) return;
+      pendingSongRefreshRef.current.add(songId);
+      if (songRefreshTimerRef.current) return;
+      songRefreshTimerRef.current = setTimeout(async () => {
+        const ids = Array.from(pendingSongRefreshRef.current);
+        pendingSongRefreshRef.current.clear();
+        songRefreshTimerRef.current = null;
+        const { data } = await supabase
+          .from("songs")
+          .select(
+            "id, title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url)"
+          )
+          .in("id", ids);
+        if (!data) return;
+        const bySongId = new Map(data.map((d: any) => [d.id, d]));
+        setSongs((prev) =>
+          prev.map((s) => {
+            const fresh = bySongId.get(s.song_id);
+            return fresh ? { ...s, songs: fresh } : s;
+          })
+        );
+      }, 400);
+    }
+
     const channel = supabase
       .channel(`set-detail-${set.id}`)
       .on(
@@ -887,15 +919,22 @@ export default function SetDetail({
         }
       )
       .on(
+        // Supabase doesn't support filtering DELETE events, and set_collaborators
+        // has RLS enabled, so the old row in the payload is primary-key-only even
+        // with full replica identity — look up the removed user_id from local
+        // state instead of trusting payload.old.user_id.
         "postgres_changes",
-        { event: "DELETE", schema: "public", table: "set_collaborators", filter: `set_id=eq.${set.id}` },
+        { event: "DELETE", schema: "public", table: "set_collaborators" },
         (payload) => {
           const row = payload.old as any;
-          setCollaborators((prev) => prev.filter((c) => c.id !== row.id));
-          if (row.user_id) {
-            participantIdsRef.current.delete(row.user_id);
-            setSongKnowledge((prev) => prev.filter((k) => k.user_id !== row.user_id));
-          }
+          setCollaborators((prev) => {
+            const removed = prev.find((c) => c.id === row.id);
+            if (removed?.user_id) {
+              participantIdsRef.current.delete(removed.user_id);
+              setSongKnowledge((prevK) => prevK.filter((k) => k.user_id !== removed.user_id));
+            }
+            return prev.filter((c) => c.id !== row.id);
+          });
         }
       )
       .on(
@@ -917,7 +956,126 @@ export default function SetDetail({
           }
         }
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "set_songs", filter: `set_id=eq.${set.id}` },
+        async (payload) => {
+          const row = payload.new as any;
+          const participantIds = Array.from(participantIdsRef.current);
+          const [songRes, knowledgeRes] = await Promise.all([
+            supabase
+              .from("set_songs")
+              .select(
+                "id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))"
+              )
+              .eq("id", row.id)
+              .single(),
+            participantIds.length > 0
+              ? supabase
+                  .from("user_songs")
+                  .select("user_id, song_id, confidence")
+                  .eq("song_id", row.song_id)
+                  .in("user_id", participantIds)
+                  .in("confidence", ["lead", "support", "learn"])
+              : Promise.resolve({ data: [] as any[] }),
+          ]);
+          const { data } = songRes;
+          if (!data) return;
+          setSongs((prev) => {
+            if (prev.some((s) => s.id === row.id)) return prev;
+            const withoutOptimistic = prev.filter((s) => s.song_id !== row.song_id);
+            return [...withoutOptimistic, data as unknown as Song].sort((a, b) => a.position - b.position);
+          });
+          if (knowledgeRes.data?.length) {
+            setSongKnowledge((prev) => [
+              ...prev.filter((k) => k.song_id !== row.song_id),
+              ...(knowledgeRes.data as { user_id: string; song_id: string; confidence: string }[]),
+            ]);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "set_songs", filter: `set_id=eq.${set.id}` },
+        (payload) => {
+          const row = payload.new as any;
+          setSongs((prev) =>
+            prev
+              .map((s) =>
+                s.id === row.id
+                  ? { ...s, position: row.position, key_note: row.key_note, leader_user_ids: row.leader_user_ids }
+                  : s
+              )
+              .sort((a, b) => a.position - b.position)
+          );
+        }
+      )
+      .on(
+        // Supabase doesn't support filtering DELETE events, so this subscribes to
+        // every set_songs deletion and relies on the id match below to no-op for
+        // rows that don't belong to this set.
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "set_songs" },
+        (payload) => {
+          const row = payload.old as any;
+          setSongs((prev) => prev.filter((s) => s.id !== row.id));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "sets", filter: `id=eq.${set.id}` },
+        (payload) => {
+          const row = payload.new as any;
+          if (!editingNameRef.current) {
+            setNameValue(row.name);
+            setDescValue(row.description ?? "");
+          }
+          setLinkSharing(row.link_sharing);
+          setUgPlaylistUrl(row.ultimate_guitar_playlist_url ?? null);
+          setLastSyncedYoutubeFingerprint(row.youtube_playlist_fingerprint ?? null);
+          setLastSyncedSpotifyFingerprint(row.spotify_playlist_fingerprint ?? null);
+          setPlaylistLinks((prev) => ({
+            youtube: row.youtube_playlist_id
+              ? { ...prev.youtube, url: `https://www.youtube.com/playlist?list=${row.youtube_playlist_id}` }
+              : undefined,
+            spotify: row.spotify_playlist_id
+              ? { ...prev.spotify, url: `https://open.spotify.com/playlist/${row.spotify_playlist_id}` }
+              : undefined,
+          }));
+        }
+      )
+      .on(
+        // Unfiltered: this covers every song in the catalog, not just this
+        // set's songs, since postgres_changes filters can't scope to a
+        // dynamic "song is in this set" list. scheduleSongRefresh no-ops for
+        // songs outside songIdsRef.
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "songs" },
+        (payload) => {
+          const row = payload.new as any;
+          scheduleSongRefresh(row.id);
+        }
+      );
+
+    for (const joinTable of [
+      "song_composers",
+      "song_lyricists",
+      "song_cultures",
+      "song_genres",
+      "song_themes",
+      "song_recording_artists",
+    ]) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: joinTable },
+        (payload) => {
+          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as any;
+          scheduleSongRefresh(row.song_id);
+        }
+      );
+    }
+
+    channel.subscribe();
 
     return () => { supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1991,7 +2149,7 @@ export default function SetDetail({
             userSingingVoice={userSingingVoice}
             onSongAdding={(optimistic) => setSongs((prev) => [...prev, optimistic])}
             onSongAdded={(optimisticId, song, knowledge) => {
-              setSongs((prev) => [...prev.filter((s) => s.id !== optimisticId), song]);
+              setSongs((prev) => [...prev.filter((s) => s.id !== optimisticId && s.id !== song.id), song]);
               if (knowledge.length) setSongKnowledge((prev) => [...prev, ...knowledge]);
             }}
             onSongAddFailed={(optimisticId) => setSongs((prev) => prev.filter((s) => s.id !== optimisticId))}
