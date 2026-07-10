@@ -94,6 +94,17 @@ describe("displayedSongs — collaborative mode (isSolo = false)", () => {
     expect(result.map((s) => s.song_id)).toEqual(["a"]);
   });
 
+  it("popular sort always puts viewer-only songs (empty who_else) after shared songs, regardless of popularity", () => {
+    const songs = [
+      song({ song_id: "a", title: "Apple", who_else: [] }),
+      song({ song_id: "b", title: "Banana", who_else: ["Bob"] }),
+      song({ song_id: "c", title: "Cherry", who_else: [] }),
+      song({ song_id: "d", title: "Date", who_else: ["Bob", "Carol"] }),
+    ];
+    const result = displayedSongs(songs, "popular", none, false);
+    expect(result.map((s) => s.song_id)).toEqual(["d", "b", "a", "c"]);
+  });
+
   it("does not mutate the original array", () => {
     const songs = [
       song({ song_id: "a", title: "Zebra" }),
