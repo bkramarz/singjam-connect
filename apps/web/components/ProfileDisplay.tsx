@@ -25,12 +25,14 @@ export default function ProfileDisplay({
   invitesEnabled = true,
   sharedSongs,
   additionalSongs,
+  wantsToLearnSongs,
 }: {
   profile: ProfileData;
   isOwner?: boolean;
   invitesEnabled?: boolean;
   sharedSongs?: ProfileSong[];
   additionalSongs?: ProfileSong[];
+  wantsToLearnSongs?: ProfileSong[];
 }) {
   const fullName = [profile.display_name, profile.last_name].filter(Boolean).join(" ");
   const SINGING_ORDER = ["lead", "backup"];
@@ -182,6 +184,24 @@ export default function ProfileDisplay({
           <ul className="space-y-1">
             {additionalSongs.map((s) => (
               <li key={s.song_id} className={`text-sm ${s.confidence === "lead" ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>
+                <a href={`/songs/${s.slug ?? s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  {s.title}{s.display_artist ? ` · ${s.display_artist}` : ""}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Wants to learn */}
+      {wantsToLearnSongs && wantsToLearnSongs.length > 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-400 mb-3">
+            Want to learn ({wantsToLearnSongs.length})
+          </div>
+          <ul className="space-y-1">
+            {wantsToLearnSongs.map((s) => (
+              <li key={s.song_id} className="text-sm text-zinc-700">
                 <a href={`/songs/${s.slug ?? s.song_id}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
                   {s.title}{s.display_artist ? ` · ${s.display_artist}` : ""}
                 </a>

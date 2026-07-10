@@ -602,7 +602,7 @@ export default function RepertoirePage() {
           <p className="mt-2 text-sm text-zinc-500">
             Add songs to your repertoire — as a lead, support, or something you&apos;re learning — and SingJam will match you with musicians who share your songs.
           </p>
-          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+          <Link href="/auth?next=/repertoire" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
             Sign in →
           </Link>
         </div>

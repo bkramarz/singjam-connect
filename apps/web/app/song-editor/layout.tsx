@@ -5,7 +5,7 @@ export default async function SongEditorLayout({ children }: { children: React.R
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect("/auth");
+  if (!user) redirect("/auth?next=/song-editor");
 
   const { data: profile } = await supabase
     .from("profiles")

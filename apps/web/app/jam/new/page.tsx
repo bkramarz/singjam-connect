@@ -4,9 +4,8 @@ import NewJamForm, { type NewJamInitialData } from "@/components/NewJamForm";
 
 export default async function NewJamPage({ searchParams }: { searchParams: Promise<{ copy?: string }> }) {
   const session = await getSessionServer();
-  if (!session) redirect("/auth");
-
   const { copy } = await searchParams;
+  if (!session) redirect(`/auth?next=${encodeURIComponent(copy ? `/jam/new?copy=${copy}` : "/jam/new")}`);
   let initialData: NewJamInitialData | null = null;
 
   if (copy) {

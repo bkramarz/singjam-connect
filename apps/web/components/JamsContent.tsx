@@ -498,7 +498,7 @@ export default function JamsContent() {
           <p className="mt-2 text-sm text-zinc-500">
             Sign in to RSVP to community jams, post your own, and get invited to private sessions by other musicians.
           </p>
-          <Link href="/auth" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
+          <Link href="/auth?next=/jams" className="mt-4 inline-block text-sm font-medium text-amber-600 hover:text-amber-500">
             Sign in →
           </Link>
         </div>

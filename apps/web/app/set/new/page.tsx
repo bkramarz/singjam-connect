@@ -4,7 +4,7 @@ import NewSetForm from "@/components/NewSetForm";
 
 export default async function NewSetPage() {
   const session = await getSessionServer();
-  if (!session) redirect("/auth");
+  if (!session) redirect("/auth?next=/set/new");
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">New set</h1>

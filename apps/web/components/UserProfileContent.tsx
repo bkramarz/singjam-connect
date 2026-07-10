@@ -21,7 +21,14 @@ type Profile = {
 type State =
   | { status: "loading" }
   | { status: "not_found" }
-  | { status: "ready"; profile: Profile; invitesEnabled: boolean; sharedSongs: ProfileSong[]; additionalSongs: ProfileSong[] };
+  | {
+      status: "ready";
+      profile: Profile;
+      invitesEnabled: boolean;
+      sharedSongs: ProfileSong[];
+      additionalSongs: ProfileSong[];
+      wantsToLearnSongs: ProfileSong[];
+    };
 
 export default function UserProfileContent() {
   const params = useParams();
@@ -44,9 +51,9 @@ export default function UserProfileContent() {
 
       const profile = profileRes.data as Profile;
       const invitesEnabled = flagRes.data?.enabled ?? true;
-      const { sharedSongs, additionalSongs } = await fetchProfileSongs(supabase, profile.id);
+      const { sharedSongs, additionalSongs, wantsToLearnSongs } = await fetchProfileSongs(supabase, profile.id);
 
-      setState({ status: "ready", profile, invitesEnabled, sharedSongs, additionalSongs });
+      setState({ status: "ready", profile, invitesEnabled, sharedSongs, additionalSongs, wantsToLearnSongs });
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
@@ -85,6 +92,7 @@ export default function UserProfileContent() {
       invitesEnabled={state.invitesEnabled}
       sharedSongs={state.sharedSongs}
       additionalSongs={state.additionalSongs}
+      wantsToLearnSongs={state.wantsToLearnSongs}
     />
   );
 }

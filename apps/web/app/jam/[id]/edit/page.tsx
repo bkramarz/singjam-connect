@@ -7,7 +7,7 @@ export default async function EditJamPage({ params }: { params: Promise<{ id: st
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect("/auth");
+  if (!user) redirect(`/auth?next=${encodeURIComponent(`/jam/${id}/edit`)}`);
 
   const [jamRes, genresRes, themesRes] = await Promise.all([
     supabase

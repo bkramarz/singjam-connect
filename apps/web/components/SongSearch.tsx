@@ -288,7 +288,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     setPendingAddId(null);
     const { data } = await supabase.auth.getSession();
     const session = data.session;
-    if (!session) { router.push("/auth"); return; }
+    if (!session) { router.push(`/auth?next=${encodeURIComponent(window.location.pathname)}`); return; }
     const { error } = await supabase.from("user_songs").upsert(
       { user_id: session.user.id, song_id: songId, confidence: level, updated_at: new Date().toISOString() },
       { onConflict: "user_id,song_id" }
