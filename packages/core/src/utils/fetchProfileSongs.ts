@@ -9,7 +9,11 @@ export type ProfileSong = {
 export async function fetchProfileSongs(
   supabase: any,
   profileId: string
-): Promise<{ sharedSongs: ProfileSong[]; additionalSongs: ProfileSong[] }> {
+): Promise<{
+  sharedSongs: ProfileSong[];
+  additionalSongs: ProfileSong[];
+  wantsToLearnSongs: ProfileSong[];
+}> {
   const [{ data: shared }, { data: theirSongs }] = await Promise.all([
     supabase.rpc("shared_songs_with", { other_user_id: profileId }),
     supabase.from("user_songs").select("song_id, confidence").eq("user_id", profileId),
@@ -29,25 +33,45 @@ export async function fetchProfileSongs(
 
   const sharedIds = new Set(sharedSongs.map((s) => s.song_id));
   const additionalIds = (theirSongs ?? [])
-    .filter((r: any) => !sharedIds.has(r.song_id))
+    .filter((r: any) => !sharedIds.has(r.song_id) && r.confidence !== "learn")
+    .map((r: any) => r.song_id as string);
+  const wantsToLearnIds = (theirSongs ?? [])
+    .filter((r: any) => r.confidence === "learn")
     .map((r: any) => r.song_id as string);
 
   let additionalSongs: ProfileSong[] = [];
-  if (additionalIds.length > 0) {
+  let wantsToLearnSongs: ProfileSong[] = [];
+  const otherIds = [...additionalIds, ...wantsToLearnIds];
+  if (otherIds.length > 0) {
     const { data: songDetails } = await supabase
       .from("songs")
       .select("id, title, display_artist, slug")
-      .in("id", additionalIds);
-    additionalSongs = (songDetails ?? [])
-      .map((s: any) => ({
+      .in("id", otherIds);
+    const detailsMap = new Map<string, any>(
+      (songDetails ?? []).map((s: any) => [s.id, s])
+    );
+
+    const toProfileSong = (id: string): ProfileSong | null => {
+      const s = detailsMap.get(id);
+      if (!s) return null;
+      return {
         song_id: s.id as string,
         title: s.title as string,
         display_artist: (s.display_artist ?? null) as string | null,
         confidence: (confidenceMap.get(s.id) ?? null) as string | null,
         slug: (s.slug ?? null) as string | null,
-      }))
+      };
+    };
+
+    additionalSongs = additionalIds
+      .map(toProfileSong)
+      .filter((s: ProfileSong | null): s is ProfileSong => s !== null)
+      .sort((a: ProfileSong, b: ProfileSong) => a.title.localeCompare(b.title));
+    wantsToLearnSongs = wantsToLearnIds
+      .map(toProfileSong)
+      .filter((s: ProfileSong | null): s is ProfileSong => s !== null)
       .sort((a: ProfileSong, b: ProfileSong) => a.title.localeCompare(b.title));
   }
 
-  return { sharedSongs, additionalSongs };
+  return { sharedSongs, additionalSongs, wantsToLearnSongs };
 }
