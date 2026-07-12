@@ -35,6 +35,7 @@ type Song = {
   song_id: string;
   position: number;
   key_note: string | null;
+  played: boolean;
   leader_user_ids: string[];
   songs: {
     title: string;
@@ -185,6 +186,8 @@ function SongRowContent({
   onLeadersChanged,
   onAddToRepertoire,
   onVoiceUpdated,
+  onTogglePlayed,
+  onRemove,
   signInUrl,
 }: {
   song: Song;
@@ -204,6 +207,8 @@ function SongRowContent({
   onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
   onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
   onVoiceUpdated: (voice: string) => void;
+  onTogglePlayed: (id: string, played: boolean) => void;
+  onRemove: (songId: string) => void;
   signInUrl?: string;
 }) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
@@ -372,23 +377,47 @@ function SongRowContent({
         </div>
 
         <div className="shrink-0 flex items-center gap-0.5">
-          {/* YouTube */}
-          {videoId ? (
-            <button
-              onClick={() => setYoutubeOpen((o) => !o)}
-              className={`rounded-lg p-1.5 transition-colors text-red-500 ${youtubeOpen ? "bg-red-50" : "hover:bg-red-50"}`}
-              title={youtubeOpen ? "Close video" : "Watch on YouTube"}
-            >
-              <YoutubeIcon />
-            </button>
+          {/* Ultimate Guitar chord chart */}
+          {chord_chart_url ? (
+            <>
+              <a
+                href={chord_chart_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sm:hidden rounded-lg p-1.5 transition-opacity hover:opacity-80"
+                title="Chord chart"
+              >
+                <UltimateGuitarIcon />
+              </a>
+              <a
+                href={chord_chart_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-zinc-200 pl-1.5 pr-3 py-1 transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+                title="Chord chart"
+              >
+                <UltimateGuitarIcon />
+                <span className="text-xs font-medium text-zinc-600">Chords</span>
+              </a>
+            </>
           ) : isAdmin ? (
-            <button
-              onClick={() => toggleAdding("youtube")}
-              className={`rounded-lg p-1.5 transition-colors ${addingField === "youtube" ? "bg-red-50 text-red-500" : "text-red-400 border border-dashed border-red-300 hover:bg-red-50 hover:text-red-500 hover:border-red-400"}`}
-              title="Add YouTube link"
-            >
-              <YoutubeIcon />
-            </button>
+            <>
+              <button
+                onClick={() => toggleAdding("chord")}
+                className={`sm:hidden rounded-lg p-1.5 transition-all ${addingField === "chord" ? "opacity-100" : "opacity-50 border border-dashed border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
+                title="Add chord chart"
+              >
+                <UltimateGuitarIcon />
+              </button>
+              <button
+                onClick={() => toggleAdding("chord")}
+                className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border border-dashed pl-1.5 pr-3 py-1 transition-all ${addingField === "chord" ? "opacity-100 border-zinc-400" : "opacity-50 border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
+                title="Add chord chart"
+              >
+                <UltimateGuitarIcon />
+                <span className="text-xs font-medium text-zinc-600">Chords</span>
+              </button>
+            </>
           ) : null}
 
           {/* Spotify */}
@@ -410,24 +439,22 @@ function SongRowContent({
             </button>
           ) : null}
 
-          {/* Ultimate Guitar chord chart */}
-          {chord_chart_url ? (
-            <a
-              href={chord_chart_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg p-1.5 transition-opacity hover:opacity-80"
-              title="Chord chart"
+          {/* YouTube */}
+          {videoId ? (
+            <button
+              onClick={() => setYoutubeOpen((o) => !o)}
+              className={`rounded-lg p-1.5 transition-colors text-red-500 ${youtubeOpen ? "bg-red-50" : "hover:bg-red-50"}`}
+              title={youtubeOpen ? "Close video" : "Watch on YouTube"}
             >
-              <UltimateGuitarIcon />
-            </a>
+              <YoutubeIcon />
+            </button>
           ) : isAdmin ? (
             <button
-              onClick={() => toggleAdding("chord")}
-              className={`rounded-lg p-1.5 transition-all ${addingField === "chord" ? "opacity-100" : "opacity-50 border border-dashed border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
-              title="Add chord chart"
+              onClick={() => toggleAdding("youtube")}
+              className={`rounded-lg p-1.5 transition-colors ${addingField === "youtube" ? "bg-red-50 text-red-500" : "text-red-400 border border-dashed border-red-300 hover:bg-red-50 hover:text-red-500 hover:border-red-400"}`}
+              title="Add YouTube link"
             >
-              <UltimateGuitarIcon />
+              <YoutubeIcon />
             </button>
           ) : null}
         </div>
@@ -483,6 +510,46 @@ function SongRowContent({
                 })}
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {(canEdit || song.played) && (
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {canEdit ? (
+            <button
+              onClick={() => onTogglePlayed(song.id, !song.played)}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                song.played
+                  ? "bg-green-500 text-white hover:bg-green-400"
+                  : "border border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
+              }`}
+            >
+              {song.played && (
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+              {song.played ? "Played" : "Mark as played"}
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-500 px-2.5 py-1 text-xs font-medium text-white">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Played
+            </span>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => onRemove(song.song_id)}
+              className="shrink-0 text-zinc-300 hover:text-red-400 transition-colors"
+              aria-label="Remove song"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
           )}
         </div>
       )}
@@ -586,6 +653,7 @@ function SortableSongItem({
   currentUserSingingVoice,
   inRepertoire,
   onRemove,
+  onTogglePlayed,
   onMediaAdded,
   onKeyChanged,
   onLeadersChanged,
@@ -606,6 +674,7 @@ function SortableSongItem({
   currentUserSingingVoice: string | null;
   inRepertoire: boolean;
   onRemove: (songId: string) => void;
+  onTogglePlayed: (id: string, played: boolean) => void;
   onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
   onKeyChanged: (id: string, key: string | null) => void;
   onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
@@ -621,15 +690,15 @@ function SortableSongItem({
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
       className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3"
     >
-      <div className="shrink-0 flex flex-col items-center gap-0.5 pt-0.5 w-4 sm:w-6">
+      <div className="shrink-0 flex flex-col items-center gap-0.5 pt-0.5 w-6 sm:w-8">
         <span className="text-[10px] sm:text-xs leading-none font-semibold text-zinc-300">{index + 1}</span>
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab touch-none text-zinc-300 hover:text-zinc-500 active:cursor-grabbing"
+          className="flex items-center justify-center w-full py-3 text-zinc-300 hover:text-zinc-500 active:cursor-grabbing cursor-grab touch-none"
           aria-label="Drag to reorder"
         >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-6 w-4" fill="none" viewBox="0 0 24 24" preserveAspectRatio="none" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
           </svg>
         </button>
@@ -653,18 +722,10 @@ function SortableSongItem({
         onLeadersChanged={onLeadersChanged}
         onAddToRepertoire={onAddToRepertoire}
         onVoiceUpdated={onVoiceUpdated}
+        onTogglePlayed={onTogglePlayed}
+        onRemove={onRemove}
         signInUrl={signInUrl}
       />
-
-      <button
-        onClick={() => onRemove(song.song_id)}
-        className="shrink-0 mt-0.5 text-zinc-300 hover:text-red-400 transition-colors"
-        aria-label="Remove song"
-      >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-        </svg>
-      </button>
     </div>
   );
 }
@@ -966,7 +1027,7 @@ export default function SetDetail({
             supabase
               .from("set_songs")
               .select(
-                "id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))"
+                "id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))"
               )
               .eq("id", row.id)
               .single(),
@@ -1003,7 +1064,7 @@ export default function SetDetail({
             prev
               .map((s) =>
                 s.id === row.id
-                  ? { ...s, position: row.position, key_note: row.key_note, leader_user_ids: row.leader_user_ids }
+                  ? { ...s, position: row.position, key_note: row.key_note, played: row.played, leader_user_ids: row.leader_user_ids }
                   : s
               )
               .sort((a, b) => a.position - b.position)
@@ -1138,6 +1199,32 @@ export default function SetDetail({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key_note: key }),
     });
+  }
+
+  async function handleTogglePlayed(id: string, played: boolean) {
+    const entry = songs.find((s) => s.id === id);
+    if (!entry) return;
+    const previous = songs;
+    const without = songs.filter((s) => s.id !== id);
+    const insertAt = without.filter((s) => s.played).length;
+    const updated = { ...entry, played };
+    const reordered = [...without.slice(0, insertAt), updated, ...without.slice(insertAt)]
+      .map((s, i) => ({ ...s, position: i }));
+
+    setSongs(reordered);
+    const [playedRes, reorderRes] = await Promise.all([
+      fetch(`/api/sets/${set.id}/songs/${entry.song_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ played }),
+      }),
+      fetch(`/api/sets/${set.id}/songs/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: reordered.map((s) => ({ id: s.id, position: s.position })) }),
+      }),
+    ]);
+    if (!playedRes.ok || !reorderRes.ok) setSongs(previous);
   }
 
   function handleLeadersChanged(id: string, leaderUserIds: string[]) {
@@ -2076,6 +2163,7 @@ export default function SetDetail({
                       currentUserSingingVoice={userSingingVoice}
                       inRepertoire={userRepertoire.has(song.song_id)}
                       onRemove={handleRemoveSong}
+                      onTogglePlayed={handleTogglePlayed}
                       onMediaAdded={handleMediaAdded}
                       onKeyChanged={handleKeyChanged}
                       onLeadersChanged={handleLeadersChanged}
@@ -2101,7 +2189,7 @@ export default function SetDetail({
                   );
               return (
                 <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
-                  <span className="shrink-0 mt-0.5 w-4 sm:w-6 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{displayNumber}</span>
+                  <span className="shrink-0 mt-0.5 w-6 sm:w-8 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{displayNumber}</span>
                   <SongRowContent
                     song={song}
                     index={originalIndex}
@@ -2120,19 +2208,10 @@ export default function SetDetail({
                     onLeadersChanged={handleLeadersChanged}
                     onAddToRepertoire={handleAddToRepertoire}
                     onVoiceUpdated={setUserSingingVoice}
+                    onTogglePlayed={handleTogglePlayed}
+                    onRemove={handleRemoveSong}
                     signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
                   />
-                  {canEdit && (
-                    <button
-                      onClick={() => handleRemoveSong(song.song_id)}
-                      className="shrink-0 mt-0.5 text-zinc-300 hover:text-red-400 transition-colors"
-                      aria-label="Remove song"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
               );
             })

@@ -24,6 +24,7 @@ export async function PATCH(
   const body = await req.json();
   const updates: Record<string, unknown> = {};
   if ("key_note" in body) updates.key_note = body.key_note as string | null;
+  if ("played" in body) updates.played = Boolean(body.played);
   if ("leader_user_ids" in body && Array.isArray(body.leader_user_ids)) {
     updates.leader_user_ids = body.leader_user_ids;
     if (body.leader_user_ids.length > 0) {

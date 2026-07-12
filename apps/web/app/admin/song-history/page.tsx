@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { supabaseServer } from "@/lib/supabase/server";
-import { computeSongPlayStats, type JamForStats } from "@/lib/songPlayStats";
+import { computeSongPlayStats, toJamsForStats, type LinkedSetRow } from "@/lib/songPlayStats";
 import SongHistoryTable from "./SongHistoryTable";
 
 export const metadata: Metadata = {
@@ -11,20 +11,18 @@ export default async function SongHistoryPage() {
   const supabase = await supabaseServer();
 
   const { data } = await supabase
-    .from("jams")
+    .from("sets")
     .select(`
-      id, name, starts_at,
-      sets(
-        set_songs(
-          songs(id, title, slug, display_artist)
-        )
+      jams!inner(id, name, starts_at),
+      set_songs!inner(
+        songs(id, title, slug, display_artist)
       )
     `)
-    .eq("visibility", "official")
-    .lte("starts_at", new Date().toISOString())
-    .order("starts_at", { ascending: false });
+    .eq("jams.visibility", "official")
+    .lte("jams.starts_at", new Date().toISOString())
+    .eq("set_songs.played", true);
 
-  const stats = computeSongPlayStats((data ?? []) as unknown as JamForStats[]);
+  const stats = computeSongPlayStats(toJamsForStats((data ?? []) as unknown as LinkedSetRow[]));
 
   return (
     <div className="space-y-4">
