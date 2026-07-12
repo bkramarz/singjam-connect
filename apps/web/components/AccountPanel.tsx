@@ -209,7 +209,7 @@ export default function AccountPanel() {
       setEmail(data.user.email ?? null);
       Promise.all([
         supabase.from("profiles").select("display_name, last_name, username, avatar_url, neighborhood, singing_voice, instrument_levels, favorite_genres, role").eq("id", data.user.id).single(),
-        supabase.from("song_genres").select("genres(name)"),
+        supabase.rpc("genres_by_usage"),
       ]).then(([{ data: profile }, { data: genreRows }]) => {
         const favorites: string[] = (profile as any)?.favorite_genres ?? [];
 
@@ -237,14 +237,7 @@ export default function AccountPanel() {
         }
 
         if (genreRows) {
-          const counts: Record<string, number> = {};
-          for (const row of genreRows) {
-            const name = (row.genres as any)?.name;
-            if (name) counts[name] = (counts[name] ?? 0) + 1;
-          }
-          const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n]) => n);
-          console.log("Genres by frequency:", Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} (${c})`));
-          setAllGenres(sorted);
+          setAllGenres((genreRows as { name: string }[]).map((r) => r.name));
         }
 
         setLoading(false);
