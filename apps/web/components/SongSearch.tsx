@@ -100,6 +100,15 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     if (browseSongs.length > 0) sessionStorage.setItem("vc:/search", String(browseSongs.length));
   }, [browseSongs.length]);
 
+  // The RPC excludes repertoire songs at fetch time; this also hides songs
+  // added to the repertoire after the current pages were fetched.
+  const visibleBrowseSongs = useMemo(() => {
+    if (!hideMySongs) return browseSongs;
+    return browseSongs.filter((r) => !repertoire.has(r.song_id));
+  }, [browseSongs, hideMySongs, repertoire]);
+
+  const visibleTotal = total === null ? null : total - (browseSongs.length - visibleBrowseSongs.length);
+
   useEffect(() => {
     // User data — session reads from localStorage (fast), then fetches profile + repertoire
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -243,7 +252,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             )}
           </div>
           <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
-            {searching || total === null ? null : `${total} song${total === 1 ? "" : "s"}`}
+            {searching || visibleTotal === null ? null : `${visibleTotal} song${visibleTotal === 1 ? "" : "s"}`}
           </p>
         </div>
 
@@ -325,7 +334,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
           </div>
         ) : (
           <div className={`grid gap-2 transition-opacity ${browseLoading ? "opacity-60" : ""}`}>
-            {browseSongs.map((r) => (
+            {visibleBrowseSongs.map((r) => (
               <SongCard
                 key={r.song_id}
                 songId={r.song_id}
@@ -357,12 +366,12 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 Loading more…
               </div>
             )}
-            {!hasMore && total !== null && total > PAGE_SIZE && (
+            {!hasMore && visibleTotal !== null && visibleTotal > PAGE_SIZE && (
               <div className="py-4 text-center text-xs text-zinc-400">
-                All {total} songs shown
+                All {visibleTotal} songs shown
               </div>
             )}
-            {total === 0 && (
+            {visibleTotal === 0 && (
               <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
                 No songs match the selected filters.
               </div>
