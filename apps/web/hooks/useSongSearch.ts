@@ -28,9 +28,13 @@ export function useSongSearch(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Invalidate any in-flight request so a slow response for an old query
+    // can't overwrite the results of a newer one.
+    const seq = ++requestSeq.current;
     const trimmed = query.trim();
     if (!trimmed) {
       setResults([]);
@@ -41,6 +45,7 @@ export function useSongSearch(
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
       const { data, error: rpcError } = await supabase.rpc("search_songs", { q: trimmed, limit_n: limit });
+      if (seq !== requestSeq.current) return;
       setLoading(false);
       if (rpcError) {
         setError("Search failed. Please try again.");
