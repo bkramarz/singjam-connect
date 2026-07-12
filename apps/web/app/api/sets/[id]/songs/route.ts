@@ -85,7 +85,7 @@ export async function POST(
   const { data, error } = await admin
     .from("set_songs")
     .insert({ set_id: setId, song_id: songId, position, added_by_user_id: user.id })
-    .select("id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, song_recording_artists(position, youtube_url, spotify_url))")
+    .select("id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, song_recording_artists(position, youtube_url, spotify_url))")
     .single();
 
   if (error) {
