@@ -19,6 +19,24 @@ export type SongPlayStat = {
   lastJamName: string | null;
 };
 
+export type LinkedSetRow = {
+  jams:
+    | { id: string; name: string | null; starts_at: string }
+    | { id: string; name: string | null; starts_at: string }[]
+    | null;
+  set_songs: { songs: { id: string; title: string; slug: string | null; display_artist: string | null } | null }[];
+};
+
+export function toJamsForStats(rows: LinkedSetRow[]): JamForStats[] {
+  return rows
+    .map((row) => {
+      const jam = Array.isArray(row.jams) ? row.jams[0] : row.jams;
+      if (!jam) return null;
+      return { id: jam.id, name: jam.name, starts_at: jam.starts_at, sets: [{ set_songs: row.set_songs }] };
+    })
+    .filter((j): j is JamForStats => j !== null);
+}
+
 export function computeSongPlayStats(jams: JamForStats[]): SongPlayStat[] {
   const stats = new Map<string, SongPlayStat>();
 

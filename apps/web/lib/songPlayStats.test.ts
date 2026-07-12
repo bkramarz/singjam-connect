@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeSongPlayStats, type JamForStats } from "./songPlayStats";
+import { computeSongPlayStats, toJamsForStats, type JamForStats, type LinkedSetRow } from "./songPlayStats";
 
 function song(id: string, title: string, overrides: Partial<{ slug: string | null; display_artist: string | null }> = {}) {
   return { id, title, slug: overrides.slug ?? null, display_artist: overrides.display_artist ?? null };
@@ -71,5 +71,45 @@ describe("computeSongPlayStats", () => {
     const result = computeSongPlayStats(jams);
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe("Amazing Grace");
+  });
+});
+
+describe("toJamsForStats", () => {
+  it("maps a row with an object-shaped jams embed into a one-set JamForStats entry", () => {
+    const rows: LinkedSetRow[] = [
+      {
+        jams: { id: "j1", name: "Jam 1", starts_at: "2026-01-01T00:00:00Z" },
+        set_songs: [{ songs: song("s1", "Amazing Grace") }],
+      },
+    ];
+    const result = toJamsForStats(rows);
+    expect(result).toEqual([
+      {
+        id: "j1",
+        name: "Jam 1",
+        starts_at: "2026-01-01T00:00:00Z",
+        sets: [{ set_songs: [{ songs: song("s1", "Amazing Grace") }] }],
+      },
+    ]);
+  });
+
+  it("handles an array-shaped jams embed defensively by taking the first element", () => {
+    const rows: LinkedSetRow[] = [
+      {
+        jams: [{ id: "j1", name: "Jam 1", starts_at: "2026-01-01T00:00:00Z" }],
+        set_songs: [{ songs: song("s1", "Amazing Grace") }],
+      },
+    ];
+    const result = toJamsForStats(rows);
+    expect(result[0].id).toBe("j1");
+  });
+
+  it("drops rows where jams is null or an empty array", () => {
+    const rows: LinkedSetRow[] = [
+      { jams: null, set_songs: [{ songs: song("s1", "Amazing Grace") }] },
+      { jams: [], set_songs: [{ songs: song("s2", "Beautiful Day") }] },
+    ];
+    const result = toJamsForStats(rows);
+    expect(result).toHaveLength(0);
   });
 });
