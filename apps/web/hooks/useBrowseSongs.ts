@@ -37,6 +37,8 @@ export function useBrowseSongs(
   const [error, setError] = useState<string | null>(null);
   const requestSeq = useRef(0);
   const isFirstLoad = useRef(true);
+  const songsRef = useRef(songs);
+  songsRef.current = songs;
 
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
 
@@ -86,5 +88,15 @@ export function useBrowseSongs(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtersKey, songs.length, pageSize, loading, loadingMore, hasMore]);
 
-  return { songs, total, loading, loadingMore, error, hasMore, loadMore };
+  // Drop a row that no longer matches the active filters (e.g. the song was
+  // just added to the caller's repertoire while excludeMine is on). Keeping
+  // songs.length and total in sync here is what keeps the next loadMore
+  // offset and the hasMore check correct without a refetch.
+  const removeSong = useCallback((songId: string) => {
+    if (!songsRef.current.some((s) => s.song_id === songId)) return;
+    setSongs((prev) => prev.filter((s) => s.song_id !== songId));
+    setTotal((t) => (t === null ? t : Math.max(0, t - 1)));
+  }, []);
+
+  return { songs, total, loading, loadingMore, error, hasMore, loadMore, removeSong };
 }
