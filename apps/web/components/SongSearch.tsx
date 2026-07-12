@@ -2,58 +2,27 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { formatComposers } from "@/lib/formatComposers";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
-import { useSongSearch, type SongSearchResult } from "@/hooks/useSongSearch";
+import { useSongSearch } from "@/hooks/useSongSearch";
+import { useBrowseSongs, type BrowseFilters } from "@/hooks/useBrowseSongs";
 import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 import SongCard from "@/components/SongCard";
 import SearchInput from "@/components/SearchInput";
 
-type PopularSong = {
+type FilterMeta = {
   song_id: string;
-  title: string;
-  slug: string | null;
-  display_artist: string | null;
-  composers: string[];
-  cultures: string[];
-  productions: string[];
   genres: string[];
   languages: string[];
   themes: string[];
+  cultures: string[];
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
   year: number | null;
-  popularity: number;
-  youtubeId: string | null;
-  spotifyTrackId: string | null;
 };
-
-function getYoutubeId(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0] || null;
-    if (u.hostname.includes("youtube.com")) {
-      return u.searchParams.get("v")
-        ?? u.pathname.match(/\/(?:embed|v|shorts)\/([^/?]+)/)?.[1]
-        ?? null;
-    }
-    return null;
-  } catch { return null; }
-}
-
-function getSpotifyTrackId(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const match = new URL(url).pathname.match(/\/track\/([a-zA-Z0-9]+)/);
-    return match?.[1] ?? null;
-  } catch { return null; }
-}
 
 const PAGE_SIZE = 20;
 
@@ -67,8 +36,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const supabase = supabaseBrowser();
   const router = useRouter();
 
-  const [popularSongs, setPopularSongs] = useState<PopularSong[]>([]);
-  const [songsLoading, setSongsLoading] = useState(true);
+  const [filterMeta, setFilterMeta] = useState<FilterMeta[]>([]);
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -79,20 +47,16 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAddId, setPendingAddId] = useState<string | null>(null);
   const [repertoire, setRepertoire] = useState<Map<string, string>>(new Map());
-  const [visibleCount, setVisibleCount] = useState(() => {
-    if (typeof window === "undefined") return PAGE_SIZE;
-    const saved = Number(sessionStorage.getItem("vc:/search"));
-    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE;
-  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [hideMySongs, setHideMySongs] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const hasMounted = useRef(false);
+  const [initialCount] = useState(() => {
+    if (typeof window === "undefined") return PAGE_SIZE;
+    const saved = Number(sessionStorage.getItem("vc:/search"));
+    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE;
+  });
 
-  useEffect(() => {
-    sessionStorage.setItem("vc:/search", String(visibleCount));
-  }, [visibleCount]);
   const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
 
   const {
@@ -107,13 +71,34 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     activeFilterCount,
     toggleGenre, toggleLanguage, toggleTheme, toggleCulture, clearFilters,
     sortBy, setSortBy,
-  } = useSongFilters(popularSongs, "popularity");
+  } = useSongFilters(filterMeta, "popularity");
 
-  // Lookup map for filter metadata on search results
-  const songMetaMap = useMemo(
-    () => new Map(popularSongs.map((s) => [s.song_id, s])),
-    [popularSongs]
-  );
+  const browseFilters = useMemo<BrowseFilters>(() => ({
+    genres: Array.from(selectedGenres).sort(),
+    languages: Array.from(selectedLanguages).sort(),
+    themes: Array.from(selectedThemes).sort(),
+    cultures: Array.from(selectedCultures).sort(),
+    vibe: selectedVibe,
+    tonality: selectedTonality,
+    meter: selectedMeter,
+    yearMin,
+    yearMax,
+    excludeMine: hideMySongs,
+    sort: sortBy,
+  }), [selectedGenres, selectedLanguages, selectedThemes, selectedCultures, selectedVibe, selectedTonality, selectedMeter, yearMin, yearMax, hideMySongs, sortBy]);
+
+  const {
+    songs: browseSongs,
+    total,
+    loading: browseLoading,
+    error: browseError,
+    hasMore,
+    loadMore,
+  } = useBrowseSongs(browseFilters, { pageSize: PAGE_SIZE, initialCount });
+
+  useEffect(() => {
+    if (browseSongs.length > 0) sessionStorage.setItem("vc:/search", String(browseSongs.length));
+  }, [browseSongs.length]);
 
   useEffect(() => {
     // User data — session reads from localStorage (fast), then fetches profile + repertoire
@@ -129,123 +114,28 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       });
     });
 
-    // Songs catalog — fires in parallel with the user fetch above
-    const SONG_PAGE = 1000;
-    async function fetchAllSongs() {
-      const all: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data } = await supabase
-          .from("songs")
-          .select(`
-            id, title, slug, display_artist, year_written, vibe, tonality, meter,
-            youtube_url,
-            song_composers(people(name)),
-            song_lyricists(people(name)),
-            song_recording_artists(position, year, youtube_url, spotify_url),
-            song_productions(productions(name)),
-            song_genres(genres(name)),
-            song_languages(languages(name)),
-            song_cultures(cultures(name)),
-            song_themes(themes(name))
-          `)
-          .range(from, from + SONG_PAGE - 1);
-        const page = data ?? [];
-        all.push(...page);
-        if (page.length < SONG_PAGE) break;
-        from += SONG_PAGE;
-      }
-      return all;
-    }
-    Promise.all([fetchAllSongs(), supabase.rpc("song_popularity_counts")]).then(([songsData, popularityRes]) => {
-      const popularityMap = new Map<string, number>(
-        ((popularityRes.data ?? []) as { song_id: string; user_count: number }[]).map(
-          (r) => [r.song_id, r.user_count]
-        )
-      );
-      const songs = songsData
-        .map((s: any) => ({
-          song_id: s.id as string,
-          title: s.title as string,
-          slug: (s.slug ?? null) as string | null,
-          display_artist: (s.display_artist ?? null) as string | null,
-          vibe: (s.vibe ?? null) as string | null,
-          tonality: (s.tonality ?? null) as string | null,
-          meter: (s.meter ?? null) as string | null,
-          productions: ((s.song_productions ?? []) as any[]).map((p: any) => p.productions?.name as string).filter(Boolean) as string[],
-          composers: Array.from(new Set([
-            ...((s.song_composers ?? []) as any[]).map((c: any) => c.people?.name as string),
-            ...((s.song_lyricists ?? []) as any[]).map((c: any) => c.people?.name as string),
-          ])).filter(Boolean).sort() as string[],
-          genres: ((s.song_genres ?? []) as any[]).map((g: any) => g.genres?.name as string).filter(Boolean) as string[],
-          languages: ((s.song_languages ?? []) as any[]).map((l: any) => l.languages?.name as string).filter(Boolean) as string[],
-          cultures: ((s.song_cultures ?? []) as any[]).map((c: any) => c.cultures?.name as string).filter(Boolean) as string[],
-          themes: ((s.song_themes ?? []) as any[]).map((t: any) => t.themes?.name as string).filter(Boolean) as string[],
-          year: (() => {
-            const firstRecording = ((s.song_recording_artists ?? []) as any[])
-              .map((r: any) => r.year as number)
-              .filter((y): y is number => typeof y === "number")
-              .sort((a, b) => a - b)[0] ?? null;
-            const yearWritten = (s as any).year_written as number | null;
-            if (yearWritten && firstRecording) return Math.min(yearWritten, firstRecording);
-            return yearWritten ?? firstRecording ?? null;
-          })(),
-          popularity: popularityMap.get(s.id) ?? 0,
-          youtubeId: (() => {
-            const artists = [...((s.song_recording_artists ?? []) as any[])].sort((a, b) => a.position - b.position);
-            const fromArtist = artists.find((a) => a.youtube_url)?.youtube_url ?? null;
-            return getYoutubeId(fromArtist) ?? getYoutubeId((s as any).youtube_url ?? null);
-          })(),
-          spotifyTrackId: getSpotifyTrackId(
-            [...((s.song_recording_artists ?? []) as any[])].sort((a, b) => a.position - b.position).find((a) => a.spotify_url)?.spotify_url ?? null
-          ),
-        }))
-        .sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
-      setPopularSongs(songs);
-      setSongsLoading(false);
+    // Slim per-song filter fields for the cascading filter-pill options —
+    // the browse list itself is paginated via the browse_songs RPC
+    supabase.rpc("song_filter_meta").then(({ data }) => {
+      setFilterMeta((data ?? []) as FilterMeta[]);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Browse list: optionally exclude repertoire songs, then apply filters
-  const filteredSongs = useMemo(() => {
-    return popularSongs.filter((s) => {
-      if (hideMySongs && repertoire.has(s.song_id)) return false;
-      return matchesFilters(s);
-    });
-  }, [popularSongs, repertoire, matchesFilters, hideMySongs]);
-
-  // Search results: apply active filters and hide-my-songs using the metadata map
+  // Search results: apply active filters and hide-my-songs client-side (≤50 rows)
   const filteredResults = useMemo(() => {
     return results.filter((r) => {
       if (hideMySongs && repertoire.has(r.song_id)) return false;
       if (activeFilterCount === 0) return true;
-      return matchesFilters(songMetaMap.get(r.song_id));
+      return matchesFilters(r);
     });
-  }, [results, songMetaMap, activeFilterCount, matchesFilters, hideMySongs, repertoire]);
-
-  const sortedBrowse = useMemo(() => {
-    if (sortBy === "title_asc") return [...filteredSongs].sort((a, b) => a.title.localeCompare(b.title));
-    if (sortBy === "title_desc") return [...filteredSongs].sort((a, b) => b.title.localeCompare(a.title));
-    return [...filteredSongs].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
-  }, [filteredSongs, sortBy]);
+  }, [results, activeFilterCount, matchesFilters, hideMySongs, repertoire]);
 
   const sortedSearch = useMemo(() => {
     if (sortBy === "title_asc") return [...filteredResults].sort((a, b) => a.title.localeCompare(b.title));
     if (sortBy === "title_desc") return [...filteredResults].sort((a, b) => b.title.localeCompare(a.title));
-    return [...filteredResults].sort((a, b) => {
-      const pa = songMetaMap.get(a.song_id)?.popularity ?? 0;
-      const pb = songMetaMap.get(b.song_id)?.popularity ?? 0;
-      return pb - pa || a.title.localeCompare(b.title);
-    });
-  }, [filteredResults, sortBy, songMetaMap]);
-
-  // Reset visible count when filters, sort, or hide-my-songs toggle change.
-  // Skip the first mount so a restored visibleCount isn't immediately overwritten.
-  useEffect(() => {
-    if (!hasMounted.current) { hasMounted.current = true; return; }
-    setVisibleCount(PAGE_SIZE);
-  }, [matchesFilters, sortBy, hideMySongs]);
+    return [...filteredResults].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
+  }, [filteredResults, sortBy]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -253,15 +143,13 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, sortedBrowse.length));
-        }
+        if (entries[0].isIntersecting) loadMore();
       },
       { rootMargin: "200px" }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [sortedBrowse.length]);
+  }, [loadMore]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -300,7 +188,6 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
     }
   }
 
-  const visibleSongs = sortedBrowse.slice(0, visibleCount);
   const searching = q.trim().length > 0;
 
   return (
@@ -322,7 +209,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
               ? `${sortedSearch.length} song(s)${activeFilterCount > 0 && sortedSearch.length < results.length ? ` (${results.length} before filters)` : ""}`
               : null}
         </div>
-        {(searchError ?? status) ? <div className="text-sm text-zinc-700">{searchError ?? status}</div> : null}
+        {(searchError ?? browseError ?? status) ? <div className="text-sm text-zinc-700">{searchError ?? browseError ?? status}</div> : null}
       </div>
 
       {/* Filter bar */}
@@ -356,7 +243,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             )}
           </div>
           <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
-            {searching ? null : songsLoading ? null : `${sortedBrowse.length} song${sortedBrowse.length === 1 ? "" : "s"}`}
+            {searching || browseLoading || total === null ? null : `${total} song${total === 1 ? "" : "s"}`}
           </p>
         </div>
 
@@ -404,7 +291,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 aka={r.aka}
                 genres={r.genres}
                 languages={r.languages ?? []}
-                popularity={songMetaMap.get(r.song_id)?.popularity}
+                popularity={r.popularity}
                 youtubeId={r.youtube_id}
                 spotifyTrackId={r.spotify_track_id}
                 repertoire={repertoire}
@@ -422,7 +309,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
               </div>
             ) : null}
           </div>
-        ) : songsLoading ? (
+        ) : browseLoading ? (
           <div className="divide-y rounded-md border">
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="flex items-center justify-between p-4">
@@ -436,9 +323,9 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
               </div>
             ))}
           </div>
-        ) : popularSongs.length > 0 ? (
+        ) : (
           <div className="grid gap-2">
-            {visibleSongs.map((r) => (
+            {browseSongs.map((r) => (
               <SongCard
                 key={r.song_id}
                 songId={r.song_id}
@@ -453,8 +340,8 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
                 genres={r.genres}
                 languages={r.languages ?? []}
                 popularity={r.popularity}
-                youtubeId={r.youtubeId}
-                spotifyTrackId={r.spotifyTrackId}
+                youtubeId={r.youtube_id}
+                spotifyTrackId={r.spotify_track_id}
                 repertoire={repertoire}
                 pendingAddId={pendingAddId}
                 singingVoice={singingVoice}
@@ -465,27 +352,26 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
               />
             ))}
 
-            {visibleCount < sortedBrowse.length && (
+            {hasMore && (
               <div ref={sentinelRef} className="py-4 text-center text-xs text-zinc-400">
                 Loading more…
               </div>
             )}
-            {visibleCount >= sortedBrowse.length && sortedBrowse.length > PAGE_SIZE && (
+            {!hasMore && total !== null && total > PAGE_SIZE && (
               <div className="py-4 text-center text-xs text-zinc-400">
-                All {sortedBrowse.length} songs shown
+                All {total} songs shown
               </div>
             )}
-            {sortedBrowse.length === 0 && (
+            {total === 0 && (
               <div className="rounded-2xl border border-zinc-200 p-5 text-sm text-zinc-600">
                 No songs match the selected filters.
               </div>
             )}
           </div>
-        ) : null}
+        )}
       </div>
 
       {currentUser && <SubmitSongForm />}
     </div>
   );
 }
-
