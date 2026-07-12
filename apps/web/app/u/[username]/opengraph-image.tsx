@@ -1,15 +1,17 @@
 import { ImageResponse } from "next/og";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const alt = "Musician profile on SingJam";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+export const revalidate = 3600;
 
 export default async function Image({ params }: { params: { username: string } }) {
-  const supabase = await supabaseServer();
+  // Service-role client: user_songs is not anon-readable (see page.tsx).
+  const supabase = supabaseAdmin();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, display_name, neighborhood, singing_voice, favorite_genres")
+    .select("id, display_name, neighborhood, singing_voice, favorite_genres, user_songs(count)")
     .eq("username", params.username)
     .maybeSingle();
 
@@ -21,9 +23,7 @@ export default async function Image({ params }: { params: { username: string } }
     .map((w: string) => w[0]?.toUpperCase() ?? "")
     .join("");
 
-  const { count: songCount } = p?.id
-    ? await supabase.from("user_songs").select("id", { count: "exact", head: true }).eq("user_id", p.id)
-    : { count: 0 };
+  const songCount = p?.user_songs?.[0]?.count ?? 0;
 
   const voice = p?.singing_voice ?? null;
   const neighborhood = p?.neighborhood ?? null;
