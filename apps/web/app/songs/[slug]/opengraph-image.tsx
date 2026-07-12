@@ -1,12 +1,13 @@
 import { ImageResponse } from "next/og";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAnon } from "@/lib/supabase/anon";
 
 export const alt = "Song on SingJam";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+export const revalidate = 3600;
 
 export default async function Image({ params }: { params: { slug: string } }) {
-  const supabase = await supabaseServer();
+  const supabase = supabaseAnon();
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.slug);
   const query = supabase.from("songs").select("title, display_artist, first_line, year, tonality");
   const { data } = await (
