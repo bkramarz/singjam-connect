@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -1252,19 +1252,24 @@ export default function SetDetail({
     })),
   ];
 
-  const sortedSongs = (() => {
+  const sortedSongs = useMemo(() => {
     if (songSort === "custom") return songs;
     const copy = [...songs];
     if (songSort === "az") return copy.sort((a, b) => a.songs.title.localeCompare(b.songs.title));
     if (songSort === "za") return copy.sort((a, b) => b.songs.title.localeCompare(a.songs.title));
-    return copy.sort((a, b) => {
-      if (isSolo) {
-        return (globalSongPopularity.get(b.song_id) ?? 0) - (globalSongPopularity.get(a.song_id) ?? 0);
+    if (isSolo) {
+      return copy.sort(
+        (a, b) => (globalSongPopularity.get(b.song_id) ?? 0) - (globalSongPopularity.get(a.song_id) ?? 0)
+      );
+    }
+    const scores = new Map<string, number>();
+    for (const k of songKnowledge) {
+      if (k.confidence === "lead" || k.confidence === "support") {
+        scores.set(k.song_id, (scores.get(k.song_id) ?? 0) + 1);
       }
-      const score = (id: string) => songKnowledge.filter(k => k.song_id === id && (k.confidence === "lead" || k.confidence === "support")).length;
-      return score(b.song_id) - score(a.song_id);
-    });
-  })();
+    }
+    return copy.sort((a, b) => (scores.get(b.song_id) ?? 0) - (scores.get(a.song_id) ?? 0));
+  }, [songs, songSort, isSolo, globalSongPopularity, songKnowledge]);
 
   const visibleSongs = songListFilter
     ? sortedSongs.filter((s) => {
@@ -1500,8 +1505,14 @@ export default function SetDetail({
   }
 
   const sortIds = (fp: string | null) => (fp ?? "").split(",").filter(Boolean).sort().join(",");
-  const youtubeFingerprint = sortIds(songs.map(s => getPrimaryYoutubeId(s.songs)).filter(Boolean).join(","));
-  const spotifyFingerprint = sortIds(songs.map(s => getSpotifyTrackId(getPrimarySpotifyUrl(s.songs))).filter(Boolean).join(","));
+  const youtubeFingerprint = useMemo(
+    () => sortIds(songs.map(s => getPrimaryYoutubeId(s.songs)).filter(Boolean).join(",")),
+    [songs]
+  );
+  const spotifyFingerprint = useMemo(
+    () => sortIds(songs.map(s => getSpotifyTrackId(getPrimarySpotifyUrl(s.songs))).filter(Boolean).join(",")),
+    [songs]
+  );
   const youtubeOutdated = !!playlistLinks.youtube && sortIds(lastSyncedYoutubeFingerprint) !== youtubeFingerprint;
   const spotifyOutdated = !!playlistLinks.spotify && sortIds(lastSyncedSpotifyFingerprint) !== spotifyFingerprint;
 
