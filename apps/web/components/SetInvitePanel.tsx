@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import QRCode from "qrcode";
 import SearchInput from "@/components/SearchInput";
 
 type UserResult = {
@@ -197,6 +196,8 @@ export default function SetInvitePanel({
       return;
     }
     try {
+      // Loaded on demand: only set owners generating a QR invite need it.
+      const QRCode = (await import("qrcode")).default;
       const dataUrl = await QRCode.toDataURL(body.url, { width: 280, margin: 2 });
       setQrDataUrl(dataUrl);
     } catch {
