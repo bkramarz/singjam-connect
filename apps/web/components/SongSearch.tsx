@@ -243,7 +243,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             )}
           </div>
           <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
-            {searching || browseLoading || total === null ? null : `${total} song${total === 1 ? "" : "s"}`}
+            {searching || total === null ? null : `${total} song${total === 1 ? "" : "s"}`}
           </p>
         </div>
 
@@ -309,7 +309,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
               </div>
             ) : null}
           </div>
-        ) : browseLoading ? (
+        ) : browseLoading && browseSongs.length === 0 ? (
           <div className="divide-y rounded-md border">
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="flex items-center justify-between p-4">
@@ -324,7 +324,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
             ))}
           </div>
         ) : (
-          <div className="grid gap-2">
+          <div className={`grid gap-2 transition-opacity ${browseLoading ? "opacity-60" : ""}`}>
             {browseSongs.map((r) => (
               <SongCard
                 key={r.song_id}
