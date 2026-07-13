@@ -1,57 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import JamCard, { type JamCardData } from "@/components/JamCard";
-import JamRsvpButton from "@/components/JamRsvpButton";
-import JamInvitePanel, { type NewInviteEntry } from "@/components/JamInvitePanel";
-import JamInviteResponse from "@/components/JamInviteResponse";
-import JamInviteList from "@/components/JamInviteList";
-import JamHostActions from "@/components/JamHostActions";
-import JamAttendeeList from "@/components/JamAttendeeList";
-import JamSetList from "@/components/JamSetList";
-
-type InviteEntry = {
-  id: string;
-  invited_user_id: string | null;
-  invitee_email: string | null;
-  status: string;
-  display_name?: string | null;
-  last_name?: string | null;
-  username?: string | null;
-};
+import { type JamCardData } from "@/components/JamCard";
+import JamView, { type InviteEntry, type JamViewData } from "@/components/JamView";
 
 type JamState =
   | { status: "loading" }
   | { status: "not_found" }
-  | {
-      status: "ready";
-      jam: any;
-      jamCardData: JamCardData;
-      userId: string | null;
-      rsvpStatus: "attending" | "waitlist" | "cancelled" | null;
-      waitlistPosition: number | null;
-      attendingCount: number;
-      pendingInvite: boolean;
-      isOfficial: boolean;
-      isHost: boolean;
-      hasFullAccess: boolean;
-      showRsvp: boolean;
-      canInvite: boolean;
-      invitesEnabled: boolean;
-      inviteList: InviteEntry[];
-      alreadyInvitedIds: string[];
-    };
+  | { status: "ready"; data: JamViewData };
 
-export default function JamContent() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const id = params.id as string;
-  const inviteToken = searchParams.get("invite") ?? undefined;
-
+export default function JamContent({ jamId, inviteToken }: { jamId: string; inviteToken?: string }) {
   const [state, setState] = useState<JamState>({ status: "loading" });
   const supabase = supabaseBrowser();
 
@@ -70,7 +29,7 @@ export default function JamContent() {
       if (inviteToken && !earlyUser) {
         // Unauthenticated visitor with a valid invite link: fetch jam data
         // server-side (bypasses RLS) so they can view without signing in.
-        const res = await fetch(`/api/jam/${id}/public?invite=${inviteToken}`);
+        const res = await fetch(`/api/jam/${jamId}/public?invite=${inviteToken}`);
         if (!res.ok) {
           setState({ status: "not_found" });
           return;
@@ -99,21 +58,23 @@ export default function JamContent() {
         };
         setState({
           status: "ready",
-          jam,
-          jamCardData,
-          userId: null,
-          rsvpStatus: null,
-          waitlistPosition: null,
-          attendingCount: data.attendingCount,
-          pendingInvite: false,
-          isOfficial: false,
-          isHost: false,
-          hasFullAccess: false,
-          showRsvp: false,
-          canInvite: false,
-          invitesEnabled: data.invitesEnabled,
-          inviteList: [],
-          alreadyInvitedIds: [],
+          data: {
+            jam: { name: jam.name, capacity: jam.capacity, host_user_id: jam.host_user_id },
+            jamCardData,
+            userId: null,
+            rsvpStatus: null,
+            waitlistPosition: null,
+            attendingCount: data.attendingCount,
+            pendingInvite: false,
+            isOfficial: false,
+            isHost: false,
+            hasFullAccess: false,
+            showRsvp: false,
+            canInvite: false,
+            invitesEnabled: data.invitesEnabled,
+            inviteList: [],
+            alreadyInvitedIds: [],
+          },
         });
         return;
       }
@@ -139,11 +100,11 @@ export default function JamContent() {
         supabase
           .from("jams")
           .select("id, name, visibility, starts_at, ends_at, timezone, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
-          .eq("id", id)
+          .eq("id", jamId)
           .maybeSingle(),
-        supabase.from("jam_genres").select("genres(name)").eq("jam_id", id),
-        supabase.from("jam_themes").select("themes(name)").eq("jam_id", id),
-        supabase.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", id).eq("status", "attending"),
+        supabase.from("jam_genres").select("genres(name)").eq("jam_id", jamId),
+        supabase.from("jam_themes").select("themes(name)").eq("jam_id", jamId),
+        supabase.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", jamId).eq("status", "attending"),
         supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
       ]);
 
@@ -163,10 +124,10 @@ export default function JamContent() {
       const [hostRes, rsvpRes, inviteRes] = await Promise.all([
         supabase.from("profiles").select("display_name, last_name, username").eq("id", jam.host_user_id).maybeSingle(),
         userId
-          ? supabase.from("jam_rsvps").select("status, waitlist_position").eq("jam_id", id).eq("user_id", userId).maybeSingle()
+          ? supabase.from("jam_rsvps").select("status, waitlist_position").eq("jam_id", jamId).eq("user_id", userId).maybeSingle()
           : Promise.resolve({ data: null }),
         userId
-          ? supabase.from("jam_invites").select("status").eq("jam_id", id).eq("invited_user_id", userId).maybeSingle()
+          ? supabase.from("jam_invites").select("status").eq("jam_id", jamId).eq("invited_user_id", userId).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 
@@ -190,7 +151,7 @@ export default function JamContent() {
         const { data: rawInvites } = await supabase
           .from("jam_invites")
           .select("id, invited_user_id, invitee_email, status")
-          .eq("jam_id", id)
+          .eq("jam_id", jamId)
           .order("created_at", { ascending: true });
 
         if (rawInvites && rawInvites.length > 0) {
@@ -243,25 +204,27 @@ export default function JamContent() {
 
       setState({
         status: "ready",
-        jam,
-        jamCardData,
-        userId,
-        rsvpStatus,
-        waitlistPosition,
-        attendingCount,
-        pendingInvite,
-        isOfficial,
-        isHost,
-        hasFullAccess,
-        showRsvp,
-        canInvite,
-        invitesEnabled,
-        inviteList,
-        alreadyInvitedIds,
+        data: {
+          jam: { name: jam.name, capacity: jam.capacity, host_user_id: jam.host_user_id },
+          jamCardData,
+          userId,
+          rsvpStatus,
+          waitlistPosition,
+          attendingCount,
+          pendingInvite,
+          isOfficial,
+          isHost,
+          hasFullAccess,
+          showRsvp,
+          canInvite,
+          invitesEnabled,
+          inviteList,
+          alreadyInvitedIds,
+        },
       });
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [jamId, inviteToken]);
 
   if (state.status === "loading") {
     return (
@@ -286,80 +249,5 @@ export default function JamContent() {
   }
   if (state.status === "not_found") return <p className="text-sm text-zinc-500">Jam not found.</p>;
 
-  const {
-    jam,
-    jamCardData,
-    userId,
-    rsvpStatus,
-    waitlistPosition,
-    attendingCount,
-    pendingInvite,
-    isOfficial,
-    isHost,
-    hasFullAccess,
-    showRsvp,
-    canInvite,
-    invitesEnabled,
-    inviteList,
-    alreadyInvitedIds,
-  } = state;
-
-  return (
-    <div className="space-y-4">
-      {pendingInvite && rsvpStatus !== "attending" && <JamInviteResponse jamId={id} />}
-      <JamCard
-        jam={jamCardData}
-        actions={
-          <>
-            {showRsvp && (
-              <JamRsvpButton
-                jamId={id}
-                initialStatus={rsvpStatus}
-                initialWaitlistPosition={waitlistPosition}
-                attendingCount={attendingCount}
-                capacity={jam.capacity}
-                onStatusChange={(newStatus) => {
-                  setState((prev) => {
-                    if (prev.status !== "ready") return prev;
-                    const isAttending = newStatus === "attending";
-                    return { ...prev, rsvpStatus: newStatus, hasFullAccess: prev.isOfficial || isAttending || prev.isHost };
-                  });
-                }}
-              />
-            )}
-            {!userId && !isOfficial && (
-              <Link
-                href={`/auth?next=/jam/${id}${inviteToken ? `&invite=${inviteToken}` : ""}`}
-                className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
-              >
-                Sign in to RSVP
-              </Link>
-            )}
-          </>
-        }
-      />
-      {hasFullAccess && <JamSetList jamId={id} jamName={jam.name} isHost={isHost} />}
-      {!isOfficial && <JamAttendeeList jamId={id} hostId={jam.host_user_id} />}
-      {canInvite && invitesEnabled && (
-        <JamInvitePanel
-          jamId={id}
-          alreadyInvitedIds={alreadyInvitedIds}
-          onInvited={(entry: NewInviteEntry) => {
-            setState((prev) => {
-              if (prev.status !== "ready") return prev;
-              return {
-                ...prev,
-                inviteList: [
-                  ...prev.inviteList,
-                  { id: crypto.randomUUID(), status: "pending", ...entry },
-                ],
-              };
-            });
-          }}
-        />
-      )}
-      {isHost && <JamInviteList jamId={id} invites={inviteList} />}
-      {isHost && <JamHostActions jamId={id} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
-    </div>
-  );
+  return <JamView key={`${jamId}:${state.data.userId ?? "anon"}`} jamId={jamId} inviteToken={inviteToken} data={state.data} />;
 }
