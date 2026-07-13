@@ -2,733 +2,38 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import SetInvitePanel from "@/components/SetInvitePanel";
-import SetSongPanel from "@/components/SetSongPanel";
 import { formatComposers } from "@/lib/formatComposers";
-import ConfidencePicker from "@/components/ConfidencePicker";
 import SearchInput from "@/components/SearchInput";
+import SetSongRow from "@/components/SetSongRow";
+import {
+  YoutubeIcon,
+  SpotifyIcon,
+  UltimateGuitarIcon,
+  getPrimaryYoutubeId,
+  getPrimarySpotifyUrl,
+  getSpotifyTrackId,
+  CSV_COLUMN_OPTIONS,
+  type CsvColumnKey,
+  type Song,
+  type Participant,
+  type Collaborator,
+  type PlaylistLink,
+  type SetData,
+} from "@/components/setDetailShared";
 
-const MUSICAL_KEYS = ["A", "Bb", "B", "C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab"];
-
-type Song = {
-  id: string;
-  song_id: string;
-  position: number;
-  key_note: string | null;
-  played: boolean;
-  leader_user_ids: string[];
-  songs: {
-    title: string;
-    display_artist: string | null;
-    slug: string | null;
-    chord_chart_url: string | null;
-    youtube_url: string | null;
-    tonality: string | null;
-    year: number | null;
-    meter: string | null;
-    song_composers: { people: { name: string } | null }[];
-    song_lyricists: { people: { name: string } | null }[];
-    song_cultures: { cultures: { name: string } | null; context: string | null }[];
-    song_genres: { genres: { name: string } | null }[];
-    song_themes: { themes: { name: string } | null }[];
-    song_recording_artists: { position: number; youtube_url: string | null; spotify_url: string | null }[];
-  };
-};
-
-type Participant = {
-  user_id: string;
-  display_name: string | null;
-  last_name: string | null;
-  username: string | null;
-  avatar_url: string | null;
-};
-
-type Collaborator = {
-  id: string;
-  user_id: string | null;
-  status: string;
-  role: "editor" | "viewer";
-  profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
-};
-
-type PlaylistLink = { url: string; added?: number; total?: number };
-
-type SetData = {
-  id: string;
-  name: string;
-  description: string | null;
-  owner_user_id: string;
-  jam_id: string | null;
-  link_sharing: "private" | "link" | "public";
-  youtube_playlist_id: string | null;
-  youtube_playlist_fingerprint: string | null;
-  spotify_playlist_id: string | null;
-  spotify_playlist_fingerprint: string | null;
-  ultimate_guitar_playlist_url: string | null;
-  profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
-};
-
-const CSV_COLUMN_OPTIONS = [
-  { key: "artist",   label: "Artist" },
-  { key: "year",     label: "Year" },
-  { key: "tonality", label: "Tonality" },
-  { key: "meter",    label: "Meter" },
-  { key: "key",      label: "Key (set)" },
-  { key: "leader",   label: "Leader" },
-  { key: "songwriters", label: "Songwriters" },
-  { key: "genres",      label: "Genres" },
-  { key: "themes",      label: "Themes" },
-  { key: "singjam",     label: "SingJam link" },
-  { key: "youtube",     label: "YouTube link" },
-  { key: "spotify",  label: "Spotify link" },
-  { key: "chords",   label: "Chord chart link" },
-] as const;
-
-type CsvColumnKey = typeof CSV_COLUMN_OPTIONS[number]["key"];
-
-function getYoutubeId(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0] || null;
-    if (u.hostname.includes("youtube.com")) {
-      return u.searchParams.get("v")
-        ?? u.pathname.match(/\/(?:embed|v|shorts)\/([^/?]+)/)?.[1]
-        ?? null;
-    }
-    return null;
-  } catch { return null; }
-}
-
-function YoutubeIcon() {
-  return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-    </svg>
-  );
-}
-
-function SpotifyIcon() {
-  return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
-    </svg>
-  );
-}
-
-function UltimateGuitarIcon() {
-  return (
-    <svg className="h-5 w-5 rounded-sm" viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M892 88H308C186.498 88 88 186.498 88 308V892C88 1013.5 186.498 1112 308 1112H892C1013.5 1112 1112 1013.5 1112 892V308C1112 186.498 1013.5 88 892 88Z" fill="#111111"/>
-      <path d="M291.02 280.202L356.294 463.987C375.375 409.765 425.595 348.494 507.938 348.494C594.301 348.494 647.532 411.755 657.573 481.057H794.152L858.425 232L706.782 310.342C670.621 280.221 623.411 263.132 572.209 263.132C502.907 263.132 451.715 291.252 417.554 329.413L291.02 280.202Z" fill="#FFD609"/>
-      <path d="M562.169 646.76L913.66 481.057V780.327L840.349 752.208C799.167 877.732 704.783 967.12 560.159 967.12C399.474 967.12 287 841.576 287 687.931C287 642.73 296.046 605.588 312.107 569.428H314.115C305.075 598.549 301.06 624.658 301.06 655.799C301.06 777.322 393.455 868.702 512.959 868.702C619.422 868.702 687.693 794.375 719.834 707.012L562.169 646.76Z" fill="#FFD609"/>
-    </svg>
-  );
-}
-
-function getPrimaryYoutubeId(song: Song["songs"]): string | null {
-  const fromArtists = [...(song.song_recording_artists ?? [])]
-    .sort((a, b) => a.position - b.position)
-    .find((a) => a.youtube_url)?.youtube_url;
-  return getYoutubeId(fromArtists) ?? getYoutubeId(song.youtube_url);
-}
-
-function getPrimarySpotifyUrl(song: Song["songs"]): string | null {
-  return [...(song.song_recording_artists ?? [])]
-    .sort((a, b) => a.position - b.position)
-    .find((a) => a.spotify_url)?.spotify_url ?? null;
-}
-
-function getSpotifyTrackId(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const match = new URL(url).pathname.match(/\/track\/([a-zA-Z0-9]+)/);
-    return match?.[1] ?? null;
-  } catch { return null; }
-}
-
-type AddingField = "youtube" | "spotify" | "chord" | null;
-
-function SongRowContent({
-  song,
-  canEdit,
-  isAdmin,
-  isHost,
-  isPublicViewer,
-  participants,
-  hasEligible,
-  participantKnowledge,
-  currentUserId,
-  currentUserSingingVoice,
-  inRepertoire,
-  onMediaAdded,
-  onKeyChanged,
-  onLeadersChanged,
-  onAddToRepertoire,
-  onVoiceUpdated,
-  onTogglePlayed,
-  onRemove,
-  signInUrl,
-}: {
-  song: Song;
-  index: number;
-  canEdit: boolean;
-  isAdmin: boolean;
-  isHost: boolean;
-  isPublicViewer: boolean;
-  participants: Participant[];
-  hasEligible: boolean;
-  participantKnowledge: Map<string, string>;
-  currentUserId: string | null;
-  currentUserSingingVoice: string | null;
-  inRepertoire: boolean;
-  onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
-  onKeyChanged: (id: string, key: string | null) => void;
-  onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
-  onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
-  onVoiceUpdated: (voice: string) => void;
-  onTogglePlayed: (id: string, played: boolean) => void;
-  onRemove: (songId: string) => void;
-  signInUrl?: string;
-}) {
-  const [youtubeOpen, setYoutubeOpen] = useState(false);
-  const [spotifyOpen, setSpotifyOpen] = useState(false);
-  const [addingField, setAddingField] = useState<AddingField>(null);
-  const [pickingRepertoire, setPickingRepertoire] = useState(false);
-  const [urlInput, setUrlInput] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [youtubeSearchResults, setYoutubeSearchResults] = useState<Array<{ videoId: string; title: string; channel: string; url: string }>>([]);
-  const [youtubeSearching, setYoutubeSearching] = useState(false);
-
-  const videoId = getPrimaryYoutubeId(song.songs);
-  const spotify_url = getPrimarySpotifyUrl(song.songs);
-  const spotifyTrackId = getSpotifyTrackId(spotify_url);
-  const { chord_chart_url } = song.songs;
-
-  const fieldMap: Record<NonNullable<AddingField>, "youtube_url" | "spotify_url" | "chord_chart_url"> = {
-    youtube: "youtube_url",
-    spotify: "spotify_url",
-    chord: "chord_chart_url",
-  };
-
-  const placeholders: Record<NonNullable<AddingField>, string> = {
-    youtube: "Paste YouTube URL…",
-    spotify: "Paste Spotify track URL…",
-    chord: "Paste chord chart URL…",
-  };
-
-  async function handleYoutubeSearch() {
-    setYoutubeSearching(true);
-    setYoutubeSearchResults([]);
-    try {
-      const artist = song.songs.display_artist ?? "";
-      const res = await fetch(
-        `/api/youtube?title=${encodeURIComponent(song.songs.title)}&artist=${encodeURIComponent(artist)}`
-      );
-      const data = await res.json();
-      setYoutubeSearchResults(data.items ?? []);
-    } finally {
-      setYoutubeSearching(false);
-    }
-  }
-
-  function toggleAdding(field: NonNullable<AddingField>) {
-    if (addingField === field) {
-      setAddingField(null);
-      setUrlInput("");
-      setYoutubeSearchResults([]);
-    } else {
-      setAddingField(field);
-      setUrlInput("");
-      setYoutubeSearchResults([]);
-      if (field === "youtube") handleYoutubeSearch();
-    }
-  }
-
-  async function saveMedia(field: NonNullable<AddingField>, url: string) {
-    setSaving(true);
-    const res = await fetch(`/api/songs/${song.song_id}/media`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [fieldMap[field]]: url }),
-    });
-    if (res.ok) {
-      onMediaAdded(song.song_id, fieldMap[field], url);
-      setAddingField(null);
-      setUrlInput("");
-      setYoutubeSearchResults([]);
-    }
-    setSaving(false);
-  }
-
-  async function handleSave() {
-    if (!addingField || !urlInput.trim()) return;
-    await saveMedia(addingField, urlInput.trim());
-  }
-
-  function handleToggleLeader(userId: string) {
-    const current = song.leader_user_ids ?? [];
-    const updated = current.includes(userId)
-      ? current.filter((id) => id !== userId)
-      : [...current, userId];
-    onLeadersChanged(song.id, updated);
-  }
-
-  const leaderIds = song.leader_user_ids ?? [];
-  // Public viewers only see designated leaders; everyone else sees all knowledge levels
-  const visibleParticipants = isPublicViewer
-    ? participants.filter((p) => leaderIds.includes(p.user_id))
-    : participants;
-
-  const leadParticipants = visibleParticipants.filter(
-    (p) => leaderIds.includes(p.user_id) || participantKnowledge.get(p.user_id) === "lead"
-  );
-  const supportParticipants = visibleParticipants.filter(
-    (p) => !leaderIds.includes(p.user_id) && participantKnowledge.get(p.user_id) === "support"
-  );
-
-  return (
-    <div className="flex-1 min-w-0 space-y-2">
-      <div className="flex items-start gap-2 min-w-0">
-        <div className="flex-1 min-w-0">
-          {song.songs.slug ? (
-            <Link href={`/songs/${song.songs.slug}`} target="_blank" rel="noopener noreferrer" className="font-medium text-zinc-900 hover:text-amber-600 truncate block">
-              {song.songs.title}
-            </Link>
-          ) : (
-            <p className="font-medium text-zinc-900 truncate">{song.songs.title}</p>
-          )}
-          {song.songs.display_artist && (
-            <p className="text-xs text-zinc-500 truncate">{song.songs.display_artist}</p>
-          )}
-          <div className="flex items-center gap-2 mt-1">
-            {canEdit ? (
-              <select
-                value={song.key_note ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value || null;
-                  if (val !== song.key_note) onKeyChanged(song.id, val);
-                }}
-                className={`text-xs rounded border border-zinc-300 px-1.5 py-0.5 focus:border-amber-400 focus:outline-none ${song.key_note ? "w-14" : "w-20"}`}
-              >
-                <option value="">key</option>
-                {MUSICAL_KEYS.map((k) => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
-              </select>
-            ) : (
-              !isPublicViewer && song.key_note && (
-                <span className="text-xs font-medium bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">
-                  {song.key_note}
-                </span>
-              )
-            )}
-            {!isPublicViewer && song.songs.tonality && (
-              <span className="text-xs font-semibold text-zinc-900">{song.songs.tonality}</span>
-            )}
-          </div>
-          {!inRepertoire && (currentUserId || signInUrl) && (
-            !currentUserId ? (
-              <a
-                href={signInUrl}
-                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
-              >
-                + Add to repertoire
-              </a>
-            ) : pickingRepertoire ? (
-              <div className="mt-1.5">
-                <ConfidencePicker
-                  variant="compact"
-                  singingVoice={currentUserSingingVoice}
-                  onSave={async (level) => { await onAddToRepertoire(song.song_id, level); setPickingRepertoire(false); }}
-                  onCancel={() => setPickingRepertoire(false)}
-                  onVoiceUpdated={onVoiceUpdated}
-                />
-              </div>
-            ) : (
-              <button
-                onClick={() => setPickingRepertoire(true)}
-                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
-              >
-                + Add to repertoire
-              </button>
-            )
-          )}
-        </div>
-
-        <div className="shrink-0 flex items-center gap-0.5">
-          {/* Ultimate Guitar chord chart */}
-          {chord_chart_url ? (
-            <>
-              <a
-                href={chord_chart_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="sm:hidden rounded-lg p-1.5 transition-opacity hover:opacity-80"
-                title="Chord chart"
-              >
-                <UltimateGuitarIcon />
-              </a>
-              <a
-                href={chord_chart_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-zinc-200 pl-1.5 pr-3 py-1 transition-colors hover:border-zinc-300 hover:bg-zinc-50"
-                title="Chord chart"
-              >
-                <UltimateGuitarIcon />
-                <span className="text-xs font-medium text-zinc-600">Chords</span>
-              </a>
-            </>
-          ) : isAdmin ? (
-            <>
-              <button
-                onClick={() => toggleAdding("chord")}
-                className={`sm:hidden rounded-lg p-1.5 transition-all ${addingField === "chord" ? "opacity-100" : "opacity-50 border border-dashed border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
-                title="Add chord chart"
-              >
-                <UltimateGuitarIcon />
-              </button>
-              <button
-                onClick={() => toggleAdding("chord")}
-                className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border border-dashed pl-1.5 pr-3 py-1 transition-all ${addingField === "chord" ? "opacity-100 border-zinc-400" : "opacity-50 border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
-                title="Add chord chart"
-              >
-                <UltimateGuitarIcon />
-                <span className="text-xs font-medium text-zinc-600">Chords</span>
-              </button>
-            </>
-          ) : null}
-
-          {/* Spotify */}
-          {spotify_url ? (
-            <button
-              onClick={() => setSpotifyOpen((o) => !o)}
-              className={`rounded-lg p-1.5 transition-colors text-green-500 ${spotifyOpen ? "bg-green-50" : "hover:bg-green-50"}`}
-              title={spotifyOpen ? "Close player" : "Play on Spotify"}
-            >
-              <SpotifyIcon />
-            </button>
-          ) : isAdmin ? (
-            <button
-              onClick={() => toggleAdding("spotify")}
-              className={`rounded-lg p-1.5 transition-colors ${addingField === "spotify" ? "bg-green-50 text-green-500" : "text-green-500 border border-dashed border-green-300 hover:bg-green-50 hover:border-green-400"}`}
-              title="Add Spotify link"
-            >
-              <SpotifyIcon />
-            </button>
-          ) : null}
-
-          {/* YouTube */}
-          {videoId ? (
-            <button
-              onClick={() => setYoutubeOpen((o) => !o)}
-              className={`rounded-lg p-1.5 transition-colors text-red-500 ${youtubeOpen ? "bg-red-50" : "hover:bg-red-50"}`}
-              title={youtubeOpen ? "Close video" : "Watch on YouTube"}
-            >
-              <YoutubeIcon />
-            </button>
-          ) : isAdmin ? (
-            <button
-              onClick={() => toggleAdding("youtube")}
-              className={`rounded-lg p-1.5 transition-colors ${addingField === "youtube" ? "bg-red-50 text-red-500" : "text-red-400 border border-dashed border-red-300 hover:bg-red-50 hover:text-red-500 hover:border-red-400"}`}
-              title="Add YouTube link"
-            >
-              <YoutubeIcon />
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {(leadParticipants.length > 0 || supportParticipants.length > 0 || (isHost && participants.length > 0)) && (
-        <div className="space-y-1">
-          {(leadParticipants.length > 0 || (isHost && participants.length > 0)) && (
-            <div className="flex items-start gap-1.5">
-              <span className="shrink-0 text-[10px] text-amber-500 font-medium pt-0.5">Lead</span>
-              <div className="flex flex-wrap gap-1 flex-1">
-                {isHost && leaderIds.length === 0 && !hasEligible && (
-                  <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
-                    No leader
-                  </span>
-                )}
-                {leadParticipants.map((p) => {
-                  const isLeader = leaderIds.includes(p.user_id);
-                  const isClickable = isHost && participantKnowledge.get(p.user_id) === "lead";
-                  const firstName = p.display_name ?? p.username ?? "?";
-                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
-                  const pillStyle = isLeader ? "bg-amber-400 text-white" : "bg-amber-100 text-amber-700";
-                  return (
-                    <button
-                      key={p.user_id}
-                      type="button"
-                      onClick={() => isClickable && handleToggleLeader(p.user_id)}
-                      disabled={!isClickable}
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all ${pillStyle} ${isClickable ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {supportParticipants.length > 0 && (
-            <div className="flex items-start gap-1.5">
-              <span className="shrink-0 text-[10px] text-sky-500 font-medium pt-0.5">Support</span>
-              <div className="flex flex-wrap gap-1 flex-1">
-                {supportParticipants.map((p) => {
-                  const firstName = p.display_name ?? p.username ?? "?";
-                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
-                  return (
-                    <span
-                      key={p.user_id}
-                      className="rounded-full px-2 py-0.5 text-xs font-medium bg-sky-100 text-sky-700"
-                    >
-                      {label}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {(canEdit || song.played) && (
-        <div className="flex items-center justify-between gap-2 pt-1">
-          {canEdit ? (
-            <button
-              onClick={() => onTogglePlayed(song.id, !song.played)}
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                song.played
-                  ? "bg-green-500 text-white hover:bg-green-400"
-                  : "border border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
-              }`}
-            >
-              {song.played && (
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-              )}
-              {song.played ? "Played" : "Mark as played"}
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-500 px-2.5 py-1 text-xs font-medium text-white">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-              Played
-            </span>
-          )}
-          {canEdit && (
-            <button
-              onClick={() => onRemove(song.song_id)}
-              className="shrink-0 text-zinc-300 hover:text-red-400 transition-colors"
-              aria-label="Remove song"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-            </button>
-          )}
-        </div>
-      )}
-
-      {youtubeOpen && videoId && (
-        <div className="rounded-xl overflow-hidden border border-zinc-200">
-          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-            <iframe
-              className="absolute inset-0 w-full h-full"
-              src={`https://www.youtube.com/embed/${videoId}`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        </div>
-      )}
-
-      {spotifyOpen && spotifyTrackId && (
-        <iframe
-          src={`https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator`}
-          width="100%"
-          height="152"
-          className="rounded-xl border-0"
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-          loading="lazy"
-        />
-      )}
-
-      {addingField && (
-        <div className="space-y-2">
-          {addingField === "youtube" && (
-            <div>
-              {youtubeSearching && (
-                <p className="text-xs text-zinc-400 py-1">Searching YouTube…</p>
-              )}
-              {!youtubeSearching && youtubeSearchResults.length > 0 && (
-                <div className="rounded-lg border border-zinc-200 divide-y divide-zinc-100 overflow-hidden">
-                  {youtubeSearchResults.map((r) => (
-                    <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
-                      <div className="min-w-0">
-                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
-                        <div className="text-xs text-zinc-400 truncate">{r.channel}</div>
-                      </div>
-                      <button
-                        onClick={() => saveMedia("youtube", r.url)}
-                        disabled={saving}
-                        className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-50 transition-colors"
-                      >
-                        Select
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {!youtubeSearching && youtubeSearchResults.length === 0 && (
-                <p className="text-xs text-zinc-400 py-1">No results — paste URL below.</p>
-              )}
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder={placeholders[addingField]}
-              className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") { setAddingField(null); setUrlInput(""); setYoutubeSearchResults([]); } }}
-              autoFocus={addingField !== "youtube"}
-            />
-            <button
-              onClick={handleSave}
-              disabled={saving || !urlInput.trim()}
-              className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button
-              onClick={() => { setAddingField(null); setUrlInput(""); setYoutubeSearchResults([]); }}
-              className="text-xs text-zinc-400 hover:text-zinc-600"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SortableSongItem({
-  song,
-  index,
-  canEdit,
-  isAdmin,
-  isHost,
-  isPublicViewer,
-  participants,
-  hasEligible,
-  participantKnowledge,
-  currentUserId,
-  currentUserSingingVoice,
-  inRepertoire,
-  onRemove,
-  onTogglePlayed,
-  onMediaAdded,
-  onKeyChanged,
-  onLeadersChanged,
-  onAddToRepertoire,
-  onVoiceUpdated,
-  signInUrl,
-}: {
-  song: Song;
-  index: number;
-  canEdit: boolean;
-  isAdmin: boolean;
-  isHost: boolean;
-  isPublicViewer: boolean;
-  participants: Participant[];
-  hasEligible: boolean;
-  participantKnowledge: Map<string, string>;
-  currentUserId: string | null;
-  currentUserSingingVoice: string | null;
-  inRepertoire: boolean;
-  onRemove: (songId: string) => void;
-  onTogglePlayed: (id: string, played: boolean) => void;
-  onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
-  onKeyChanged: (id: string, key: string | null) => void;
-  onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
-  onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
-  onVoiceUpdated: (voice: string) => void;
-  signInUrl?: string;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: song.id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3"
-    >
-      <div className="shrink-0 flex flex-col items-center gap-0.5 pt-0.5 w-6 sm:w-8">
-        <span className="text-[10px] sm:text-xs leading-none font-semibold text-zinc-300">{index + 1}</span>
-        <button
-          {...attributes}
-          {...listeners}
-          className="flex items-center justify-center w-full py-3 text-zinc-300 hover:text-zinc-500 active:cursor-grabbing cursor-grab touch-none"
-          aria-label="Drag to reorder"
-        >
-          <svg className="h-6 w-4" fill="none" viewBox="0 0 24 24" preserveAspectRatio="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-          </svg>
-        </button>
-      </div>
-
-      <SongRowContent
-        song={song}
-        index={index}
-        canEdit={canEdit}
-        isAdmin={isAdmin}
-        isHost={isHost}
-        isPublicViewer={isPublicViewer}
-        participants={participants}
-        hasEligible={hasEligible}
-        participantKnowledge={participantKnowledge}
-        currentUserId={currentUserId}
-        currentUserSingingVoice={currentUserSingingVoice}
-        inRepertoire={inRepertoire}
-        onMediaAdded={onMediaAdded}
-        onKeyChanged={onKeyChanged}
-        onLeadersChanged={onLeadersChanged}
-        onAddToRepertoire={onAddToRepertoire}
-        onVoiceUpdated={onVoiceUpdated}
-        onTogglePlayed={onTogglePlayed}
-        onRemove={onRemove}
-        signInUrl={signInUrl}
-      />
-    </div>
-  );
-}
+// Split out of the main bundle: dnd-kit only loads for editors, the invite
+// panel on first open, and the add-songs panel only for signed-in viewers.
+const SetSortableSongList = dynamic(() => import("@/components/SetSortableSongList"));
+const SetInvitePanel = dynamic(() => import("@/components/SetInvitePanel"), {
+  loading: () => <div className="h-24 animate-pulse rounded-xl bg-zinc-100" />,
+});
+const SetSongPanel = dynamic(() => import("@/components/SetSongPanel"), {
+  loading: () => <div className="h-12 animate-pulse rounded-xl bg-zinc-100" />,
+});
 
 export default function SetDetail({
   set,
@@ -816,11 +121,6 @@ export default function SetDetail({
     spotify: false,
     chords: false,
   });
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
 
   useEffect(() => {
     const token = searchParams.get("invite");
@@ -1288,13 +588,11 @@ export default function SetDetail({
     songKnowledgeMap.get(k.song_id)!.set(k.user_id, k.confidence);
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = songs.findIndex((s) => s.id === active.id);
-    const newIndex = songs.findIndex((s) => s.id === over.id);
-    const reordered = arrayMove(songs, oldIndex, newIndex).map((s, i) => ({ ...s, position: i }));
+  function handleMoveSong(oldIndex: number, newIndex: number) {
+    const next = [...songs];
+    const [moved] = next.splice(oldIndex, 1);
+    next.splice(newIndex, 0, moved);
+    const reordered = next.map((s, i) => ({ ...s, position: i }));
 
     setSongs(reordered);
     fetch(`/api/sets/${set.id}/songs/reorder`, {
@@ -2149,43 +1447,44 @@ export default function SetDetail({
 
         {songs.length > 0 && (
           canEdit && !songListFilter && songSort === "custom" ? (
-            <DndContext id={set.id} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={songs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                {songs.map((song, i) => {
-                  const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
-                  const knowledgeUserIds = new Set(knowledgeForSong.keys());
-                  const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
-                  const rowParticipants = participants.filter((p) =>
-                    knowledgeUserIds.has(p.user_id) || (song.leader_user_ids ?? []).includes(p.user_id)
-                  );
-                  return (
-                    <SortableSongItem
-                      key={song.id}
-                      song={song}
-                      index={i}
-                      canEdit={canEdit}
-                      isAdmin={isAdmin}
-                      isHost={isOwner}
-                      isPublicViewer={isPublicViewer}
-                      participants={rowParticipants}
-                      hasEligible={hasEligible}
-                      participantKnowledge={knowledgeForSong}
-                      currentUserId={currentUserId}
-                      currentUserSingingVoice={userSingingVoice}
-                      inRepertoire={userRepertoire.has(song.song_id)}
-                      onRemove={handleRemoveSong}
-                      onTogglePlayed={handleTogglePlayed}
-                      onMediaAdded={handleMediaAdded}
-                      onKeyChanged={handleKeyChanged}
-                      onLeadersChanged={handleLeadersChanged}
-                      onAddToRepertoire={handleAddToRepertoire}
-                      onVoiceUpdated={setUserSingingVoice}
-                      signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
-                    />
-                  );
-                })}
-              </SortableContext>
-            </DndContext>
+            <SetSortableSongList
+              contextId={set.id}
+              items={songs}
+              onMove={handleMoveSong}
+              renderRow={(i) => {
+                const song = songs[i];
+                const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
+                const knowledgeUserIds = new Set(knowledgeForSong.keys());
+                const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
+                const rowParticipants = participants.filter((p) =>
+                  knowledgeUserIds.has(p.user_id) || (song.leader_user_ids ?? []).includes(p.user_id)
+                );
+                return (
+                  <SetSongRow
+                    song={song}
+                    index={i}
+                    canEdit={canEdit}
+                    isAdmin={isAdmin}
+                    isHost={isOwner}
+                    isPublicViewer={isPublicViewer}
+                    participants={rowParticipants}
+                    hasEligible={hasEligible}
+                    participantKnowledge={knowledgeForSong}
+                    currentUserId={currentUserId}
+                    currentUserSingingVoice={userSingingVoice}
+                    inRepertoire={userRepertoire.has(song.song_id)}
+                    onRemove={handleRemoveSong}
+                    onTogglePlayed={handleTogglePlayed}
+                    onMediaAdded={handleMediaAdded}
+                    onKeyChanged={handleKeyChanged}
+                    onLeadersChanged={handleLeadersChanged}
+                    onAddToRepertoire={handleAddToRepertoire}
+                    onVoiceUpdated={setUserSingingVoice}
+                    signInUrl={currentUserId ? undefined : `/auth?next=/set/${set.id}`}
+                  />
+                );
+              }}
+            />
           ) : (
             visibleSongs.map((song, i) => {
               const originalIndex = songs.indexOf(song);
@@ -2201,7 +1500,7 @@ export default function SetDetail({
               return (
                 <div key={song.id} className="flex items-start gap-2 sm:gap-3 rounded-xl border border-zinc-200 bg-white px-2 sm:px-4 py-2.5 sm:py-3">
                   <span className="shrink-0 mt-0.5 w-6 sm:w-8 text-center text-[10px] sm:text-xs font-semibold text-zinc-300">{displayNumber}</span>
-                  <SongRowContent
+                  <SetSongRow
                     song={song}
                     index={originalIndex}
                     canEdit={canEdit}

@@ -1,0 +1,488 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import ConfidencePicker from "@/components/ConfidencePicker";
+import {
+  MUSICAL_KEYS,
+  YoutubeIcon,
+  SpotifyIcon,
+  UltimateGuitarIcon,
+  getPrimaryYoutubeId,
+  getPrimarySpotifyUrl,
+  getSpotifyTrackId,
+  type Song,
+  type Participant,
+} from "@/components/setDetailShared";
+
+type AddingField = "youtube" | "spotify" | "chord" | null;
+
+export default function SetSongRow({
+  song,
+  canEdit,
+  isAdmin,
+  isHost,
+  isPublicViewer,
+  participants,
+  hasEligible,
+  participantKnowledge,
+  currentUserId,
+  currentUserSingingVoice,
+  inRepertoire,
+  onMediaAdded,
+  onKeyChanged,
+  onLeadersChanged,
+  onAddToRepertoire,
+  onVoiceUpdated,
+  onTogglePlayed,
+  onRemove,
+  signInUrl,
+}: {
+  song: Song;
+  index: number;
+  canEdit: boolean;
+  isAdmin: boolean;
+  isHost: boolean;
+  isPublicViewer: boolean;
+  participants: Participant[];
+  hasEligible: boolean;
+  participantKnowledge: Map<string, string>;
+  currentUserId: string | null;
+  currentUserSingingVoice: string | null;
+  inRepertoire: boolean;
+  onMediaAdded: (songId: string, field: "youtube_url" | "spotify_url" | "chord_chart_url", url: string) => void;
+  onKeyChanged: (id: string, key: string | null) => void;
+  onLeadersChanged: (id: string, leaderUserIds: string[]) => void;
+  onAddToRepertoire: (songId: string, confidence: string) => Promise<void>;
+  onVoiceUpdated: (voice: string) => void;
+  onTogglePlayed: (id: string, played: boolean) => void;
+  onRemove: (songId: string) => void;
+  signInUrl?: string;
+}) {
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const [spotifyOpen, setSpotifyOpen] = useState(false);
+  const [addingField, setAddingField] = useState<AddingField>(null);
+  const [pickingRepertoire, setPickingRepertoire] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [youtubeSearchResults, setYoutubeSearchResults] = useState<Array<{ videoId: string; title: string; channel: string; url: string }>>([]);
+  const [youtubeSearching, setYoutubeSearching] = useState(false);
+
+  const videoId = getPrimaryYoutubeId(song.songs);
+  const spotify_url = getPrimarySpotifyUrl(song.songs);
+  const spotifyTrackId = getSpotifyTrackId(spotify_url);
+  const { chord_chart_url } = song.songs;
+
+  const fieldMap: Record<NonNullable<AddingField>, "youtube_url" | "spotify_url" | "chord_chart_url"> = {
+    youtube: "youtube_url",
+    spotify: "spotify_url",
+    chord: "chord_chart_url",
+  };
+
+  const placeholders: Record<NonNullable<AddingField>, string> = {
+    youtube: "Paste YouTube URL…",
+    spotify: "Paste Spotify track URL…",
+    chord: "Paste chord chart URL…",
+  };
+
+  async function handleYoutubeSearch() {
+    setYoutubeSearching(true);
+    setYoutubeSearchResults([]);
+    try {
+      const artist = song.songs.display_artist ?? "";
+      const res = await fetch(
+        `/api/youtube?title=${encodeURIComponent(song.songs.title)}&artist=${encodeURIComponent(artist)}`
+      );
+      const data = await res.json();
+      setYoutubeSearchResults(data.items ?? []);
+    } finally {
+      setYoutubeSearching(false);
+    }
+  }
+
+  function toggleAdding(field: NonNullable<AddingField>) {
+    if (addingField === field) {
+      setAddingField(null);
+      setUrlInput("");
+      setYoutubeSearchResults([]);
+    } else {
+      setAddingField(field);
+      setUrlInput("");
+      setYoutubeSearchResults([]);
+      if (field === "youtube") handleYoutubeSearch();
+    }
+  }
+
+  async function saveMedia(field: NonNullable<AddingField>, url: string) {
+    setSaving(true);
+    const res = await fetch(`/api/songs/${song.song_id}/media`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [fieldMap[field]]: url }),
+    });
+    if (res.ok) {
+      onMediaAdded(song.song_id, fieldMap[field], url);
+      setAddingField(null);
+      setUrlInput("");
+      setYoutubeSearchResults([]);
+    }
+    setSaving(false);
+  }
+
+  async function handleSave() {
+    if (!addingField || !urlInput.trim()) return;
+    await saveMedia(addingField, urlInput.trim());
+  }
+
+  function handleToggleLeader(userId: string) {
+    const current = song.leader_user_ids ?? [];
+    const updated = current.includes(userId)
+      ? current.filter((id) => id !== userId)
+      : [...current, userId];
+    onLeadersChanged(song.id, updated);
+  }
+
+  const leaderIds = song.leader_user_ids ?? [];
+  // Public viewers only see designated leaders; everyone else sees all knowledge levels
+  const visibleParticipants = isPublicViewer
+    ? participants.filter((p) => leaderIds.includes(p.user_id))
+    : participants;
+
+  const leadParticipants = visibleParticipants.filter(
+    (p) => leaderIds.includes(p.user_id) || participantKnowledge.get(p.user_id) === "lead"
+  );
+  const supportParticipants = visibleParticipants.filter(
+    (p) => !leaderIds.includes(p.user_id) && participantKnowledge.get(p.user_id) === "support"
+  );
+
+  return (
+    <div className="flex-1 min-w-0 space-y-2">
+      <div className="flex items-start gap-2 min-w-0">
+        <div className="flex-1 min-w-0">
+          {song.songs.slug ? (
+            <Link href={`/songs/${song.songs.slug}`} target="_blank" rel="noopener noreferrer" className="font-medium text-zinc-900 hover:text-amber-600 truncate block">
+              {song.songs.title}
+            </Link>
+          ) : (
+            <p className="font-medium text-zinc-900 truncate">{song.songs.title}</p>
+          )}
+          {song.songs.display_artist && (
+            <p className="text-xs text-zinc-500 truncate">{song.songs.display_artist}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            {canEdit ? (
+              <select
+                value={song.key_note ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  if (val !== song.key_note) onKeyChanged(song.id, val);
+                }}
+                className={`text-xs rounded border border-zinc-300 px-1.5 py-0.5 focus:border-amber-400 focus:outline-none ${song.key_note ? "w-14" : "w-20"}`}
+              >
+                <option value="">key</option>
+                {MUSICAL_KEYS.map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+            ) : (
+              !isPublicViewer && song.key_note && (
+                <span className="text-xs font-medium bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">
+                  {song.key_note}
+                </span>
+              )
+            )}
+            {!isPublicViewer && song.songs.tonality && (
+              <span className="text-xs font-semibold text-zinc-900">{song.songs.tonality}</span>
+            )}
+          </div>
+          {!inRepertoire && (currentUserId || signInUrl) && (
+            !currentUserId ? (
+              <a
+                href={signInUrl}
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
+              >
+                + Add to repertoire
+              </a>
+            ) : pickingRepertoire ? (
+              <div className="mt-1.5">
+                <ConfidencePicker
+                  variant="compact"
+                  singingVoice={currentUserSingingVoice}
+                  onSave={async (level) => { await onAddToRepertoire(song.song_id, level); setPickingRepertoire(false); }}
+                  onCancel={() => setPickingRepertoire(false)}
+                  onVoiceUpdated={onVoiceUpdated}
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setPickingRepertoire(true)}
+                className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-400 transition-colors"
+              >
+                + Add to repertoire
+              </button>
+            )
+          )}
+        </div>
+
+        <div className="shrink-0 flex items-center gap-0.5">
+          {/* Ultimate Guitar chord chart */}
+          {chord_chart_url ? (
+            <>
+              <a
+                href={chord_chart_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sm:hidden rounded-lg p-1.5 transition-opacity hover:opacity-80"
+                title="Chord chart"
+              >
+                <UltimateGuitarIcon />
+              </a>
+              <a
+                href={chord_chart_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-zinc-200 pl-1.5 pr-3 py-1 transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+                title="Chord chart"
+              >
+                <UltimateGuitarIcon />
+                <span className="text-xs font-medium text-zinc-600">Chords</span>
+              </a>
+            </>
+          ) : isAdmin ? (
+            <>
+              <button
+                onClick={() => toggleAdding("chord")}
+                className={`sm:hidden rounded-lg p-1.5 transition-all ${addingField === "chord" ? "opacity-100" : "opacity-50 border border-dashed border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
+                title="Add chord chart"
+              >
+                <UltimateGuitarIcon />
+              </button>
+              <button
+                onClick={() => toggleAdding("chord")}
+                className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border border-dashed pl-1.5 pr-3 py-1 transition-all ${addingField === "chord" ? "opacity-100 border-zinc-400" : "opacity-50 border-zinc-400 hover:opacity-80 hover:border-zinc-500"}`}
+                title="Add chord chart"
+              >
+                <UltimateGuitarIcon />
+                <span className="text-xs font-medium text-zinc-600">Chords</span>
+              </button>
+            </>
+          ) : null}
+
+          {/* Spotify */}
+          {spotify_url ? (
+            <button
+              onClick={() => setSpotifyOpen((o) => !o)}
+              className={`rounded-lg p-1.5 transition-colors text-green-500 ${spotifyOpen ? "bg-green-50" : "hover:bg-green-50"}`}
+              title={spotifyOpen ? "Close player" : "Play on Spotify"}
+            >
+              <SpotifyIcon />
+            </button>
+          ) : isAdmin ? (
+            <button
+              onClick={() => toggleAdding("spotify")}
+              className={`rounded-lg p-1.5 transition-colors ${addingField === "spotify" ? "bg-green-50 text-green-500" : "text-green-500 border border-dashed border-green-300 hover:bg-green-50 hover:border-green-400"}`}
+              title="Add Spotify link"
+            >
+              <SpotifyIcon />
+            </button>
+          ) : null}
+
+          {/* YouTube */}
+          {videoId ? (
+            <button
+              onClick={() => setYoutubeOpen((o) => !o)}
+              className={`rounded-lg p-1.5 transition-colors text-red-500 ${youtubeOpen ? "bg-red-50" : "hover:bg-red-50"}`}
+              title={youtubeOpen ? "Close video" : "Watch on YouTube"}
+            >
+              <YoutubeIcon />
+            </button>
+          ) : isAdmin ? (
+            <button
+              onClick={() => toggleAdding("youtube")}
+              className={`rounded-lg p-1.5 transition-colors ${addingField === "youtube" ? "bg-red-50 text-red-500" : "text-red-400 border border-dashed border-red-300 hover:bg-red-50 hover:text-red-500 hover:border-red-400"}`}
+              title="Add YouTube link"
+            >
+              <YoutubeIcon />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {(leadParticipants.length > 0 || supportParticipants.length > 0 || (isHost && participants.length > 0)) && (
+        <div className="space-y-1">
+          {(leadParticipants.length > 0 || (isHost && participants.length > 0)) && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 text-[10px] text-amber-500 font-medium pt-0.5">Lead</span>
+              <div className="flex flex-wrap gap-1 flex-1">
+                {isHost && leaderIds.length === 0 && !hasEligible && (
+                  <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
+                    No leader
+                  </span>
+                )}
+                {leadParticipants.map((p) => {
+                  const isLeader = leaderIds.includes(p.user_id);
+                  const isClickable = isHost && participantKnowledge.get(p.user_id) === "lead";
+                  const firstName = p.display_name ?? p.username ?? "?";
+                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
+                  const pillStyle = isLeader ? "bg-amber-400 text-white" : "bg-amber-100 text-amber-700";
+                  return (
+                    <button
+                      key={p.user_id}
+                      type="button"
+                      onClick={() => isClickable && handleToggleLeader(p.user_id)}
+                      disabled={!isClickable}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition-all ${pillStyle} ${isClickable ? "cursor-pointer hover:opacity-75" : "cursor-default"}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {supportParticipants.length > 0 && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 text-[10px] text-sky-500 font-medium pt-0.5">Support</span>
+              <div className="flex flex-wrap gap-1 flex-1">
+                {supportParticipants.map((p) => {
+                  const firstName = p.display_name ?? p.username ?? "?";
+                  const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
+                  return (
+                    <span
+                      key={p.user_id}
+                      className="rounded-full px-2 py-0.5 text-xs font-medium bg-sky-100 text-sky-700"
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(canEdit || song.played) && (
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {canEdit ? (
+            <button
+              onClick={() => onTogglePlayed(song.id, !song.played)}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                song.played
+                  ? "bg-green-500 text-white hover:bg-green-400"
+                  : "border border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50"
+              }`}
+            >
+              {song.played && (
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+              {song.played ? "Played" : "Mark as played"}
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-500 px-2.5 py-1 text-xs font-medium text-white">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Played
+            </span>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => onRemove(song.song_id)}
+              className="shrink-0 text-zinc-300 hover:text-red-400 transition-colors"
+              aria-label="Remove song"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
+      {youtubeOpen && videoId && (
+        <div className="rounded-xl overflow-hidden border border-zinc-200">
+          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+            <iframe
+              className="absolute inset-0 w-full h-full"
+              src={`https://www.youtube.com/embed/${videoId}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
+
+      {spotifyOpen && spotifyTrackId && (
+        <iframe
+          src={`https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator`}
+          width="100%"
+          height="152"
+          className="rounded-xl border-0"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+          loading="lazy"
+        />
+      )}
+
+      {addingField && (
+        <div className="space-y-2">
+          {addingField === "youtube" && (
+            <div>
+              {youtubeSearching && (
+                <p className="text-xs text-zinc-400 py-1">Searching YouTube…</p>
+              )}
+              {!youtubeSearching && youtubeSearchResults.length > 0 && (
+                <div className="rounded-lg border border-zinc-200 divide-y divide-zinc-100 overflow-hidden">
+                  {youtubeSearchResults.map((r) => (
+                    <div key={r.videoId} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
+                      <div className="min-w-0">
+                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:underline truncate block">{r.title}</a>
+                        <div className="text-xs text-zinc-400 truncate">{r.channel}</div>
+                      </div>
+                      <button
+                        onClick={() => saveMedia("youtube", r.url)}
+                        disabled={saving}
+                        className="shrink-0 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:border-amber-400 hover:text-amber-600 disabled:opacity-50 transition-colors"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!youtubeSearching && youtubeSearchResults.length === 0 && (
+                <p className="text-xs text-zinc-400 py-1">No results — paste URL below.</p>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder={placeholders[addingField]}
+              className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") { setAddingField(null); setUrlInput(""); setYoutubeSearchResults([]); } }}
+              autoFocus={addingField !== "youtube"}
+            />
+            <button
+              onClick={handleSave}
+              disabled={saving || !urlInput.trim()}
+              className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => { setAddingField(null); setUrlInput(""); setYoutubeSearchResults([]); }}
+              className="text-xs text-zinc-400 hover:text-zinc-600"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
