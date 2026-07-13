@@ -1,22 +1,32 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
-import { supabaseServer } from "@/lib/supabase/server";
+import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
 import PDFBuilderLoader from "./PDFBuilderLoader";
+
+const getSet = cache(async (id: string) => {
+  const supabase = await getServerSupabase();
+  const { data } = await supabase
+    .from("sets")
+    .select("id, name, owner_user_id, link_sharing, profiles(display_name, username)")
+    .eq("id", id)
+    .single();
+  return data as any;
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await supabaseServer();
-  const { data } = await supabase.from("sets").select("name").eq("id", id).single();
-  return { title: `${(data as any)?.name ?? "Set"} | PDF Builder` };
+  const set = await getSet(id);
+  return { title: `${set?.name ?? "Set"} | PDF Builder` };
 }
 
 export default async function SetPDFPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ order?: string }> }) {
   const { id } = await params;
   const { order } = await searchParams;
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const supabase = await getServerSupabase();
+  const user = await getServerUser();
 
-  const [setRes, songsRes, authCollabRes, allCollabsRes] = await Promise.all([
-    supabase.from("sets").select("id, name, owner_user_id, link_sharing, profiles(display_name, username)").eq("id", id).single(),
+  const [set, songsRes, authCollabRes, allCollabsRes] = await Promise.all([
+    getSet(id),
     supabase
       .from("set_songs")
       .select("song_id, position, key_note, leader_user_ids, songs(title, display_artist, tonality, song_recording_artists(position, youtube_url), song_composers(people(name)))")
@@ -32,7 +42,6 @@ export default async function SetPDFPage({ params, searchParams }: { params: Pro
       .eq("status", "accepted"),
   ]);
 
-  const set = setRes.data as any;
   if (!set) redirect(`/set/${id}`);
 
   const isOwner = user?.id === set.owner_user_id;

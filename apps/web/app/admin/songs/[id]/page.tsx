@@ -1,7 +1,31 @@
-import { supabaseServer } from "@/lib/supabase/server";
+import { cache } from "react";
+import { getServerSupabase } from "@/lib/supabase/cached";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import SongEditor from "./SongEditor";
+
+const getSong = cache(async (id: string) => {
+  if (id === "new") return null;
+  const supabase = await getServerSupabase();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const { data } = await supabase
+    .from("songs")
+    .select(`
+      *,
+      song_genres(genre_id),
+      song_themes(theme_id),
+      song_cultures(culture_id, context),
+      song_languages(language_id),
+      song_composers(person_id),
+      song_lyricists(person_id),
+      song_recording_artists(artist_id, year, position, youtube_url, spotify_url),
+      song_alternate_titles(id, title),
+      song_productions(production_id)
+    `)
+    .eq(isUuid ? "id" : "slug", id)
+    .single();
+  return data;
+});
 
 export async function generateMetadata({
   params,
@@ -10,10 +34,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   if (id === "new") return { title: "New Song | SingJam Admin" };
-  const supabase = await supabaseServer();
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  const { data } = await supabase.from("songs").select("title").eq(isUuid ? "id" : "slug", id).single();
-  return { title: data?.title ? `${data.title} | SingJam Admin` : "Edit Song | SingJam Admin" };
+  const song = await getSong(id);
+  return { title: song?.title ? `${song.title} | SingJam Admin` : "Edit Song | SingJam Admin" };
 }
 
 export default async function AdminSongPage({
@@ -22,31 +44,12 @@ export default async function AdminSongPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await supabaseServer();
+  const supabase = await getServerSupabase();
   const isNew = id === "new";
 
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-  const [songRes, genresRes, themesRes, culturesRes, langsRes, peopleRes, artistsRes, productionsRes] =
+  const [song, genresRes, themesRes, culturesRes, langsRes, peopleRes, artistsRes, productionsRes] =
     await Promise.all([
-      isNew
-        ? Promise.resolve({ data: null })
-        : supabase
-            .from("songs")
-            .select(`
-              *,
-              song_genres(genre_id),
-              song_themes(theme_id),
-              song_cultures(culture_id, context),
-              song_languages(language_id),
-              song_composers(person_id),
-              song_lyricists(person_id),
-              song_recording_artists(artist_id, year, position, youtube_url, spotify_url),
-              song_alternate_titles(id, title),
-              song_productions(production_id)
-            `)
-            .eq(isUuid ? "id" : "slug", id)
-            .single(),
+      getSong(id),
       supabase.from("genres").select("id, name").order("name"),
       supabase.from("themes").select("id, name").order("name"),
       supabase.from("cultures").select("id, name").order("name"),
@@ -56,11 +59,11 @@ export default async function AdminSongPage({
       supabase.from("productions").select("id, name").order("name"),
     ]);
 
-  if (!isNew && !songRes.data) notFound();
+  if (!isNew && !song) notFound();
 
   return (
     <SongEditor
-      song={songRes.data}
+      song={song}
       isNew={isNew}
       allGenres={genresRes.data ?? []}
       allThemes={themesRes.data ?? []}
