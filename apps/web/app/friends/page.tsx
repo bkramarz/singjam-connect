@@ -178,7 +178,7 @@ export default function MatchesPage() {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-100">
                       {u.avatar_url ? (
-                        <Image src={u.avatar_url} alt={fullName || "Avatar"} fill className="object-cover" unoptimized />
+                        <Image src={u.avatar_url} alt={fullName || "Avatar"} fill sizes="40px" className="object-cover" />
                       ) : (
                         <span className="flex h-full w-full items-center justify-center text-sm font-medium text-zinc-400">
                           {initial}
@@ -239,7 +239,7 @@ export default function MatchesPage() {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-100">
                       {m.avatar_url ? (
-                        <Image src={m.avatar_url} alt={fullName || "Avatar"} fill className="object-cover" unoptimized />
+                        <Image src={m.avatar_url} alt={fullName || "Avatar"} fill sizes="40px" className="object-cover" />
                       ) : (
                         <span className="flex h-full w-full items-center justify-center text-sm font-medium text-zinc-400">
                           {initial}

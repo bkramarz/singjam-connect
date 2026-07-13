@@ -1721,7 +1721,7 @@ export default function SetDetail({
         <li className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
           <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
             {set.profiles?.avatar_url
-              ? <Image src={set.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+              ? <Image src={set.profiles.avatar_url} alt="" fill sizes="28px" className="object-cover" />
               : (set.profiles?.display_name ?? set.profiles?.username ?? "?")[0].toUpperCase()
             }
           </span>
@@ -1742,7 +1742,7 @@ export default function SetDetail({
           <li key={r.id} className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
             <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber-100 text-xs font-medium text-amber-700">
               {r.profiles?.avatar_url
-                ? <Image src={r.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+                ? <Image src={r.profiles.avatar_url} alt="" fill sizes="28px" className="object-cover" />
                 : (r.profiles?.display_name ?? r.profiles?.username ?? "?")[0].toUpperCase()
               }
             </span>
@@ -1783,7 +1783,7 @@ export default function SetDetail({
           <li key={c.id} className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-white px-3 py-2">
             <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium text-zinc-600">
               {c.profiles?.avatar_url
-                ? <Image src={c.profiles.avatar_url} alt="" fill className="object-cover" unoptimized />
+                ? <Image src={c.profiles.avatar_url} alt="" fill sizes="28px" className="object-cover" />
                 : (c.profiles?.display_name ?? c.profiles?.username ?? "?")[0].toUpperCase()
               }
             </span>

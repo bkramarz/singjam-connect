@@ -3,11 +3,22 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
+const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+  : "*.supabase.co";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../..'),
   reactStrictMode: true,
   devIndicators: false,
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" },
+      // Google OAuth avatars
+      { protocol: "https", hostname: "*.googleusercontent.com" },
+    ],
+  },
   async headers() {
     return [
       {
