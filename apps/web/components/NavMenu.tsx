@@ -43,7 +43,7 @@ export default function NavMenu() {
           className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-600 hover:ring-2 hover:ring-amber-500 transition-all"
         >
           {profile?.avatar_url ? (
-            <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+            <Image src={profile.avatar_url} alt="Avatar" fill sizes="32px" className="object-cover" />
           ) : (
             <span className="text-xs font-medium text-slate-200">{initial}</span>
           )}
@@ -64,7 +64,7 @@ export default function NavMenu() {
           >
             <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-slate-600">
               {profile?.avatar_url ? (
-                <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+                <Image src={profile.avatar_url} alt="Avatar" fill sizes="28px" className="object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-xs font-medium text-slate-200">
                   {initial}

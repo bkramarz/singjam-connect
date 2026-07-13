@@ -79,7 +79,7 @@ export default function BottomNav() {
           >
             <span className={`relative h-6 w-6 shrink-0 overflow-hidden rounded-full ${profileActive ? "ring-2 ring-amber-500" : "bg-slate-300"}`}>
               {profile?.avatar_url ? (
-                <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+                <Image src={profile.avatar_url} alt="Avatar" fill sizes="24px" className="object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center bg-slate-600 text-xs font-medium text-slate-200">
                   {initial}

@@ -502,7 +502,7 @@ export default function AccountPanel() {
             title="Change photo"
           >
             {avatarUrl ? (
-              <Image src={avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
+              <Image src={avatarUrl} alt="Avatar" fill sizes="64px" className="object-cover" />
             ) : (
               <span className="flex h-full w-full items-center justify-center text-2xl text-zinc-400">
                 {name?.[0]?.toUpperCase() ?? "?"}

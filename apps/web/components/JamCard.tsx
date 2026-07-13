@@ -64,7 +64,6 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
             className="object-contain"
             sizes="(max-width: 896px) 100vw, 896px"
             priority
-            unoptimized
           />
         </div>
       )}

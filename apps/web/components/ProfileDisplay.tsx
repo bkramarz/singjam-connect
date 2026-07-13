@@ -62,8 +62,8 @@ export default function ProfileDisplay({
                 src={profile.avatar_url}
                 alt={fullName || "Profile"}
                 fill
+                sizes="80px"
                 className="object-cover"
-                unoptimized
               />
             ) : (
               <span className="flex h-full w-full items-center justify-center text-3xl text-zinc-400">

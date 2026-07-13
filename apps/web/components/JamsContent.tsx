@@ -76,7 +76,7 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
     <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
-          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" unoptimized />
+          <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" />
         </div>
       ) : jam.starts_at ? (
         <div className={`shrink-0 w-20 flex flex-col items-center justify-center border-r px-2 py-4 ${isOfficial ? "bg-amber-50 border-amber-200" : "bg-zinc-50 border-zinc-100"}`}>
