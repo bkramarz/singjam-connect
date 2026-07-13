@@ -12,9 +12,14 @@ export type SongSearchResult = {
   cultures: string[];
   productions: string[];
   genres: string[];
-  languages: string[] | null;
+  languages: string[];
+  themes: string[];
+  vibe: string | null;
+  tonality: string | null;
+  meter: string | null;
   year: number | null;
   slug: string | null;
+  popularity: number;
   youtube_id: string | null;
   spotify_track_id: string | null;
 };
