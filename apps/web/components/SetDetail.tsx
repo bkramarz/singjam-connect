@@ -77,6 +77,7 @@ export default function SetDetail({
   const [descValue, setDescValue] = useState(set.description ?? "");
   const [songListFilter, setSongListFilter] = useState("");
   const [songSort, setSongSort] = useState<"custom" | "az" | "za" | "popularity">("custom");
+  const [globalSongPopularity, setGlobalSongPopularity] = useState<Map<string, number>>(new Map());
   const [userRepertoire, setUserRepertoire] = useState(new Map<string, string>());
   const [showInvitePanel, setShowInvitePanel] = useState(false);
   const [showAllCollaborators, setShowAllCollaborators] = useState(false);
@@ -443,6 +444,20 @@ export default function SetDetail({
 
   const isSolo = collaborators.length === 0;
 
+  const songIdsKey = useMemo(() => songs.map((s) => s.song_id).sort().join(","), [songs]);
+
+  useEffect(() => {
+    if (!isSolo || songs.length === 0) { setGlobalSongPopularity(new Map()); return; }
+    supabase.rpc("song_popularity_for", { p_song_ids: songs.map((s) => s.song_id) }).then(({ data }) => {
+      const map = new Map<string, number>();
+      for (const row of (data ?? []) as any[]) {
+        map.set(row.song_id, Number(row.user_count));
+      }
+      setGlobalSongPopularity(map);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSolo, songIdsKey]);
+
   async function handleAddToRepertoire(songId: string, confidence: string) {
     await supabase
       .from("user_songs")
@@ -544,6 +559,11 @@ export default function SetDetail({
     const copy = [...songs];
     if (songSort === "az") return copy.sort((a, b) => a.songs.title.localeCompare(b.songs.title));
     if (songSort === "za") return copy.sort((a, b) => b.songs.title.localeCompare(a.songs.title));
+    if (isSolo) {
+      return copy.sort(
+        (a, b) => (globalSongPopularity.get(b.song_id) ?? 0) - (globalSongPopularity.get(a.song_id) ?? 0)
+      );
+    }
     const scores = new Map<string, number>();
     for (const k of songKnowledge) {
       if (k.confidence === "lead" || k.confidence === "support") {
@@ -551,7 +571,7 @@ export default function SetDetail({
       }
     }
     return copy.sort((a, b) => (scores.get(b.song_id) ?? 0) - (scores.get(a.song_id) ?? 0));
-  }, [songs, songSort, songKnowledge]);
+  }, [songs, songSort, isSolo, globalSongPopularity, songKnowledge]);
 
   const visibleSongs = songListFilter
     ? sortedSongs.filter((s) => {
