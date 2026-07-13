@@ -1,21 +1,15 @@
 import { redirect } from "next/navigation";
-import { supabaseServer } from "@/lib/supabase/server";
+import { getServerSupabase, getServerUser, getServerUserRole } from "@/lib/supabase/cached";
 import Link from "next/link";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
   if (!user) redirect("/auth?next=/admin");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  if ((await getServerUserRole()) !== "admin") redirect("/");
 
-  if (profile?.role !== "admin") redirect("/");
-
+  const supabase = await getServerSupabase();
   const { count: reviewCount } = await supabase
     .from("songs")
     .select("id", { count: "exact", head: true })

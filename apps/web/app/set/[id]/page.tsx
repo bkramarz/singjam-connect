@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { supabaseServer } from "@/lib/supabase/server";
+import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
 import SetDetail from "@/components/SetDetail";
 import SetRequestAccess from "@/components/SetRequestAccess";
 import SetJoinPrompt from "@/components/SetJoinPrompt";
@@ -14,18 +14,33 @@ function supabaseAdmin() {
   );
 }
 
+const getSet = cache(async (id: string) => {
+  const supabase = await getServerSupabase();
+  const { data } = await supabase
+    .from("sets")
+    .select("id, name, description, owner_user_id, jam_id, link_sharing, youtube_playlist_id, youtube_playlist_fingerprint, spotify_playlist_id, spotify_playlist_fingerprint, ultimate_guitar_playlist_url, profiles(display_name, last_name, username, avatar_url)")
+    .eq("id", id)
+    .single();
+  return data as any;
+});
+
+const getSetSongs = cache(async (id: string) => {
+  const supabase = await getServerSupabase();
+  const { data } = await supabase
+    .from("set_songs")
+    .select("id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))")
+    .eq("set_id", id)
+    .order("position", { ascending: true });
+  return (data ?? []) as any[];
+});
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await supabaseServer();
-  const [setRes, countRes] = await Promise.all([
-    supabase.from("sets").select("name, description, profiles(display_name, last_name, username)").eq("id", id).single(),
-    supabase.from("set_songs").select("id", { count: "exact", head: true }).eq("set_id", id),
-  ]);
-  if (!setRes.data) return { title: "Set" };
-  const set = setRes.data as any;
+  const [set, songs] = await Promise.all([getSet(id), getSetSongs(id)]);
+  if (!set) return { title: "Set" };
   const name = set.name ?? "Set";
   const owner = set.profiles?.display_name ?? set.profiles?.username ?? null;
-  const songCount = countRes.count ?? 0;
+  const songCount = songs.length;
   const description = [
     set.description || null,
     owner ? `Curated by ${owner}.` : null,
@@ -44,21 +59,13 @@ export default async function SetPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await supabaseServer();
+  const supabase = await getServerSupabase();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getServerUser();
 
-  const [setRes, songsRes, collabRes, requestsRes, profileRes] = await Promise.all([
-    supabase
-      .from("sets")
-      .select("id, name, description, owner_user_id, jam_id, link_sharing, youtube_playlist_id, youtube_playlist_fingerprint, spotify_playlist_id, spotify_playlist_fingerprint, ultimate_guitar_playlist_url, profiles(display_name, last_name, username, avatar_url)")
-      .eq("id", id)
-      .single(),
-    supabase
-      .from("set_songs")
-      .select("id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, year, meter, song_composers(people(name)), song_lyricists(people(name)), song_cultures(cultures(name), context), song_genres(genres(name)), song_themes(themes(name)), song_recording_artists(position, youtube_url, spotify_url))")
-      .eq("set_id", id)
-      .order("position", { ascending: true }),
+  const [set, songs, collabRes, requestsRes, profileRes] = await Promise.all([
+    getSet(id),
+    getSetSongs(id),
     supabase
       .from("set_collaborators")
       .select("id, user_id, status, role, profiles!user_id(display_name, last_name, username, avatar_url)")
@@ -74,10 +81,7 @@ export default async function SetPage({
       : Promise.resolve({ data: null }),
   ]);
 
-  if (!setRes.data) notFound();
-
-  const set = setRes.data as any;
-  const songs = (songsRes.data ?? []) as any[];
+  if (!set) notFound();
   const accessRequests = (requestsRes.data ?? []) as any[];
 
   const sortCollaborators = (list: any[]) =>
