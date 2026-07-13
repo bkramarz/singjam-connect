@@ -242,7 +242,7 @@ export default function JamsContent() {
         : Promise.resolve({ data: null }),
       supabase
         .from("jams")
-        .select("id, name, starts_at, ends_at, timezone, neighborhood, tickets_url, image_url, visibility, host_user_id")
+        .select("id, name, starts_at, ends_at, timezone, neighborhood, tickets_url, image_url, visibility, host_user_id, jam_genres(genres(name)), jam_themes(themes(name)), host:profiles!jams_host_user_id_fkey(display_name, last_name, username)")
         .gte("starts_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
         .order("starts_at", { ascending: true, nullsFirst: false })
         .limit(100),
@@ -255,20 +255,6 @@ export default function JamsContent() {
     ]);
 
     const allJams = (jamsRes.data ?? []) as any[];
-    const jamIds = allJams.map((j) => j.id);
-    const hostIds = [...new Set(allJams.map((j) => j.host_user_id).filter(Boolean))] as string[];
-
-    const [genresRes, themesRes, profilesRes] = await Promise.all([
-      jamIds.length > 0
-        ? supabase.from("jam_genres").select("jam_id, genres(name)").in("jam_id", jamIds)
-        : Promise.resolve({ data: [] }),
-      jamIds.length > 0
-        ? supabase.from("jam_themes").select("jam_id, themes(name)").in("jam_id", jamIds)
-        : Promise.resolve({ data: [] }),
-      hostIds.length > 0
-        ? supabase.from("profiles").select("id, display_name, last_name, username").in("id", hostIds)
-        : Promise.resolve({ data: [] }),
-    ]);
 
     const rsvpByJam = new Map(((rsvpsRes.data ?? []) as any[]).map((r) => [r.jam_id, r]));
     const inviteByJam = new Map(((invitesRes.data ?? []) as any[]).map((i) => [i.jam_id, i]));
@@ -276,22 +262,17 @@ export default function JamsContent() {
     const themesByJam = new Map<string, string[]>();
     const profileById = new Map<string, { label: string; username: string | null }>();
 
-    for (const row of (genresRes.data ?? []) as any[]) {
-      const name = row.genres?.name;
-      if (!name) continue;
-      const arr = genresByJam.get(row.jam_id) ?? [];
-      arr.push(name);
-      genresByJam.set(row.jam_id, arr);
-    }
-    for (const row of (themesRes.data ?? []) as any[]) {
-      const name = row.themes?.name;
-      if (!name) continue;
-      const arr = themesByJam.get(row.jam_id) ?? [];
-      arr.push(name);
-      themesByJam.set(row.jam_id, arr);
-    }
-    for (const p of (profilesRes.data ?? []) as any[]) {
-      profileById.set(p.id, { label: [p.display_name, p.last_name].filter(Boolean).join(" ") || p.username || null, username: p.username ?? null });
+    for (const j of allJams) {
+      const genres = ((j.jam_genres ?? []) as any[]).map((r) => r.genres?.name).filter(Boolean);
+      if (genres.length > 0) genresByJam.set(j.id, genres);
+      const themes = ((j.jam_themes ?? []) as any[]).map((r) => r.themes?.name).filter(Boolean);
+      if (themes.length > 0) themesByJam.set(j.id, themes);
+      if (j.host_user_id && j.host && !profileById.has(j.host_user_id)) {
+        profileById.set(j.host_user_id, {
+          label: [j.host.display_name, j.host.last_name].filter(Boolean).join(" ") || j.host.username || null,
+          username: j.host.username ?? null,
+        });
+      }
     }
 
     setData({
