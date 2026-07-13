@@ -56,7 +56,10 @@ export const config = {
   // HTML from the CDN cache, and routing it through middleware forces an
   // edge-function cold start (~2s) in front of an otherwise-cached response.
   // Session cookie refresh for signed-in visitors happens client-side there.
+  // api/ is excluded because route handlers authenticate themselves via
+  // getUser(), which refreshes an expired session and, unlike server
+  // components, can persist the refreshed cookies on the response.
   matcher: [
-    "/((?!$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!$|api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
