@@ -30,7 +30,16 @@ const nextConfig = {
         ],
       },
       {
-        source: "/(repertoire|friends|jams|auth|profile|account|notifications|matches|admin|search)(.*)",
+        // Only routes whose server-rendered HTML is personalized or auth-flow
+        // sensitive stay no-store: /admin SSRs the signed-in user's role and
+        // review counts; /auth renders invite/error params and hosts the
+        // password-reset flow. Every other formerly listed route (/repertoire,
+        // /friends, /jams, /profile, /account, /notifications, /matches,
+        // /search) is a statically prerendered shell — built with no user
+        // context, data fetched client-side — so it inherits the default
+        // static-page caching and the CDN can serve it. Auth gating for those
+        // shells lives in middleware, which runs before the CDN cache.
+        source: "/(auth|admin)(.*)",
         headers: [
           { key: "Cache-Control", value: "private, no-store" },
         ],
