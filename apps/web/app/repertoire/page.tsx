@@ -233,59 +233,13 @@ export default function RepertoirePage() {
         const uid = data.session.user.id;
         setUserId(uid);
 
-        const PAGE = 1000;
-        async function fetchAllUserSongs() {
-          const all: any[] = [];
-          let from = 0;
-          while (true) {
-            const { data, error } = await supabase
-              .from("user_songs")
-              .select(
-                `
-                song_id,
-                confidence,
-                updated_at,
-                songs (
-                  title,
-                  slug,
-                  display_artist,
-                  first_line,
-                  hook,
-                  notes,
-                  vibe,
-                  tonality,
-                  meter,
-                  year_written,
-                  song_composers ( people ( name ) ),
-                  song_lyricists ( people ( name ) ),
-                  song_cultures ( cultures ( name ) ),
-                  song_productions ( productions ( name ) ),
-                  song_genres ( genres ( name ) ),
-                  song_languages ( languages ( name ) ),
-                  song_themes ( themes ( name ) ),
-                  song_recording_artists ( year )
-                )
-              `
-              )
-              .eq("user_id", uid)
-              .order("updated_at", { ascending: false })
-              .range(from, from + PAGE - 1);
-            if (error) throw error;
-            const page = data ?? [];
-            all.push(...page);
-            if (page.length < PAGE) break;
-            from += PAGE;
-          }
-          return all;
-        }
-
-        const [{ data: p }, rows, popularityRes, setsJson, suggestionsRes] = await Promise.all([
+        const [{ data: p }, repertoireRes, setsJson, suggestionsRes] = await Promise.all([
           supabase.from("profiles").select("singing_voice").eq("id", uid).single(),
-          fetchAllUserSongs(),
-          supabase.rpc("song_popularity_counts"),
+          supabase.rpc("my_repertoire"),
           fetch("/api/sets").then((r) => (r.ok ? r.json() : { owned: [], collaborating: [] })),
           supabase.rpc("suggest_songs_for_user", { p_user_id: uid, p_limit: 20 }),
         ]);
+        if (repertoireRes.error) throw repertoireRes.error;
 
         setSingingVoice((p as any)?.singing_voice ?? null);
         setUserSets([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]);
@@ -296,52 +250,28 @@ export default function RepertoirePage() {
 
         if (cancelled) return;
 
-        const popularityMap = new Map<string, number>(
-          ((popularityRes.data ?? []) as { song_id: string; user_count: number }[]).map(
-            (r) => [r.song_id, r.user_count]
-          )
-        );
-
-        const typed = rows as any[];
-        const flattened: Item[] = typed
-          .filter((r) => r.songs)
-          .map((r) => {
-            const names = new Set<string>([
-              ...(r.songs.song_composers ?? []).map((c: any) => c.people?.name).filter(Boolean),
-              ...(r.songs.song_lyricists ?? []).map((l: any) => l.people?.name).filter(Boolean),
-            ]);
-            return {
-              song_id: r.song_id,
-              slug: r.songs.slug ?? null,
-              confidence: r.confidence,
-              updated_at: r.updated_at,
-              title: r.songs.title,
-              display_artist: r.songs.display_artist,
-              first_line: r.songs.first_line ?? null,
-              hook: r.songs.hook ?? null,
-              notes: r.songs.notes ?? null,
-              vibe: r.songs.vibe ?? null,
-              tonality: r.songs.tonality ?? null,
-              meter: r.songs.meter ?? null,
-              year: (() => {
-                const recordings = (r.songs.song_recording_artists ?? []) as any[];
-                const firstRecording = recordings
-                  .map((rec: any) => rec.year as number)
-                  .filter((y): y is number => typeof y === "number")
-                  .sort((a, b) => a - b)[0] ?? null;
-                const yearWritten = (r.songs.year_written ?? null) as number | null;
-                if (yearWritten && firstRecording) return Math.min(yearWritten, firstRecording);
-                return yearWritten ?? firstRecording ?? null;
-              })(),
-              composers: [...names].sort(),
-              cultures: (r.songs.song_cultures ?? []).map((c: any) => c.cultures?.name).filter(Boolean),
-              productions: (r.songs.song_productions ?? []).map((p: any) => p.productions?.name).filter(Boolean),
-              genres: (r.songs.song_genres ?? []).map((g: any) => g.genres?.name).filter(Boolean),
-              languages: (r.songs.song_languages ?? []).map((l: any) => l.languages?.name).filter(Boolean),
-              themes: (r.songs.song_themes ?? []).map((t: any) => t.themes?.name).filter(Boolean),
-              popularity: popularityMap.get(r.song_id),
-            };
-          });
+        const flattened: Item[] = ((repertoireRes.data ?? []) as any[]).map((r) => ({
+          song_id: r.song_id,
+          slug: r.slug ?? null,
+          confidence: r.confidence,
+          updated_at: r.updated_at,
+          title: r.title,
+          display_artist: r.display_artist,
+          first_line: r.first_line ?? null,
+          hook: r.hook ?? null,
+          notes: r.notes ?? null,
+          vibe: r.vibe ?? null,
+          tonality: r.tonality ?? null,
+          meter: r.meter ?? null,
+          year: r.year ?? null,
+          composers: r.composers ?? [],
+          cultures: r.cultures ?? [],
+          productions: r.productions ?? [],
+          genres: r.genres ?? [],
+          languages: r.languages ?? [],
+          themes: r.themes ?? [],
+          popularity: r.popularity ?? 0,
+        }));
 
         setItems(flattened.sort((a, b) => a.title.localeCompare(b.title)));
       } catch (e: any) {
