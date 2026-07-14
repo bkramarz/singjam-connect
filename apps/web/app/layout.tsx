@@ -70,6 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/privacy" className="hover:text-slate-600">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-slate-600">Terms of Service</Link>
               <a href="https://sacredmusicfellowship.org/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600">About Us</a>
+              <a href="https://www.instagram.com/sacredmusic1" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600">Follow Us</a>
             </div>
           </div>
         </footer>
