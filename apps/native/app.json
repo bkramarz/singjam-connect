@@ -37,7 +37,8 @@
       [
         "@react-native-google-signin/google-signin",
         { "iosUrlScheme": "com.googleusercontent.apps.557301235221-ddalr5lli87u06df4s3gh5vd2se1k1m9" }
-      ]
+      ],
+      "./plugins/withGoogleSignInPodfileFix"
     ],
     "experiments": {
       "typedRoutes": true
