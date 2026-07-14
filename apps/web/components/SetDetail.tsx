@@ -444,9 +444,11 @@ export default function SetDetail({
 
   const isSolo = collaborators.length === 0;
 
+  const songIdsKey = useMemo(() => songs.map((s) => s.song_id).sort().join(","), [songs]);
+
   useEffect(() => {
-    if (!isSolo) { setGlobalSongPopularity(new Map()); return; }
-    supabase.rpc("song_popularity_counts").then(({ data }) => {
+    if (!isSolo || songs.length === 0) { setGlobalSongPopularity(new Map()); return; }
+    supabase.rpc("song_popularity_for", { p_song_ids: songs.map((s) => s.song_id) }).then(({ data }) => {
       const map = new Map<string, number>();
       for (const row of (data ?? []) as any[]) {
         map.set(row.song_id, Number(row.user_count));
@@ -454,7 +456,7 @@ export default function SetDetail({
       setGlobalSongPopularity(map);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSolo]);
+  }, [isSolo, songIdsKey]);
 
   async function handleAddToRepertoire(songId: string, confidence: string) {
     await supabase
