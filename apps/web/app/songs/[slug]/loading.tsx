@@ -1,6 +1,6 @@
 export default function SongPageLoading() {
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen space-y-6">
       <div className="space-y-2">
         <div className="h-7 w-2/3 animate-pulse rounded bg-zinc-200" />
         <div className="h-4 w-1/3 animate-pulse rounded bg-zinc-100" />
