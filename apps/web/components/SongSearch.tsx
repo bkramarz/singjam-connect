@@ -54,7 +54,8 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
   const [initialCount] = useState(() => {
     if (typeof window === "undefined") return PAGE_SIZE;
     const saved = Number(sessionStorage.getItem("vc:/search"));
-    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE;
+    // browse_songs caps p_limit at 200 server-side
+    return Number.isFinite(saved) && saved > PAGE_SIZE ? Math.min(saved, 200) : PAGE_SIZE;
   });
 
   const { results, loading, error: searchError } = useSongSearch(q, { limit: 50, debounceMs: 200 });
