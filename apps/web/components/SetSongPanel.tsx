@@ -248,18 +248,13 @@ export default function SetSongPanel({
 
   if (pendingSong) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-        <p className="text-sm text-zinc-700">
-          How well do you know <span className="font-semibold">{pendingSong.title}</span>?
-        </p>
-        <ConfidencePicker
-          variant="compact"
-          singingVoice={userSingingVoice}
-          onSave={(level) => submitAddSong(pendingSong.song_id, level, pendingSong)}
-          onCancel={() => setPendingSong(null)}
-          onVoiceUpdated={onVoiceUpdated}
-        />
-      </div>
+      <ConfidencePicker
+        singingVoice={userSingingVoice}
+        songTitle={pendingSong.title}
+        onSave={(level) => submitAddSong(pendingSong.song_id, level, pendingSong)}
+        onCancel={() => setPendingSong(null)}
+        onVoiceUpdated={onVoiceUpdated}
+      />
     );
   }
 
