@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
@@ -51,6 +51,18 @@ type Item = {
   meter: string | null;
   year: number | null;
   popularity?: number;
+};
+
+const CACHE_KEY = "cache:/repertoire";
+
+type RepertoireCache = {
+  uid: string;
+  items: Item[];
+  singingVoice: string | null;
+  userSets: { id: string; name: string }[];
+  suggestions: SuggestionResult[];
+  suggestionsOffset: number;
+  suggestionsHasMore: boolean;
 };
 
 type SuggestionResult = {
@@ -213,17 +225,45 @@ export default function RepertoirePage() {
 
   const saveScrollPosition = useScrollRestoration("scroll:/repertoire", !loading);
 
+  // Show the cached repertoire immediately on return visits (the fresh fetch
+  // below still runs and silently replaces it). Layout effect so the cached
+  // rows paint on the first frame, letting scroll restoration land on them.
+  const hydratedUidRef = useRef<string | null>(null);
+  // With cached rows the page is interactive while the refresh is in flight;
+  // a mutation during that window must not be clobbered by the older fetch.
+  const itemsMutatedRef = useRef(false);
+  useLayoutEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      const c = JSON.parse(raw) as RepertoireCache;
+      if (!c.uid || !Array.isArray(c.items)) return;
+      hydratedUidRef.current = c.uid;
+      setUserId(c.uid);
+      setIsSignedIn(true);
+      setSingingVoice(c.singingVoice ?? null);
+      setUserSets(c.userSets ?? []);
+      setSuggestions(c.suggestions ?? []);
+      setSuggestionsOffset(c.suggestionsOffset ?? 0);
+      setSuggestionsHasMore(c.suggestionsHasMore ?? true);
+      setItems(c.items);
+      setLoading(false);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        setLoading(true);
+        if (!hydratedUidRef.current) setLoading(true);
 
         const { data, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
 
         if (!data.session) {
+          sessionStorage.removeItem(CACHE_KEY);
+          setItems([]);
           setIsSignedIn(false);
           setLoading(false);
           return;
@@ -232,6 +272,13 @@ export default function RepertoirePage() {
 
         const uid = data.session.user.id;
         setUserId(uid);
+        if (hydratedUidRef.current && hydratedUidRef.current !== uid) {
+          sessionStorage.removeItem(CACHE_KEY);
+          hydratedUidRef.current = null;
+          setItems([]);
+          setSuggestions([]);
+          setLoading(true);
+        }
 
         const [{ data: p }, repertoireRes, setsJson, suggestionsRes] = await Promise.all([
           supabase.from("profiles").select("singing_voice").eq("id", uid).single(),
@@ -273,11 +320,16 @@ export default function RepertoirePage() {
           popularity: r.popularity ?? 0,
         }));
 
-        setItems(flattened.sort((a, b) => a.title.localeCompare(b.title)));
+        if (!itemsMutatedRef.current) {
+          setItems(flattened.sort((a, b) => a.title.localeCompare(b.title)));
+        }
       } catch (e: any) {
         console.error("Repertoire load exception:", e);
-        setErrorMsg("Something went wrong. Please try again.");
-        setItems([]);
+        // keep showing cached rows if the background refresh fails
+        if (!hydratedUidRef.current) {
+          setErrorMsg("Something went wrong. Please try again.");
+          setItems([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -286,6 +338,22 @@ export default function RepertoirePage() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (loading || !isSignedIn || !userId) return;
+    const cache: RepertoireCache = {
+      uid: userId,
+      items,
+      singingVoice,
+      userSets,
+      suggestions,
+      suggestionsOffset,
+      suggestionsHasMore,
+    };
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch {}
+  }, [loading, isSignedIn, userId, items, singingVoice, userSets, suggestions, suggestionsOffset, suggestionsHasMore]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -372,6 +440,7 @@ export default function RepertoirePage() {
     if (!userId) return;
     const ids = Array.from(selectedIds);
     setBulkConfidenceLevel("");
+    itemsMutatedRef.current = true;
     setItems((cur) => cur.map((it) => (ids.includes(it.song_id) ? { ...it, confidence: level } : it)));
     startTransition(async () => {
       const { error } = await supabase
@@ -387,6 +456,7 @@ export default function RepertoirePage() {
     if (!userId) return;
     const ids = Array.from(selectedIds);
     const prevItems = items;
+    itemsMutatedRef.current = true;
     setItems((prev) => prev.filter((x) => !ids.includes(x.song_id)));
     setBulkRemoveConfirm(false);
     startTransition(async () => {
@@ -416,6 +486,7 @@ export default function RepertoirePage() {
   const updateConfidence = (song_id: string, next: string) => {
     if (!userId) return;
     const prev = items.find((x) => x.song_id === song_id)?.confidence ?? null;
+    itemsMutatedRef.current = true;
     setItems((cur) => cur.map((it) => (it.song_id === song_id ? { ...it, confidence: next } : it)));
     startTransition(async () => {
       const { error } = await supabase
@@ -433,6 +504,7 @@ export default function RepertoirePage() {
   const removeFromRepertoire = (song_id: string) => {
     if (!userId) return;
     const prevItems = items;
+    itemsMutatedRef.current = true;
     setItems((prev) => prev.filter((x) => x.song_id !== song_id));
     startTransition(async () => {
       const { error } = await supabase
@@ -449,6 +521,7 @@ export default function RepertoirePage() {
     const prevItems = items;
     const prevSuggestions = suggestions;
     setPendingAddId(null);
+    itemsMutatedRef.current = true;
     setSuggestions((prev) => prev.filter((s) => s.song_id !== songId));
     setItems((prev) => {
       if (prev.find((x) => x.song_id === songId)) {
