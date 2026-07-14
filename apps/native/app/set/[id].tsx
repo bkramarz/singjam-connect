@@ -709,6 +709,17 @@ export default function SetDetailScreen() {
     );
   }
 
+  const displayedSongs = useMemo(() => {
+    let result = songs;
+    if (filterQuery.trim()) {
+      const q = filterQuery.trim().toLowerCase();
+      result = result.filter(s => s.songs.title.toLowerCase().includes(q) || (s.songs.display_artist ?? '').toLowerCase().includes(q));
+    }
+    if (sortBy === 'title_asc') return [...result].sort((a, b) => a.songs.title.localeCompare(b.songs.title));
+    if (sortBy === 'title_desc') return [...result].sort((a, b) => b.songs.title.localeCompare(a.songs.title));
+    return result;
+  }, [songs, sortBy, filterQuery]);
+
   if (loading) {
     return (
       <>
@@ -734,17 +745,6 @@ export default function SetDetailScreen() {
   const isOwner = set.owner_user_id === myUserId;
   const existingIds = new Set(songs.map((s) => s.song_id));
   const canDrag = canEdit && sortBy === 'custom' && !filterQuery.trim();
-
-  const displayedSongs = useMemo(() => {
-    let result = songs;
-    if (filterQuery.trim()) {
-      const q = filterQuery.trim().toLowerCase();
-      result = result.filter(s => s.songs.title.toLowerCase().includes(q) || (s.songs.display_artist ?? '').toLowerCase().includes(q));
-    }
-    if (sortBy === 'title_asc') return [...result].sort((a, b) => a.songs.title.localeCompare(b.songs.title));
-    if (sortBy === 'title_desc') return [...result].sort((a, b) => b.songs.title.localeCompare(a.songs.title));
-    return result;
-  }, [songs, sortBy, filterQuery]);
 
   return (
     <>
