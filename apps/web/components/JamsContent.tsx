@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
@@ -18,6 +18,20 @@ type JamsData = {
   genresByJam: Map<string, string[]>;
   themesByJam: Map<string, string[]>;
   profileById: Map<string, { label: string; username: string | null }>;
+};
+
+const CACHE_KEY = "cache:/jams";
+
+type JamsCache = {
+  uid: string | null;
+  invitesEnabled: boolean;
+  isAdmin: boolean;
+  allJams: any[];
+  rsvpByJam: [string, any][];
+  inviteByJam: [string, any][];
+  genresByJam: [string, string[]][];
+  themesByJam: [string, string[]][];
+  profileById: [string, { label: string; username: string | null }][];
 };
 
 function RsvpBadge({ status, waitlistPosition }: { status: RsvpStatus; waitlistPosition?: number | null }) {
@@ -230,10 +244,41 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
 export default function JamsContent() {
   const [data, setData] = useState<JamsData | null>(null);
   const supabase = supabaseBrowser();
+  const hydratedUidRef = useRef<string | null | undefined>(undefined);
+
+  // Show the cached jams list immediately on return visits; the fetch below
+  // still runs and silently replaces it. Layout effect so cached rows paint
+  // on the first frame.
+  useLayoutEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      const c = JSON.parse(raw) as JamsCache;
+      hydratedUidRef.current = c.uid;
+      setData({
+        userId: c.uid,
+        invitesEnabled: c.invitesEnabled,
+        isAdmin: c.isAdmin,
+        allJams: c.allJams,
+        rsvpByJam: new Map(c.rsvpByJam),
+        inviteByJam: new Map(c.inviteByJam),
+        genresByJam: new Map(c.genresByJam),
+        themesByJam: new Map(c.themesByJam),
+        profileById: new Map(c.profileById),
+      });
+    } catch {}
+  }, []);
 
   async function fetchData() {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user.id ?? null;
+
+    // The cached data belongs to a different user (or a signed-out view) —
+    // drop it immediately rather than let personalized rows keep showing.
+    if (hydratedUidRef.current !== undefined && hydratedUidRef.current !== userId) {
+      hydratedUidRef.current = userId;
+      setData(null);
+    }
 
     const [flagRes, adminRes, jamsRes, rsvpsRes, invitesRes] = await Promise.all([
       supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
@@ -275,10 +320,13 @@ export default function JamsContent() {
       }
     }
 
+    const invitesEnabled = flagRes.data?.enabled ?? true;
+    const isAdmin = (adminRes.data as any)?.role === "admin";
+
     setData({
       userId,
-      invitesEnabled: flagRes.data?.enabled ?? true,
-      isAdmin: (adminRes.data as any)?.role === "admin",
+      invitesEnabled,
+      isAdmin,
       allJams,
       rsvpByJam,
       inviteByJam,
@@ -286,6 +334,21 @@ export default function JamsContent() {
       themesByJam,
       profileById,
     });
+
+    try {
+      const cache: JamsCache = {
+        uid: userId,
+        invitesEnabled,
+        isAdmin,
+        allJams,
+        rsvpByJam: Array.from(rsvpByJam.entries()),
+        inviteByJam: Array.from(inviteByJam.entries()),
+        genresByJam: Array.from(genresByJam.entries()),
+        themesByJam: Array.from(themesByJam.entries()),
+        profileById: Array.from(profileById.entries()),
+      };
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch {}
   }
 
   useEffect(() => {

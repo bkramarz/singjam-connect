@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import SetCard from "@/components/SetCard";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -28,26 +28,70 @@ type SetsData = {
   authenticated: boolean;
 };
 
+const CACHE_KEY = "cache:/sets";
+
+type SetsCache = {
+  uid: string | null;
+  data: SetsData;
+  hasRepertoire: boolean;
+};
+
 export default function SetsContent() {
   const supabase = supabaseBrowser();
   const [data, setData] = useState<SetsData | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [hasRepertoire, setHasRepertoire] = useState(true);
+  const hydratedUidRef = useRef<string | null | undefined>(undefined);
+
+  // Show the cached sets lists immediately on return visits; the fetch below
+  // still runs and silently replaces it. Layout effect so cached rows paint
+  // on the first frame.
+  useLayoutEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      const c = JSON.parse(raw) as SetsCache;
+      hydratedUidRef.current = c.uid;
+      setData(c.data);
+      setIsSignedIn(c.data.authenticated);
+      setHasRepertoire(c.hasRepertoire);
+    } catch {}
+  }, []);
 
   useEffect(() => {
-    fetch("/api/sets")
-      .then((r) => r.json())
-      .then((json) => {
-        setData(json);
-        setIsSignedIn(json.authenticated);
-        if (!json.authenticated) return;
-        supabase.auth.getUser().then(({ data: { user } }) => {
-          if (!user) return;
-          supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("user_id", user.id).then(({ count }) => {
-            setHasRepertoire((count ?? 0) > 0);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const userId = user?.id ?? null;
+
+      // The cached data belongs to a different user (or a signed-out view) —
+      // drop it immediately rather than let personalized sets keep showing.
+      if (hydratedUidRef.current !== undefined && hydratedUidRef.current !== userId) {
+        hydratedUidRef.current = userId;
+        setData(null);
+      }
+
+      fetch("/api/sets")
+        .then((r) => r.json())
+        .then((json: SetsData) => {
+          setData(json);
+          setIsSignedIn(json.authenticated);
+          if (!json.authenticated || !userId) {
+            setHasRepertoire(true);
+            try {
+              const cache: SetsCache = { uid: userId, data: json, hasRepertoire: true };
+              sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+            } catch {}
+            return;
+          }
+          supabase.from("user_songs").select("song_id", { count: "exact", head: true }).eq("user_id", userId).then(({ count }) => {
+            const repertoire = (count ?? 0) > 0;
+            setHasRepertoire(repertoire);
+            try {
+              const cache: SetsCache = { uid: userId, data: json, hasRepertoire: repertoire };
+              sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+            } catch {}
           });
         });
-      });
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -114,7 +158,20 @@ export default function SetsContent() {
                 set={set}
                 isOwner
                 linkSharing={set.link_sharing}
-                onDelete={(id) => setData((d) => d && { ...d, owned: d.owned.filter((s) => s.id !== id) })}
+                onDelete={(id) => {
+                  setData((d) => {
+                    if (!d) return d;
+                    const next = { ...d, owned: d.owned.filter((s) => s.id !== id) };
+                    try {
+                      const raw = sessionStorage.getItem(CACHE_KEY);
+                      if (raw) {
+                        const cache = JSON.parse(raw) as SetsCache;
+                        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...cache, data: next }));
+                      }
+                    } catch {}
+                    return next;
+                  });
+                }}
               />
             ))}
             <Link
