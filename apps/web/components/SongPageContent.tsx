@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -66,6 +66,45 @@ type SongUsers = {
   learn: JammerEntry[];
 };
 
+// Some browsers (Chrome iOS) re-apply a stale scroll offset after the
+// client-fetched content lands, so the page opens scrolled down. They ignore
+// the Blink-only overflow-anchor fix in the root layout, so after the content
+// mounts we briefly pin the viewport to the top — unless the user has already
+// scrolled on purpose, or arrived via back/forward (where the browser is
+// legitimately restoring their old position).
+let lastPopstate = 0;
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => { lastPopstate = Date.now(); });
+}
+
+function usePinToTopOnLoad(loaded: boolean) {
+  const userScrolledRef = useRef(false);
+
+  useEffect(() => {
+    const mark = () => { userScrolledRef.current = true; };
+    window.addEventListener("touchstart", mark, { passive: true });
+    window.addEventListener("wheel", mark, { passive: true });
+    window.addEventListener("keydown", mark);
+    return () => {
+      window.removeEventListener("touchstart", mark);
+      window.removeEventListener("wheel", mark);
+      window.removeEventListener("keydown", mark);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (Date.now() - lastPopstate < 3000) return;
+    const start = performance.now();
+    let raf = requestAnimationFrame(function pin() {
+      if (userScrolledRef.current) return;
+      if (window.scrollY > 0) window.scrollTo(0, 0);
+      if (performance.now() - start < 800) raf = requestAnimationFrame(pin);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [loaded]);
+}
+
 export default function SongPageContent() {
   const params = useParams();
   const slug = params.slug as string;
@@ -80,6 +119,8 @@ export default function SongPageContent() {
   const [userSets, setUserSets] = useState<{ id: string; name: string }[] | null>(null);
   const [songInSets, setSongInSets] = useState<Set<string>>(new Set());
   const supabase = supabaseBrowser();
+
+  usePinToTopOnLoad(data !== null);
 
   useEffect(() => {
     (async () => {
@@ -187,7 +228,7 @@ export default function SongPageContent() {
   if (notFound) return <p className="text-sm text-slate-500">Song not found.</p>;
   if (!data) {
     return (
-      <div className="space-y-6">
+      <div className="min-h-screen space-y-6">
         <div className="space-y-2">
           <div className="h-7 w-2/3 animate-pulse rounded bg-zinc-200" />
           <div className="h-4 w-1/3 animate-pulse rounded bg-zinc-100" />
