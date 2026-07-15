@@ -192,7 +192,7 @@ export default function SetsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Collaborating on</h2>
           <div className="grid grid-cols-1 gap-3">
             {data.collaborating.map((set) => (
-              <SetCard key={set.id} set={set} isOwner={false} linkSharing={set.link_sharing} />
+              <SetCard key={set.id} set={set} isOwner={false} linkSharing={set.link_sharing} canCopy />
             ))}
           </div>
         </section>

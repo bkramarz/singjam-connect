@@ -920,7 +920,7 @@ export default function SetDetail({
           )}
         </div>
 
-        {isPublicViewer && (
+        {!isOwner && (
           currentUserId ? (
             <button
               onClick={handleCopySet}
@@ -1223,7 +1223,7 @@ export default function SetDetail({
           </a>
         ) : null}
 
-        {isOwner ? (
+        {canEdit ? (
           !playlistLinks.spotify ? (
             <button
               onClick={() => handleCreatePlaylist("spotify")}
@@ -1353,7 +1353,7 @@ export default function SetDetail({
 
         <button
           onClick={() => setShowCsvOptions((v) => !v)}
-          className={`flex items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${showCsvOptions ? "border-zinc-400 bg-zinc-50 text-zinc-900" : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"}`}
+          className={`hidden md:flex items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${showCsvOptions ? "border-zinc-400 bg-zinc-50 text-zinc-900" : "border-zinc-300 text-zinc-700 hover:bg-zinc-50"}`}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -1361,7 +1361,7 @@ export default function SetDetail({
           Export CSV
         </button>
         {showCsvOptions && (
-          <div className="basis-full rounded-xl border border-zinc-200 bg-white px-4 py-3 space-y-3">
+          <div className="hidden md:block basis-full rounded-xl border border-zinc-200 bg-white px-4 py-3 space-y-3">
             <p className="text-xs font-medium text-zinc-500">Columns to include</p>
             <div className="flex flex-wrap gap-x-5 gap-y-2">
               {CSV_COLUMN_OPTIONS.map(({ key, label }) => (
@@ -1396,7 +1396,7 @@ export default function SetDetail({
           href={`/set/${set.id}/pdf${songSort !== "custom" ? `?order=${sortedSongs.map((s) => s.song_id).join(",")}` : ""}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+          className="hidden md:flex items-center gap-1.5 rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />

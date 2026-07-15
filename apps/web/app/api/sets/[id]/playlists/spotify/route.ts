@@ -86,7 +86,19 @@ export async function POST(
 
   const admin = supabaseAdmin();
   const { data: setOwner } = await admin.from("sets").select("owner_user_id").eq("id", setId).single();
-  if (!setOwner || setOwner.owner_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!setOwner) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (setOwner.owner_user_id !== user.id) {
+    const { data: collab } = await admin
+      .from("set_collaborators")
+      .select("id")
+      .eq("set_id", setId)
+      .eq("user_id", user.id)
+      .eq("status", "accepted")
+      .eq("role", "editor")
+      .maybeSingle();
+    if (!collab) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { token: access_token, authExpired } = await getAccessToken();
   if (!access_token) {

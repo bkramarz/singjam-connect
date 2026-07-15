@@ -7,12 +7,15 @@ export default function SetRequestAccess({
   setId,
   setName,
   isLoggedIn,
+  inviteToken,
 }: {
   setId: string;
   setName: string;
   isLoggedIn: boolean;
+  inviteToken?: string;
 }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const setPath = `/set/${setId}${inviteToken ? `?invite=${inviteToken}` : ""}`;
 
   async function handleRequest() {
     setStatus("sending");
@@ -30,18 +33,24 @@ export default function SetRequestAccess({
         </div>
 
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold text-zinc-900">You need access</h1>
+          <h1 className="text-lg font-semibold text-zinc-900">
+            {!isLoggedIn && inviteToken ? "Sign in to join this set" : "You need access"}
+          </h1>
           <p className="text-sm text-zinc-500">
-            Ask the owner for access to <span className="font-medium text-zinc-700">{setName}</span>.
+            {!isLoggedIn && inviteToken ? (
+              <>You've been invited to <span className="font-medium text-zinc-700">{setName}</span>. Sign in or create a free account to view it.</>
+            ) : (
+              <>Ask the owner for access to <span className="font-medium text-zinc-700">{setName}</span>.</>
+            )}
           </p>
         </div>
 
         {!isLoggedIn ? (
           <Link
-            href={`/auth?next=/set/${setId}`}
+            href={`/auth?next=${encodeURIComponent(setPath)}`}
             className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
           >
-            Sign in to request access
+            {inviteToken ? "Sign in" : "Sign in to request access"}
           </Link>
         ) : status === "sent" ? (
           <p className="text-sm text-zinc-500">

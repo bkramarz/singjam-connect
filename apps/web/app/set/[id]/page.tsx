@@ -55,10 +55,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function SetPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ invite?: string }>;
 }) {
   const { id } = await params;
+  const { invite: inviteToken } = await searchParams;
   const supabase = await getServerSupabase();
 
   const user = await getServerUser();
@@ -130,13 +133,39 @@ export default async function SetPage({
     }
   }
 
+  // Claim a set invite-link token before gating on visibility — otherwise a private
+  // set's gate below redirects away before the client ever gets a chance to claim it.
+  if (inviteToken && user && !isOwner) {
+    const alreadyJoined = collaborators.some((c: any) => c.user_id === user.id);
+    if (!alreadyJoined) {
+      const admin = supabaseAdmin();
+      const { data: invite } = await admin
+        .from("set_collaborators")
+        .select("id, user_id, status, role")
+        .eq("set_id", id)
+        .eq("token", inviteToken)
+        .maybeSingle();
+
+      if (invite && (!(invite as any).user_id || (invite as any).user_id === user.id)) {
+        const { data: claimed } = await admin
+          .from("set_collaborators")
+          .update({ user_id: user.id, status: "accepted" })
+          .eq("id", (invite as any).id)
+          .select("id, user_id, status, role, profiles!user_id(display_name, last_name, username, avatar_url)")
+          .single();
+
+        if (claimed) collaborators = sortCollaborators([...collaborators, claimed as any]);
+      }
+    }
+  }
+
   const isCollaborator = collaborators.some((c: any) => c.user_id === user?.id);
   const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && c.role === "editor");
 
   // Gate by visibility mode
   if (!isOwner && !isCollaborator && !isAdmin) {
     if (set.link_sharing === "private") {
-      return <SetRequestAccess setId={set.id} setName={set.name} isLoggedIn={!!user} />;
+      return <SetRequestAccess setId={set.id} setName={set.name} isLoggedIn={!!user} inviteToken={inviteToken} />;
     }
     if (set.link_sharing === "link" && !user) {
       // Open-join sets require a SingJam account to auto-join
