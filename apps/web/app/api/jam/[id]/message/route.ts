@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamHostMessageHtml } from "@/emails/jam-host-message";
+import { isJamCohost } from "@/lib/jamCohosts";
 
 export async function POST(
   req: Request,
@@ -32,7 +33,9 @@ export async function POST(
     .single();
 
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
-  if (jam.host_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (jam.host_user_id !== user.id && !(await isJamCohost(admin, jamId, user.id))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Get host display name
   const { data: hostProfile } = await admin

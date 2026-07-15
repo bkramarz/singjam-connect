@@ -5,6 +5,7 @@ import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { createNotification } from "@/lib/notifications";
 import { memberInviteHtml, nonMemberInviteHtml } from "@/emails/jam-invite";
 import { formatJamTime } from "@/lib/formatJamTime";
+import { isJamCohost } from "@/lib/jamCohosts";
 
 export async function POST(
   req: Request,
@@ -32,7 +33,7 @@ export async function POST(
   if (jam.visibility === "official") return NextResponse.json({ error: "Official events don't use invites" }, { status: 400 });
 
   // Permission check
-  const isHost = jam.host_user_id === user.id;
+  const isHost = jam.host_user_id === user.id || (await isJamCohost(admin, jamId, user.id));
   if (!isHost) {
     if (jam.visibility === "community") {
       // Must be attending

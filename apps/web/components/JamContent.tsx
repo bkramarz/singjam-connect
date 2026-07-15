@@ -68,6 +68,7 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
             pendingInvite: false,
             isOfficial: false,
             isHost: false,
+            isCoHost: false,
             hasFullAccess: false,
             showRsvp: false,
             canInvite: false,
@@ -121,13 +122,16 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
       const attendingCount = countRes.count ?? 0;
       const invitesEnabled = flagRes.data?.enabled ?? true;
 
-      const [hostRes, rsvpRes, inviteRes] = await Promise.all([
+      const [hostRes, rsvpRes, inviteRes, cohostRes] = await Promise.all([
         supabase.from("profiles").select("display_name, last_name, username").eq("id", jam.host_user_id).maybeSingle(),
         userId
           ? supabase.from("jam_rsvps").select("status, waitlist_position").eq("jam_id", jamId).eq("user_id", userId).maybeSingle()
           : Promise.resolve({ data: null }),
         userId
           ? supabase.from("jam_invites").select("status").eq("jam_id", jamId).eq("invited_user_id", userId).maybeSingle()
+          : Promise.resolve({ data: null }),
+        userId
+          ? supabase.from("jam_cohosts").select("user_id").eq("jam_id", jamId).eq("user_id", userId).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 
@@ -140,14 +144,15 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
       const isOfficial = jam.visibility === "official";
       const isAttending = rsvpStatus === "attending";
       const isHost = jam.host_user_id === userId;
-      const hasFullAccess = isOfficial || isAttending || isHost;
+      const isCoHost = !!cohostRes.data;
+      const hasFullAccess = isOfficial || isAttending || isHost || isCoHost;
       const showRsvp = !isOfficial && !!userId && !pendingInvite && !isHost;
-      const canInvite = !!userId && !isOfficial && (isHost || (isAttending && jam.guests_can_invite));
+      const canInvite = !!userId && !isOfficial && (isHost || isCoHost || (isAttending && jam.guests_can_invite));
 
       let inviteList: InviteEntry[] = [];
       let alreadyInvitedIds: string[] = [];
 
-      if (isHost) {
+      if (isHost || isCoHost) {
         const { data: rawInvites } = await supabase
           .from("jam_invites")
           .select("id, invited_user_id, invitee_email, status")
@@ -214,6 +219,7 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
           pendingInvite,
           isOfficial,
           isHost,
+          isCoHost,
           hasFullAccess,
           showRsvp,
           canInvite,

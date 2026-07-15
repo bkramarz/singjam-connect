@@ -35,6 +35,7 @@ export type JamViewData = {
   pendingInvite: boolean;
   isOfficial: boolean;
   isHost: boolean;
+  isCoHost: boolean;
   hasFullAccess: boolean;
   showRsvp: boolean;
   canInvite: boolean;
@@ -61,6 +62,7 @@ export default function JamView({
     pendingInvite,
     isOfficial,
     isHost,
+    isCoHost,
     showRsvp,
     canInvite,
     invitesEnabled,
@@ -70,6 +72,7 @@ export default function JamView({
   const [rsvpStatus, setRsvpStatus] = useState(data.rsvpStatus);
   const [hasFullAccess, setHasFullAccess] = useState(data.hasFullAccess);
   const [inviteList, setInviteList] = useState(data.inviteList);
+  const canManage = isHost || isCoHost;
 
   return (
     <div className="space-y-4">
@@ -87,7 +90,7 @@ export default function JamView({
                 capacity={jam.capacity}
                 onStatusChange={(newStatus) => {
                   setRsvpStatus(newStatus);
-                  setHasFullAccess(isOfficial || newStatus === "attending" || isHost);
+                  setHasFullAccess(isOfficial || newStatus === "attending" || isHost || isCoHost);
                 }}
               />
             )}
@@ -102,8 +105,8 @@ export default function JamView({
           </>
         }
       />
-      {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} isHost={isHost} />}
-      {!isOfficial && <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} />}
+      {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
+      {!isOfficial && <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />}
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={jamId}
@@ -113,8 +116,8 @@ export default function JamView({
           }}
         />
       )}
-      {isHost && <JamInviteList jamId={jamId} invites={inviteList} />}
-      {isHost && <JamHostActions jamId={jamId} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
+      {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
+      {canManage && <JamHostActions jamId={jamId} isHost={isHost} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
   );
 }

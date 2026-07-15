@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { memberInviteHtml, nonMemberInviteHtml } from "@/emails/jam-invite";
 import { formatJamTime } from "@/lib/formatJamTime";
+import { isJamCohost } from "@/lib/jamCohosts";
 
 export async function POST(
   req: Request,
@@ -27,7 +28,9 @@ export async function POST(
     .single();
 
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
-  if (jam.host_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (jam.host_user_id !== user.id && !(await isJamCohost(admin, jamId, user.id))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Load the invite
   const { data: invite } = await admin
