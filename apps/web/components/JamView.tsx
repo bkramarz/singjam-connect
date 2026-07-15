@@ -76,7 +76,7 @@ export default function JamView({
 
   return (
     <div className="space-y-4">
-      {pendingInvite && rsvpStatus !== "attending" && <JamInviteResponse jamId={jamId} />}
+      {pendingInvite && rsvpStatus !== "attending" && !isHost && <JamInviteResponse jamId={jamId} />}
       <JamCard
         jam={jamCardData}
         actions={
