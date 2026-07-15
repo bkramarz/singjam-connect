@@ -34,7 +34,7 @@ function AttendeeRow({ profile, badge, action }: { profile: any; badge: ReactNod
   const tags = parseTags(profile);
   return (
     <li className="py-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         {profile?.username ? (
           <Link href={`/u/${profile.username}`} className="text-sm font-medium text-zinc-900 hover:underline">
             {fullName}

@@ -33,6 +33,9 @@ export async function POST(
   if (response === "accepted") {
     // Auto-RSVP — reuse RSVP logic: check capacity
     const { data: jam } = await admin.from("jams").select("capacity, name, host_user_id").eq("id", jamId).single();
+    if (jam?.host_user_id === user.id) {
+      return NextResponse.json({ error: "You can't RSVP to your own jam" }, { status: 400 });
+    }
     const { count: attendingCount } = await admin
       .from("jam_rsvps")
       .select("id", { count: "exact", head: true })
