@@ -202,6 +202,29 @@ describe("PUT /api/jam/[id]/set", () => {
       expect(inserted.map((r: any) => r.user_id)).not.toContain(HOST_ID);
     });
 
+    it("does not add the set owner as a collaborator when someone else links the set", async () => {
+      // Regression test: linking used to only exclude the *linker's* own id from
+      // the auto-added-attendees insert, not the set's actual owner. If the host
+      // links a set they don't own, and the real owner is also a jam attendee,
+      // the owner would wrongly get a duplicate "editor" collaborator row.
+      const OWNER_ID = "owner-1";
+      mockServerFrom
+        .mockReturnValueOnce(chain({ data: jamRow })) // jams (caller is host)
+        .mockReturnValueOnce(chain({ data: { owner_user_id: OWNER_ID, jam_id: null } })) // sets select
+        .mockReturnValueOnce(chain({ data: { role: "editor" } })); // set_collaborators lookup (host is an editor collab)
+      mockAdminFrom
+        .mockReturnValueOnce(chain({ error: null })) // sets update
+        .mockReturnValueOnce(chain({ data: [{ user_id: OWNER_ID }, { user_id: "attendee-1" }] })) // rsvps — owner is attending
+        .mockReturnValueOnce(chain({ data: [] })) // existing collabs
+        .mockReturnValueOnce(chain({ error: null })); // insert
+
+      await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
+      const insertChain = mockAdminFrom.mock.results[3].value;
+      const inserted: any[] = insertChain.insert.mock.calls[0][0];
+      expect(inserted.map((r: any) => r.user_id)).not.toContain(OWNER_ID);
+      expect(inserted.map((r: any) => r.user_id)).toContain("attendee-1");
+    });
+
     it("skips the insert entirely when there are no new collaborators", async () => {
       // All attendees are already collaborators
       setupSuccess({ rsvpUserIds: ["attendee-1"], existingCollabUserIds: ["attendee-1"] });
