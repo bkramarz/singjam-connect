@@ -920,7 +920,7 @@ export default function SetDetail({
           )}
         </div>
 
-        {isPublicViewer && (
+        {!isOwner && (
           currentUserId ? (
             <button
               onClick={handleCopySet}
