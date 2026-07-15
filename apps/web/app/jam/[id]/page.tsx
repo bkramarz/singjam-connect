@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense, cache } from "react";
 import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import JamContent from "@/components/JamContent";
 import JamView, { type InviteEntry } from "@/components/JamView";
 import { type JamCardData } from "@/components/JamCard";
@@ -16,9 +17,36 @@ const getJam = cache(async (id: string) => {
   return data as any;
 });
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+// Invite links point at jams that RLS otherwise hides from anonymous
+// visitors, so the metadata crawler needs the same token-gated admin
+// lookup the client-side invite flow already uses (see /api/jam/[id]/public).
+async function getJamViaInviteToken(jamId: string, token: string) {
+  const admin = supabaseAdmin();
+  const { data: invite } = await admin
+    .from("jam_invites")
+    .select("id")
+    .eq("jam_id", jamId)
+    .eq("token", token)
+    .maybeSingle();
+  if (!invite) return null;
+  const { data } = await admin
+    .from("jams")
+    .select("name, starts_at, neighborhood, profiles(display_name, last_name, username)")
+    .eq("id", jamId)
+    .maybeSingle();
+  return data as any;
+}
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ invite?: string }>;
+}): Promise<Metadata> {
   const { id } = await params;
-  const jam = await getJam(id);
+  const { invite } = await searchParams;
+  const jam = invite ? await getJamViaInviteToken(id, invite) : await getJam(id);
   if (!jam) return { title: "Jam" };
   const name = jam.name ?? "Jam";
   const host = jam.profiles?.display_name ?? jam.profiles?.username ?? null;
