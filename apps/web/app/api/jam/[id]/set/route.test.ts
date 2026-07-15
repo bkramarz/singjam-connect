@@ -53,14 +53,14 @@ function setupSuccess({
   rsvpUserIds = [] as string[],
   existingCollabUserIds = [] as string[],
 } = {}) {
-  // server client: getJam → getSet → updateSet
+  // server client: getJam → getSet
   mockServerFrom
     .mockReturnValueOnce(chain({ data: jamRow }))          // jams
-    .mockReturnValueOnce(chain({ data: setRow }))          // sets (select)
-    .mockReturnValueOnce(chain({ error: null }));           // sets (update)
+    .mockReturnValueOnce(chain({ data: setRow }));         // sets (select)
 
-  // admin client: rsvps + existing collabs (parallel), then insert
+  // admin client: updateSet, then rsvps + existing collabs (parallel), then insert
   mockAdminFrom
+    .mockReturnValueOnce(chain({ error: null }))           // sets (update)
     .mockReturnValueOnce(chain({ data: rsvpUserIds.map((id) => ({ user_id: id })) }))
     .mockReturnValueOnce(chain({ data: existingCollabUserIds.map((id) => ({ user_id: id })) }))
     .mockReturnValueOnce(chain({ data: null })); // insert (only called if newCollaborators > 0)
@@ -130,26 +130,37 @@ describe("PUT /api/jam/[id]/set", () => {
   describe("co-hosts and collaborators", () => {
     it("allows a co-host (not the true host) to link a set they own", async () => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "cohost-1" } } });
-      mockAdminFrom.mockReturnValueOnce(chain({ data: { user_id: "cohost-1" } })); // isJamCohost → true
+      mockAdminFrom
+        .mockReturnValueOnce(chain({ data: { user_id: "cohost-1" } })) // isJamCohost → true
+        .mockReturnValueOnce(chain({ error: null })); // sets update
       mockServerFrom
         .mockReturnValueOnce(chain({ data: jamRow }))
-        .mockReturnValueOnce(chain({ data: { owner_user_id: "cohost-1", jam_id: null } }))
-        .mockReturnValueOnce(chain({ error: null })); // sets update
+        .mockReturnValueOnce(chain({ data: { owner_user_id: "cohost-1", jam_id: null } }));
 
       // remaining admin calls (rsvps, existing collabs) fall back to the default chain({ data: null })
       const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
       expect(res.status).toBe(200);
     });
 
-    it("allows linking a set the caller doesn't own but is an accepted editor collaborator on", async () => {
+    it("allows linking a set the caller doesn't own but is an accepted editor collaborator on, and persists via the admin client (not the RLS-scoped one)", async () => {
+      // Regression test: the "sets_update" RLS policy only allows the owner to
+      // update the row, so a non-owning collaborator's own session client
+      // would silently no-op this write. It must go through admin.
       mockServerFrom
         .mockReturnValueOnce(chain({ data: jamRow })) // jams (caller is host)
         .mockReturnValueOnce(chain({ data: { owner_user_id: "other-user", jam_id: null } })) // sets select
-        .mockReturnValueOnce(chain({ data: { role: "editor" } })) // set_collaborators lookup
-        .mockReturnValueOnce(chain({ error: null })); // sets update
+        .mockReturnValueOnce(chain({ data: { role: "editor" } })); // set_collaborators lookup
+      mockAdminFrom.mockReturnValueOnce(chain({ error: null })); // sets update
 
       const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
       expect(res.status).toBe(200);
+
+      const updateChain = mockAdminFrom.mock.results[0].value;
+      expect(updateChain.update).toHaveBeenCalledWith({ jam_id: JAM_ID });
+      // None of the server (RLS-scoped) client's chains should have been used to update sets.
+      for (const result of mockServerFrom.mock.results) {
+        expect(result.value.update).not.toHaveBeenCalled();
+      }
     });
   });
 
@@ -164,7 +175,7 @@ describe("PUT /api/jam/[id]/set", () => {
     it("inserts jam attendees as editor collaborators", async () => {
       setupSuccess({ rsvpUserIds: ["attendee-1", "attendee-2"] });
       await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
-      const insertChain = mockAdminFrom.mock.results[2].value;
+      const insertChain = mockAdminFrom.mock.results[3].value;
       expect(insertChain.insert).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ user_id: "attendee-1", role: "editor", status: "accepted" }),
@@ -176,7 +187,7 @@ describe("PUT /api/jam/[id]/set", () => {
     it("does not re-insert users already in set_collaborators", async () => {
       setupSuccess({ rsvpUserIds: ["attendee-1", "attendee-2"], existingCollabUserIds: ["attendee-1"] });
       await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
-      const insertChain = mockAdminFrom.mock.results[2].value;
+      const insertChain = mockAdminFrom.mock.results[3].value;
       const inserted: any[] = insertChain.insert.mock.calls[0][0];
       expect(inserted.map((r: any) => r.user_id)).not.toContain("attendee-1");
       expect(inserted.map((r: any) => r.user_id)).toContain("attendee-2");
@@ -186,7 +197,7 @@ describe("PUT /api/jam/[id]/set", () => {
       // HOST_ID is both the jam host and the set owner — should not appear in the insert
       setupSuccess({ rsvpUserIds: [HOST_ID, "attendee-1"] });
       await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
-      const insertChain = mockAdminFrom.mock.results[2].value;
+      const insertChain = mockAdminFrom.mock.results[3].value;
       const inserted: any[] = insertChain.insert.mock.calls[0][0];
       expect(inserted.map((r: any) => r.user_id)).not.toContain(HOST_ID);
     });
@@ -196,7 +207,7 @@ describe("PUT /api/jam/[id]/set", () => {
       setupSuccess({ rsvpUserIds: ["attendee-1"], existingCollabUserIds: ["attendee-1"] });
       await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
       // Only 2 admin from() calls (rsvps + existing collabs), no insert
-      expect(mockAdminFrom).toHaveBeenCalledTimes(2);
+      expect(mockAdminFrom).toHaveBeenCalledTimes(3);
     });
   });
 });
@@ -215,20 +226,21 @@ describe("DELETE /api/jam/[id]/set", () => {
     expect(res.status).toBe(403);
   });
 
-  it("allows the host to unlink", async () => {
-    mockServerFrom
-      .mockReturnValueOnce(chain({ data: jamRow }))
-      .mockReturnValueOnce(chain({ error: null }));
+  it("allows the host to unlink, persisting via the admin client", async () => {
+    mockServerFrom.mockReturnValueOnce(chain({ data: jamRow }));
+    mockAdminFrom.mockReturnValueOnce(chain({ error: null })); // sets update
     const res = await DELETE(deleteReq(JAM_ID), { params: Promise.resolve({ id: JAM_ID }) });
     expect(res.status).toBe(200);
+    const updateChain = mockAdminFrom.mock.results[0].value;
+    expect(updateChain.update).toHaveBeenCalledWith({ jam_id: null });
   });
 
   it("allows a co-host to unlink", async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: "cohost-1" } } });
-    mockAdminFrom.mockReturnValueOnce(chain({ data: { user_id: "cohost-1" } }));
-    mockServerFrom
-      .mockReturnValueOnce(chain({ data: jamRow }))
-      .mockReturnValueOnce(chain({ error: null }));
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: { user_id: "cohost-1" } })) // isJamCohost
+      .mockReturnValueOnce(chain({ error: null })); // sets update
+    mockServerFrom.mockReturnValueOnce(chain({ data: jamRow }));
     const res = await DELETE(deleteReq(JAM_ID), { params: Promise.resolve({ id: JAM_ID }) });
     expect(res.status).toBe(200);
   });
