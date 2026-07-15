@@ -62,6 +62,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const existingUserIds = new Set<string>([
     user.id,
+    set.owner_user_id,
     ...((existingCollabRes.data ?? []) as any[]).map((c: any) => c.user_id),
   ]);
 
