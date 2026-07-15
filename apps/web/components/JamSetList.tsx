@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type LinkedSet = { id: string; name: string };
-type OwnedSet = { id: string; name: string; jam_id: string | null };
+type OwnedSet = { id: string; name: string };
 
-export default function JamSetList({ jamId, jamName, isHost }: { jamId: string; jamName: string | null; isHost: boolean }) {
+export default function JamSetList({ jamId, jamName, canManage }: { jamId: string; jamName: string | null; canManage: boolean }) {
   const router = useRouter();
   const [set, setSet] = useState<LinkedSet | null | undefined>(undefined);
   const [creating, setCreating] = useState(false);
@@ -38,8 +38,8 @@ export default function JamSetList({ jamId, jamName, isHost }: { jamId: string; 
     setLinking(true);
     if (!availableSets) {
       const res = await fetch("/api/sets");
-      const { owned } = await res.json();
-      setAvailableSets(owned as OwnedSet[]);
+      const { owned, collaborating } = await res.json();
+      setAvailableSets([...(owned as OwnedSet[]), ...(collaborating as OwnedSet[])]);
     }
   }
 
@@ -70,7 +70,7 @@ export default function JamSetList({ jamId, jamName, isHost }: { jamId: string; 
   }
 
   if (set === undefined) return null;
-  if (!isHost && !set) return null;
+  if (!canManage && !set) return null;
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
@@ -86,7 +86,7 @@ export default function JamSetList({ jamId, jamName, isHost }: { jamId: string; 
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
             </svg>
           </a>
-          {isHost && (
+          {canManage && (
             <button
               onClick={handleUnlink}
               disabled={unlinking}

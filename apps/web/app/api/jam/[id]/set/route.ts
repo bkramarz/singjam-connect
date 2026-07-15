@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
+import { isJamCohost } from "@/lib/jamCohosts";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,8 +22,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const admin = supabaseAdmin();
+
   const { data: jam } = await supabase.from("jams").select("host_user_id").eq("id", jamId).single();
-  if (!jam || jam.host_user_id !== user.id) {
+  if (!jam || (jam.host_user_id !== user.id && !(await isJamCohost(admin, jamId, user.id)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -30,13 +33,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!setId) return NextResponse.json({ error: "setId is required" }, { status: 400 });
 
   const { data: set } = await supabase.from("sets").select("owner_user_id, jam_id").eq("id", setId).single();
-  if (!set || set.owner_user_id !== user.id) {
+  if (!set) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  let canLink = set.owner_user_id === user.id;
+  if (!canLink) {
+    const { data: collab } = await supabase
+      .from("set_collaborators")
+      .select("role")
+      .eq("set_id", setId)
+      .eq("user_id", user.id)
+      .eq("status", "accepted")
+      .maybeSingle();
+    canLink = collab?.role === "editor";
+  }
+  if (!canLink) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const { error } = await supabase.from("sets").update({ jam_id: jamId }).eq("id", setId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const admin = supabaseAdmin();
   const [rsvpRes, existingCollabRes] = await Promise.all([
     admin.from("jam_rsvps").select("user_id").eq("jam_id", jamId).eq("status", "attending"),
     admin.from("set_collaborators").select("user_id").eq("set_id", setId),
@@ -72,8 +87,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const admin = supabaseAdmin();
+
   const { data: jam } = await supabase.from("jams").select("host_user_id").eq("id", jamId).single();
-  if (!jam || jam.host_user_id !== user.id) {
+  if (!jam || (jam.host_user_id !== user.id && !(await isJamCohost(admin, jamId, user.id)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -49,14 +49,30 @@ describe("POST /api/jam/[id]/message", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 403 when the authenticated user is not the host", async () => {
+  it("returns 403 when the authenticated user is not the host or a co-host", async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: "visitor-id" } } });
-    mockFrom.mockReturnValue({
-      select: () => ({ eq: () => ({ single: () => ({ data: { host_user_id: "host-id", name: "Test Jam" } }) }) }),
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "jams") return jamRow("host-id");
+      if (table === "jam_cohosts") return cohostLookup(null);
+      return emptyTable();
     });
 
     const res = await POST(makeRequest({ subject: "Hey", message: "Hi" }), { params });
     expect(res.status).toBe(403);
+  });
+
+  it("allows a co-host (not the host) to message attendees", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "cohost-id" } } });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "jams") return jamRow("host-id");
+      if (table === "jam_cohosts") return cohostLookup({ user_id: "cohost-id" });
+      if (table === "profiles") return profileRow("Cohost");
+      if (table === "jam_rsvps") return rsvpRows([]);
+      return emptyTable();
+    });
+
+    const res = await POST(makeRequest({ subject: "Hey", message: "Hi" }), { params });
+    expect(res.status).toBe(200);
   });
 
   it("returns 400 when subject is missing", async () => {
@@ -199,4 +215,10 @@ function rsvpRows(rows: { user_id: string }[]) {
 
 function emptyTable() {
   return { select: () => ({ eq: () => ({ eq: () => ({ data: [] }) }) }) };
+}
+
+function cohostLookup(data: { user_id: string } | null) {
+  return {
+    select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => ({ data }) }) }) }),
+  };
 }

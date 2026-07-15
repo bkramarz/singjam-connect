@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: vi.fn(() => ({ from: mockAdminFrom })),
 }));
 
-import { PUT } from "./route";
+import { PUT, DELETE } from "./route";
 
 // Builds a chainable Supabase query mock that resolves at the terminal method.
 function chain(result: any, extra: Record<string, any> = {}) {
@@ -37,6 +37,10 @@ function putReq(jamId: string, body: object) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function deleteReq(jamId: string) {
+  return new Request(`http://localhost/api/jam/${jamId}/set`, { method: "DELETE" });
 }
 
 const HOST_ID = "host-1";
@@ -65,6 +69,8 @@ function setupSuccess({
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetUser.mockResolvedValue({ data: { user: { id: HOST_ID } } });
+  // Default: not a co-host, unless a test overrides with its own mockReturnValueOnce queue.
+  mockAdminFrom.mockReturnValue(chain({ data: null }));
 });
 
 describe("PUT /api/jam/[id]/set", () => {
@@ -94,12 +100,56 @@ describe("PUT /api/jam/[id]/set", () => {
       expect(res.status).toBe(400);
     });
 
-    it("returns 403 when caller does not own the set", async () => {
+    it("returns 403 when caller does not own the set and is not an editor collaborator", async () => {
       mockServerFrom
         .mockReturnValueOnce(chain({ data: jamRow }))
-        .mockReturnValueOnce(chain({ data: { owner_user_id: "other-user", jam_id: null } }));
+        .mockReturnValueOnce(chain({ data: { owner_user_id: "other-user", jam_id: null } }))
+        .mockReturnValueOnce(chain({ data: null })); // set_collaborators lookup — no row
       const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
       expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when caller is only a viewer collaborator on the set", async () => {
+      mockServerFrom
+        .mockReturnValueOnce(chain({ data: jamRow }))
+        .mockReturnValueOnce(chain({ data: { owner_user_id: "other-user", jam_id: null } }))
+        .mockReturnValueOnce(chain({ data: { role: "viewer" } }));
+      const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 404 when the set does not exist", async () => {
+      mockServerFrom
+        .mockReturnValueOnce(chain({ data: jamRow }))
+        .mockReturnValueOnce(chain({ data: null }));
+      const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("co-hosts and collaborators", () => {
+    it("allows a co-host (not the true host) to link a set they own", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "cohost-1" } } });
+      mockAdminFrom.mockReturnValueOnce(chain({ data: { user_id: "cohost-1" } })); // isJamCohost → true
+      mockServerFrom
+        .mockReturnValueOnce(chain({ data: jamRow }))
+        .mockReturnValueOnce(chain({ data: { owner_user_id: "cohost-1", jam_id: null } }))
+        .mockReturnValueOnce(chain({ error: null })); // sets update
+
+      // remaining admin calls (rsvps, existing collabs) fall back to the default chain({ data: null })
+      const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
+      expect(res.status).toBe(200);
+    });
+
+    it("allows linking a set the caller doesn't own but is an accepted editor collaborator on", async () => {
+      mockServerFrom
+        .mockReturnValueOnce(chain({ data: jamRow })) // jams (caller is host)
+        .mockReturnValueOnce(chain({ data: { owner_user_id: "other-user", jam_id: null } })) // sets select
+        .mockReturnValueOnce(chain({ data: { role: "editor" } })) // set_collaborators lookup
+        .mockReturnValueOnce(chain({ error: null })); // sets update
+
+      const res = await PUT(putReq(JAM_ID, { setId: SET_ID }), { params: Promise.resolve({ id: JAM_ID }) });
+      expect(res.status).toBe(200);
     });
   });
 
@@ -148,5 +198,38 @@ describe("PUT /api/jam/[id]/set", () => {
       // Only 2 admin from() calls (rsvps + existing collabs), no insert
       expect(mockAdminFrom).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe("DELETE /api/jam/[id]/set", () => {
+  it("returns 401 when not authenticated", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    const res = await DELETE(deleteReq(JAM_ID), { params: Promise.resolve({ id: JAM_ID }) });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when caller is neither host nor co-host", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "stranger" } } });
+    mockServerFrom.mockReturnValueOnce(chain({ data: jamRow }));
+    const res = await DELETE(deleteReq(JAM_ID), { params: Promise.resolve({ id: JAM_ID }) });
+    expect(res.status).toBe(403);
+  });
+
+  it("allows the host to unlink", async () => {
+    mockServerFrom
+      .mockReturnValueOnce(chain({ data: jamRow }))
+      .mockReturnValueOnce(chain({ error: null }));
+    const res = await DELETE(deleteReq(JAM_ID), { params: Promise.resolve({ id: JAM_ID }) });
+    expect(res.status).toBe(200);
+  });
+
+  it("allows a co-host to unlink", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "cohost-1" } } });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: { user_id: "cohost-1" } }));
+    mockServerFrom
+      .mockReturnValueOnce(chain({ data: jamRow }))
+      .mockReturnValueOnce(chain({ error: null }));
+    const res = await DELETE(deleteReq(JAM_ID), { params: Promise.resolve({ id: JAM_ID }) });
+    expect(res.status).toBe(200);
   });
 });

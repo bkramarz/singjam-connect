@@ -53,6 +53,12 @@ const pendingEmailInvite = {
   token: "token-xyz",
 };
 
+function cohostLookup(data: { user_id: string } | null) {
+  return {
+    select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => ({ data }) }) }) }),
+  };
+}
+
 function setupMocks({ invite }: { invite: typeof pendingMemberInvite | typeof pendingEmailInvite }) {
   mockFrom.mockImplementation((table: string) => {
     if (table === "jams") {
@@ -99,7 +105,7 @@ describe("POST /api/jam/[id]/invite/nudge", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 403 when caller is not the host", async () => {
+  it("returns 403 when caller is neither host nor co-host", async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: "other-user" } } });
     mockFrom.mockImplementation((table: string) => {
       if (table === "jams") {
@@ -111,11 +117,26 @@ describe("POST /api/jam/[id]/invite/nudge", () => {
           }),
         };
       }
+      if (table === "jam_cohosts") return cohostLookup(null);
       return {};
     });
 
     const res = await POST(makeRequest({ inviteId: "invite-1" }), { params });
     expect(res.status).toBe(403);
+  });
+
+  it("allows a co-host (not the host) to nudge an invite", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "cohost-id" } } });
+    setupMocks({ invite: pendingMemberInvite });
+    mockGetUserById.mockResolvedValue({ data: { user: { email: "member@example.com" } } });
+    const baseFrom = mockFrom.getMockImplementation()!;
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "jam_cohosts") return cohostLookup({ user_id: "cohost-id" });
+      return baseFrom(table);
+    });
+
+    const res = await POST(makeRequest({ inviteId: "invite-1" }), { params });
+    expect(res.status).toBe(200);
   });
 
   it("returns 400 when inviteId is missing", async () => {

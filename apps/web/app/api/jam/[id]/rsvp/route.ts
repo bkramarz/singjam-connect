@@ -147,6 +147,7 @@ export async function DELETE(
   if (!rsvp) return NextResponse.json({ error: "RSVP not found" }, { status: 404 });
 
   await admin.from("jam_rsvps").update({ status: "cancelled", waitlist_position: null }).eq("id", rsvp.id);
+  await admin.from("jam_cohosts").delete().eq("jam_id", jamId).eq("user_id", user.id);
 
   // Promote first waitlist person if a confirmed spot opened up
   if (rsvp.status === "attending") {
