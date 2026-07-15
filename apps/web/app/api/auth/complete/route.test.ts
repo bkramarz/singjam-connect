@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockSyncContact, tables, resetTables, chain } = vi.hoisted(() => {
+const { mockGetUser, mockAdminGetUser, mockSyncContact, tables, resetTables, chain } = vi.hoisted(() => {
   const tables: Record<string, any[]> = {};
 
   function chain(result: any) {
@@ -14,6 +14,7 @@ const { mockGetUser, mockSyncContact, tables, resetTables, chain } = vi.hoisted(
 
   return {
     mockGetUser: vi.fn(),
+    mockAdminGetUser: vi.fn(),
     mockSyncContact: vi.fn().mockResolvedValue(undefined),
     tables,
     resetTables: () => {
@@ -36,16 +37,20 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
-  supabaseAdmin: vi.fn(() => ({ from: vi.fn(fromMock) })),
+  supabaseAdmin: vi.fn(() => ({
+    from: vi.fn(fromMock),
+    auth: { getUser: mockAdminGetUser },
+  })),
 }));
 
 vi.mock("@/lib/activecampaign", () => ({ syncContact: mockSyncContact }));
 
 import { POST } from "./route";
 
-function req(body: Record<string, unknown>) {
+function req(body: Record<string, unknown>, headers?: Record<string, string>) {
   return new Request("https://singjam.org/api/auth/complete", {
     method: "POST",
+    headers,
     body: JSON.stringify(body),
   });
 }
@@ -54,6 +59,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetTables();
   mockGetUser.mockResolvedValue({ data: { user: { id: "user-1", email: "singer@example.com" } } });
+  mockAdminGetUser.mockResolvedValue({ data: { user: null } });
 });
 
 describe("POST /api/auth/complete", () => {
@@ -90,5 +96,21 @@ describe("POST /api/auth/complete", () => {
     const res = await POST(req({ inviteToken: "tok123" }));
     const body = await res.json();
     expect(body.jamId).toBe("jam-9");
+  });
+
+  it("authenticates via a Bearer token when there's no cookie session (native clients)", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    mockAdminGetUser.mockResolvedValue({ data: { user: { id: "user-1", email: "singer@example.com" } } });
+    tables.profiles = [{ data: { username: "existing" }, error: null }];
+    const res = await POST(req({}, { Authorization: "Bearer good-token" }));
+    expect(res.status).toBe(200);
+    expect(mockAdminGetUser).toHaveBeenCalledWith("good-token");
+  });
+
+  it("returns 401 when the Bearer token is invalid and there's no cookie session", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    mockAdminGetUser.mockResolvedValue({ data: { user: null } });
+    const res = await POST(req({}, { Authorization: "Bearer bad-token" }));
+    expect(res.status).toBe(401);
   });
 });

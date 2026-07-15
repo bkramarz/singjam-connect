@@ -1,8 +1,31 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 
 type Mode = 'signin' | 'signup' | 'reset';
+
+const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+
+if (googleWebClientId) {
+  GoogleSignin.configure({ webClientId: googleWebClientId, iosClientId: googleIosClientId });
+}
+
+async function completeAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+  fetch(`${process.env.EXPO_PUBLIC_WEB_URL}/api/auth/complete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({}),
+  }).catch(() => {});
+}
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -47,6 +70,54 @@ export default function AuthScreen() {
         : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'singjam://' } });
     if (error) setError(error.message);
     setLoading(false);
+  }
+
+  async function handleAppleSignIn() {
+    setError(null);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) throw new Error('No identity token returned from Apple.');
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+      setLoading(false);
+      if (error) { setError(error.message); return; }
+      completeAuth();
+    } catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') setError(e.message ?? 'Apple sign-in failed.');
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    try {
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+      if (!isSuccessResponse(response)) return;
+      const idToken = response.data.idToken;
+      if (!idToken) throw new Error('No ID token returned from Google.');
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+      setLoading(false);
+      if (error) { setError(error.message); return; }
+      completeAuth();
+    } catch (e) {
+      if (isErrorWithCode(e)) {
+        if (e.code !== statusCodes.SIGN_IN_CANCELLED) setError('Google sign-in failed.');
+      } else {
+        setError('Google sign-in failed.');
+      }
+    }
   }
 
   if (mode === 'reset') {
@@ -112,6 +183,35 @@ export default function AuthScreen() {
       <View className="flex-1 justify-center px-6">
         <Text className="text-3xl font-bold text-slate-900 mb-2">SingJam</Text>
         <Text className="text-slate-500 mb-8">Find your next jam session.</Text>
+
+        {googleWebClientId && (
+          <TouchableOpacity
+            className="flex-row items-center justify-center gap-2.5 border border-slate-200 rounded-lg py-3 mb-3"
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+          >
+            <Ionicons name="logo-google" size={18} color="#4285F4" />
+            <Text className="text-slate-700 font-medium">Continue with Google</Text>
+          </TouchableOpacity>
+        )}
+
+        {Platform.OS === 'ios' && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={8}
+            style={{ width: '100%', height: 44, marginBottom: 16 }}
+            onPress={handleAppleSignIn}
+          />
+        )}
+
+        {(googleWebClientId || Platform.OS === 'ios') && (
+          <View className="flex-row items-center gap-3 mb-4">
+            <View className="h-px flex-1 bg-slate-200" />
+            <Text className="text-xs text-slate-400">or</Text>
+            <View className="h-px flex-1 bg-slate-200" />
+          </View>
+        )}
 
         <TextInput
           className="border border-slate-200 rounded-lg px-4 py-3 mb-3 text-slate-900"

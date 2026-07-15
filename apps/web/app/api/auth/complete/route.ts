@@ -7,7 +7,11 @@ import { syncContact } from "@/lib/activecampaign";
 // create the profile and link any invite token, mirroring the callback route.
 export async function POST(req: Request) {
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = (await supabase.auth.getUser()).data.user ?? null;
+  if (!user) {
+    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (bearer) user = (await supabaseAdmin().auth.getUser(bearer)).data.user ?? null;
+  }
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { inviteToken } = await req.json().catch(() => ({}));

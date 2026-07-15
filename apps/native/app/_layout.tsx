@@ -46,7 +46,16 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (!session) setProfileComplete(null);
+      if (!session) {
+        setProfileComplete(null);
+        return;
+      }
+      supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data }) => setProfileComplete(!!data?.display_name));
     });
 
     // Refresh session when app returns to foreground (mirrors web's visibilitychange handler)
