@@ -49,7 +49,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!canLink) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const { error } = await supabase.from("sets").update({ jam_id: jamId }).eq("id", setId);
+  // Use admin here: app-level authorization is already verified above, but the
+  // "sets_update" RLS policy only allows the set's owner — a non-owning editor
+  // collaborator's own session would otherwise silently no-op this write.
+  const { error } = await admin.from("sets").update({ jam_id: jamId }).eq("id", setId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const [rsvpRes, existingCollabRes] = await Promise.all([
@@ -94,7 +97,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { error } = await supabase.from("sets").update({ jam_id: null }).eq("jam_id", jamId);
+  // Same reasoning as PUT above — the caller (host/co-host) may not own the
+  // linked set, so this must bypass the owner-only "sets_update" RLS policy.
+  const { error } = await admin.from("sets").update({ jam_id: null }).eq("jam_id", jamId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });
