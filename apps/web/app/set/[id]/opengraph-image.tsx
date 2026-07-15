@@ -64,15 +64,17 @@ export default async function Image({ params }: { params: { id: string } }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 22,
               }}
             >
-              🎵
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+              </svg>
             </div>
             <span style={{ fontSize: 24, fontWeight: 700, color: "#f8fafc" }}>SingJam</span>
           </div>
           <div
             style={{
+              display: "flex",
               padding: "8px 18px",
               borderRadius: 999,
               border: "1.5px solid #334155",
@@ -90,6 +92,7 @@ export default async function Image({ params }: { params: { id: string } }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div
             style={{
+              display: "flex",
               fontSize: name.length > 40 ? 52 : name.length > 25 ? 64 : 76,
               fontWeight: 800,
               color: "#f8fafc",
@@ -116,6 +119,7 @@ export default async function Image({ params }: { params: { id: string } }) {
             {songCount > 0 && (
               <div
                 style={{
+                  display: "flex",
                   padding: "8px 18px",
                   borderRadius: 999,
                   background: "#1e293b",
@@ -130,6 +134,7 @@ export default async function Image({ params }: { params: { id: string } }) {
             {owner && (
               <div
                 style={{
+                  display: "flex",
                   padding: "8px 18px",
                   borderRadius: 999,
                   background: "rgba(245,158,11,0.12)",
