@@ -1034,6 +1034,13 @@ export default function SongEditor({
                   </div>
                 )}
               </section>
+
+              {/* Additional notes */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+                <h2 className="text-sm font-semibold text-slate-700">Additional notes</h2>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+                  className="input min-h-[80px] resize-y" placeholder="Any extra context, performance notes, etc." />
+              </section>
             </>
           );
         })()}

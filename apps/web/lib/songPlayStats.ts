@@ -1,3 +1,5 @@
+import type { supabaseServer } from "@/lib/supabase/server";
+
 export type JamForStats = {
   id: string;
   name: string | null;
@@ -73,4 +75,22 @@ export function computeSongPlayStats(jams: JamForStats[]): SongPlayStat[] {
     b.lastPlayedAt.localeCompare(a.lastPlayedAt) ||
     a.title.localeCompare(b.title)
   );
+}
+
+export async function getSongHistoryStats(
+  supabase: Awaited<ReturnType<typeof supabaseServer>>
+): Promise<SongPlayStat[]> {
+  const { data } = await supabase
+    .from("sets")
+    .select(`
+      jams!inner(id, name, starts_at),
+      set_songs!inner(
+        songs(id, title, slug, display_artist)
+      )
+    `)
+    .eq("jams.visibility", "official")
+    .lte("jams.starts_at", new Date().toISOString())
+    .eq("set_songs.played", true);
+
+  return computeSongPlayStats(toJamsForStats((data ?? []) as unknown as LinkedSetRow[]));
 }
