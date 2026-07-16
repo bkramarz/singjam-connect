@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Song History",
 };
 
-export default async function SongHistoryPage() {
+export default async function SongEditorHistoryPage() {
   const supabase = await supabaseServer();
   const stats = await getSongHistoryStats(supabase);
 

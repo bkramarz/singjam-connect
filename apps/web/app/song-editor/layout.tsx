@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerUser, getServerUserRole } from "@/lib/supabase/cached";
+import Link from "next/link";
 
 export default async function SongEditorLayout({ children }: { children: React.ReactNode }) {
   const user = await getServerUser();
@@ -11,10 +12,18 @@ export default async function SongEditorLayout({ children }: { children: React.R
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-4 border-b border-slate-200 pb-4">
-        <span className="rounded-md bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">
+      <div className="mb-6 flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:gap-4">
+        <span className="w-fit rounded-md bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">
           Song Editor
         </span>
+        <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+          <Link href="/song-editor" className="text-slate-600 hover:text-slate-900">
+            Song Links
+          </Link>
+          <Link href="/song-editor/history" className="text-slate-600 hover:text-slate-900">
+            Song History
+          </Link>
+        </nav>
       </div>
       {children}
     </div>
