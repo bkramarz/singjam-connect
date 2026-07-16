@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
@@ -53,15 +53,18 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
   const mapZoom = showFullAddress ? 16 : 13;
 
   return (
-    <div className="pb-10">
+    <div>
       {/* Hero image */}
       {jam.image_url && (
-        <div className="relative mb-6 overflow-hidden rounded-2xl bg-black" style={{ height: 320 }}>
+        <div
+          className="relative mb-6 overflow-hidden rounded-2xl bg-black"
+          style={{ height: 320, "--focal-point": jam.image_focal_point ?? "50% 50%" } as CSSProperties}
+        >
           <Image
             src={jam.image_url}
             alt={jam.name ?? "Event"}
             fill
-            className="object-contain"
+            className="object-contain sm:object-cover sm:object-[var(--focal-point)]"
             sizes="(max-width: 896px) 100vw, 896px"
             priority
           />
