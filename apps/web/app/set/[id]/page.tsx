@@ -98,6 +98,7 @@ export default async function SetPage({
 
   const isOwner = user?.id === set.owner_user_id;
   const isAdmin = (profileRes as any)?.data?.role === "admin";
+  const isSongEditor = (profileRes as any)?.data?.role === "song_editor";
   const currentUserSingingVoice: string | null = (profileRes as any)?.data?.singing_voice ?? null;
 
   // Auto-join for 'link' mode — logged-in users are added as viewers on first visit
@@ -163,7 +164,7 @@ export default async function SetPage({
   const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && c.role === "editor");
 
   // Gate by visibility mode
-  if (!isOwner && !isCollaborator && !isAdmin) {
+  if (!isOwner && !isCollaborator && !isAdmin && !isSongEditor) {
     if (set.link_sharing === "private") {
       return <SetRequestAccess setId={set.id} setName={set.name} isLoggedIn={!!user} inviteToken={inviteToken} />;
     }
@@ -213,6 +214,7 @@ export default async function SetPage({
         canEdit={isOwner || isEditorCollaborator}
         isOwner={isOwner}
         isAdmin={isAdmin}
+        isSongEditor={isSongEditor}
         isPublicViewer={isPublicViewer}
         songKnowledge={songKnowledge}
         canAccessJam={canAccessJam}

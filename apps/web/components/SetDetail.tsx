@@ -45,6 +45,7 @@ export default function SetDetail({
   canEdit,
   isOwner,
   isAdmin,
+  isSongEditor = false,
   isPublicViewer = false,
   songKnowledge: initialSongKnowledge = [],
   canAccessJam = false,
@@ -58,6 +59,7 @@ export default function SetDetail({
   canEdit: boolean;
   isOwner: boolean;
   isAdmin: boolean;
+  isSongEditor?: boolean;
   isPublicViewer?: boolean;
   songKnowledge?: { user_id: string; song_id: string; confidence: string }[];
   canAccessJam?: boolean;
@@ -1159,7 +1161,6 @@ export default function SetDetail({
               <div className="basis-full">
                 <SetInvitePanel
                   setId={set.id}
-                  isOwner={isOwner}
                   alreadyCollaboratorIds={collaborators.filter((c) => c.user_id).map((c) => c.user_id!)}
                   onCollaboratorAdded={(c) => setCollaborators((prev) => {
                     if (prev.some((existing) => existing.id === c.id)) return prev;
@@ -1467,7 +1468,7 @@ export default function SetDetail({
                     index={i}
                     canEdit={canEdit}
                     isAdmin={isAdmin}
-                    isHost={isOwner}
+                    isSongEditor={isSongEditor}
                     isPublicViewer={isPublicViewer}
                     participants={rowParticipants}
                     hasEligible={hasEligible}
@@ -1507,7 +1508,7 @@ export default function SetDetail({
                     index={originalIndex}
                     canEdit={canEdit}
                     isAdmin={isAdmin}
-                    isHost={isOwner}
+                    isSongEditor={isSongEditor}
                     isPublicViewer={isPublicViewer}
                     participants={rowParticipants}
                     hasEligible={hasEligible}

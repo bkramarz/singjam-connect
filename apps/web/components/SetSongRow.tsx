@@ -21,7 +21,7 @@ export default function SetSongRow({
   song,
   canEdit,
   isAdmin,
-  isHost,
+  isSongEditor = false,
   isPublicViewer,
   participants,
   hasEligible,
@@ -42,7 +42,7 @@ export default function SetSongRow({
   index: number;
   canEdit: boolean;
   isAdmin: boolean;
-  isHost: boolean;
+  isSongEditor?: boolean;
   isPublicViewer: boolean;
   participants: Participant[];
   hasEligible: boolean;
@@ -248,7 +248,7 @@ export default function SetSongRow({
                 <span className="text-xs font-medium text-zinc-600">Chords</span>
               </a>
             </>
-          ) : isAdmin ? (
+          ) : isAdmin || isSongEditor ? (
             <>
               <button
                 onClick={() => toggleAdding("chord")}
@@ -308,20 +308,20 @@ export default function SetSongRow({
         </div>
       </div>
 
-      {(leadParticipants.length > 0 || supportParticipants.length > 0 || (isHost && participants.length > 0)) && (
+      {(leadParticipants.length > 0 || supportParticipants.length > 0 || (canEdit && participants.length > 0)) && (
         <div className="space-y-1">
-          {(leadParticipants.length > 0 || (isHost && participants.length > 0)) && (
+          {(leadParticipants.length > 0 || (canEdit && participants.length > 0)) && (
             <div className="flex items-start gap-1.5">
               <span className="shrink-0 text-[10px] text-amber-500 font-medium pt-0.5">Lead</span>
               <div className="flex flex-wrap gap-1 flex-1">
-                {isHost && leaderIds.length === 0 && !hasEligible && (
+                {canEdit && leaderIds.length === 0 && !hasEligible && (
                   <span className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-xs font-medium text-amber-500">
                     No leader
                   </span>
                 )}
                 {leadParticipants.map((p) => {
                   const isLeader = leaderIds.includes(p.user_id);
-                  const isClickable = isHost && participantKnowledge.get(p.user_id) === "lead";
+                  const isClickable = canEdit && participantKnowledge.get(p.user_id) === "lead";
                   const firstName = p.display_name ?? p.username ?? "?";
                   const label = p.last_name ? `${firstName} ${p.last_name[0].toUpperCase()}.` : firstName;
                   const pillStyle = isLeader ? "bg-amber-400 text-white" : "bg-amber-100 text-amber-700";

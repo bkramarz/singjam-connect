@@ -18,7 +18,7 @@ export async function POST(
   if (!inviteeUserId && !inviteeEmail) {
     return NextResponse.json({ error: "Provide inviteeUserId or inviteeEmail" }, { status: 400 });
   }
-  let collaboratorRole: "editor" | "viewer" = role === "viewer" ? "viewer" : "editor";
+  const collaboratorRole: "editor" | "viewer" = role === "viewer" ? "viewer" : "editor";
 
   const admin = supabaseAdmin();
 
@@ -41,9 +41,6 @@ export async function POST(
       .maybeSingle();
     if (!collab) return NextResponse.json({ error: "Only editors can invite collaborators" }, { status: 403 });
   }
-
-  // Non-owners can only invite as editor regardless of what was requested
-  if (!isOwner) collaboratorRole = "editor";
 
   const { data: inviterProfile } = await admin
     .from("profiles")
