@@ -160,22 +160,34 @@ describe("POST /api/sets/[id]/invite", () => {
   });
 
   describe("role enforcement", () => {
-    it("forces editor role when a non-owner invites, regardless of the requested role", async () => {
+    it("lets a non-owner editor collaborator invite someone as viewer", async () => {
       mockGetUser.mockResolvedValue({ data: { user: { id: "editor-1" } } });
       mockAdminFrom
         .mockReturnValueOnce(chain({ data: setRow }))                  // sets
         .mockReturnValueOnce(chain({ data: { id: "editor-collab" } })) // editor check
         .mockReturnValueOnce(chain({ data: inviterProfile }))           // profiles
         .mockReturnValueOnce(chain({ data: null }))                     // existing check
-        .mockReturnValueOnce(chain({ data: { ...newCollab, role: "editor" } })); // insert
+        .mockReturnValueOnce(chain({ data: { ...newCollab, role: "viewer" } })); // insert
       const res = await POST(
         req("set-1", { inviteeUserId: "user-2", role: "viewer" }),
         { params: Promise.resolve({ id: "set-1" }) }
       );
       expect(res.status).toBe(200);
-      // The insert (5th from() call) must have been called with role: "editor", not "viewer"
+      // The insert (5th from() call) must honor the requested role: "viewer"
       const insertChain = mockAdminFrom.mock.results[4].value;
-      expect(insertChain.insert).toHaveBeenCalledWith(expect.objectContaining({ role: "editor" }));
+      expect(insertChain.insert).toHaveBeenCalledWith(expect.objectContaining({ role: "viewer" }));
+    });
+
+    it("rejects invites from an accepted collaborator who is only a viewer", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: { id: "viewer-1" } } });
+      mockAdminFrom
+        .mockReturnValueOnce(chain({ data: setRow }))     // sets
+        .mockReturnValueOnce(chain({ data: null }));      // editor check finds no editor row
+      const res = await POST(
+        req("set-1", { inviteeUserId: "user-2", role: "editor" }),
+        { params: Promise.resolve({ id: "set-1" }) }
+      );
+      expect(res.status).toBe(403);
     });
   });
 

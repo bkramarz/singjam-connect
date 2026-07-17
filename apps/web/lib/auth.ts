@@ -4,7 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 type SupabaseServer = Awaited<ReturnType<typeof supabaseServer>>;
 
-type AuthSuccess = { ok: true; supabase: SupabaseServer; user: User };
+type AuthSuccess = { ok: true; supabase: SupabaseServer; user: User; role?: string };
 type AuthFailure = { ok: false; response: NextResponse };
 
 export async function requireRole(
@@ -33,7 +33,7 @@ export async function requireRole(
     };
   }
 
-  return { ok: true, supabase, user };
+  return { ok: true, supabase, user, role: profile.role };
 }
 
 export async function requireAuth(): Promise<AuthSuccess | AuthFailure> {

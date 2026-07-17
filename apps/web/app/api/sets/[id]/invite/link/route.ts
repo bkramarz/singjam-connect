@@ -30,12 +30,12 @@ export async function POST(
       .eq("set_id", setId)
       .eq("user_id", user.id)
       .eq("status", "accepted")
+      .eq("role", "editor")
       .maybeSingle();
-    if (!collab) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!collab) return NextResponse.json({ error: "Only editors can invite collaborators" }, { status: 403 });
   }
 
-  // Non-owners can only issue editor links
-  const role: "editor" | "viewer" = isOwner && body.role === "viewer" ? "viewer" : "editor";
+  const role: "editor" | "viewer" = body.role === "viewer" ? "viewer" : "editor";
 
   const { data: inserted } = await admin
     .from("set_collaborators")
