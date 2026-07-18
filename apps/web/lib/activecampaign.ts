@@ -75,12 +75,12 @@ async function acFetch(path: string, options: RequestInit) {
       ...(options.headers ?? {}),
     },
   });
+  const text = await res.text();
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.error(`[ActiveCampaign] ${options.method ?? "GET"} ${path} → ${res.status}`, body);
+    console.error(`[ActiveCampaign] ${options.method ?? "GET"} ${path} → ${res.status}`, text);
     return null;
   }
-  return res.json();
+  return text ? JSON.parse(text) : {};
 }
 
 export interface ContactProfile {
@@ -189,6 +189,23 @@ export async function syncContact(email: string, profile: ContactProfile = {}): 
   }
 
   return failed;
+}
+
+// Permanently removes the contact from ActiveCampaign. Safe to call for
+// emails with no matching contact — treated as already-deleted, not a failure.
+export async function deleteContact(email: string): Promise<boolean> {
+  if (!AC_API_URL || !AC_API_KEY) return true;
+
+  const found = await acFetch(`/contacts?email=${encodeURIComponent(email)}`, { method: "GET" });
+  const contactId: string | undefined = found?.contacts?.[0]?.id;
+  if (!contactId) return true;
+
+  const result = await acFetch(`/contacts/${contactId}`, { method: "DELETE" });
+  if (result === null) {
+    console.error(`[ActiveCampaign] failed to delete contact ${contactId} for ${email}`);
+    return false;
+  }
+  return true;
 }
 
 async function notifyAdminOfSyncFailure(userEmail: string, failures: string[]) {
