@@ -302,8 +302,7 @@ export default function SongLibraryScreen() {
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setUserId(user.id);
+      setUserId(user?.id ?? null);
 
       const [songsRes, popularityRes, myRes] = await Promise.all([
         supabase.from('songs').select(`
@@ -314,7 +313,9 @@ export default function SongLibraryScreen() {
           song_themes ( themes ( name ) )
         `).order('title').limit(1000),
         supabase.rpc('song_popularity_counts'),
-        supabase.from('user_songs').select('song_id').eq('user_id', user.id),
+        user
+          ? supabase.from('user_songs').select('song_id').eq('user_id', user.id)
+          : Promise.resolve({ data: null }),
       ]);
 
       setMyIds(new Set((myRes.data ?? []).map((r: any) => r.song_id)));
@@ -394,7 +395,7 @@ export default function SongLibraryScreen() {
   }, [query, allSongs, searchResults, filters, myIds]);
 
   async function addSong(song: SongMeta, confidence: string) {
-    if (!userId) return;
+    if (!userId) { router.push('/(auth)/sign-in' as any); return; }
     setPendingId(song.song_id);
     const { error } = await supabase.from('user_songs').upsert(
       { user_id: userId, song_id: song.song_id, confidence, updated_at: new Date().toISOString() },

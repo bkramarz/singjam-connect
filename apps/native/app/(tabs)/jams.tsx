@@ -31,8 +31,7 @@ export default function JamsScreen() {
     if (isRefresh) setRefreshing(true);
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setUserId(user.id);
+    setUserId(user?.id ?? null);
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -49,14 +48,12 @@ export default function JamsScreen() {
         .gte('starts_at', thirtyDaysAgo.toISOString())
         .order('starts_at')
         .limit(100),
-      supabase
-        .from('jam_rsvps')
-        .select('jam_id, status')
-        .eq('user_id', user.id),
-      supabase
-        .from('jam_invites')
-        .select('jam_id, status')
-        .eq('invited_user_id', user.id),
+      user
+        ? supabase.from('jam_rsvps').select('jam_id, status').eq('user_id', user.id)
+        : Promise.resolve({ data: null }),
+      user
+        ? supabase.from('jam_invites').select('jam_id, status').eq('invited_user_id', user.id)
+        : Promise.resolve({ data: null }),
     ]);
 
     const rsvpMap = new Map(
@@ -114,7 +111,7 @@ export default function JamsScreen() {
       <View className="px-4 pt-14 pb-3 border-b border-slate-100 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-slate-900">Jams</Text>
         <TouchableOpacity
-          onPress={() => router.push('/jam/new' as any)}
+          onPress={() => router.push((userId ? '/jam/new' : '/(auth)/sign-in') as any)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           className="w-8 h-8 rounded-full bg-amber-500 items-center justify-center"
         >

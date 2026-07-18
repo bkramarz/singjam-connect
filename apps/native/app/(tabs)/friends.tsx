@@ -5,7 +5,9 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import InviteToJamModal from '@/components/InviteToJamModal';
+import SignInPrompt from '@/components/SignInPrompt';
 
 type Match = {
   user_id: string;
@@ -218,6 +220,9 @@ export default function FriendsScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to see your matches" />;
 
   function handleSearchChange(text: string) {
     setQuery(text);

@@ -24,6 +24,15 @@ Use a hybrid of conventional and descriptive style:
 - Keep solutions simple — do not add features, abstractions, or refactors beyond what was asked
 - Do not add comments unless the logic is genuinely non-obvious
 
+## Web / Native Parity
+
+The native app (`apps/native`) is the mobile companion to the web app (`apps/web`). It should look and behave like the mobile web experience, plus native-only capabilities (local data caching, push notifications).
+
+- Before building or changing a native screen, review the mobile web version of the same page and match its behavior and visual hierarchy
+- Business rules must live in exactly one place — a web API route, a Supabase RPC, or `packages/core` — never implemented separately in both apps
+- When changing a shared flow (RSVPs, invites, notifications, repertoire or set mutations), grep the other app for the same logic and update both sides in the same PR
+- Pure helpers (formatting, sorting, search normalization) belong in `packages/core`, with their tests in the package
+
 ## Database
 
 - All schema changes **must** include a new migration file in `supabase/migrations/`

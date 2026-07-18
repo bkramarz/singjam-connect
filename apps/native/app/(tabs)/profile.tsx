@@ -4,6 +4,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import SignInPrompt from '@/components/SignInPrompt';
 
 type Profile = {
   display_name: string | null;
@@ -63,6 +65,9 @@ export default function ProfileScreen() {
       load();
     }, [])
   );
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to see your profile" />;
 
   async function uploadAvatar(asset: ImagePicker.ImagePickerAsset) {
     setUploadingAvatar(true);

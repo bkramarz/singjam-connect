@@ -3,10 +3,10 @@ import '../global.css';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import type { Session } from '@supabase/supabase-js';
+import { AuthProvider, useAuth } from '@/lib/auth-context';
 
 async function handleAuthDeepLink(url: string) {
   // Email confirmation links arrive as singjam://#access_token=...&refresh_token=...
@@ -21,43 +21,12 @@ async function handleAuthDeepLink(url: string) {
   }
 }
 
-export default function RootLayout() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [initialised, setInitialised] = useState(false);
-  const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
+function RootNavigator() {
+  const { session, initialised, profileComplete, isGuest } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (session) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', session.user.id)
-          .single();
-        setProfileComplete(!!data?.display_name);
-      }
-      setInitialised(true);
-    }
-    init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (!session) {
-        setProfileComplete(null);
-        return;
-      }
-      supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', session.user.id)
-        .single()
-        .then(({ data }) => setProfileComplete(!!data?.display_name));
-    });
-
     // Refresh session when app returns to foreground (mirrors web's visibilitychange handler)
     const handleAppStateChange = (state: AppStateStatus) => {
       if (state === 'active') supabase.auth.startAutoRefresh();
@@ -70,7 +39,6 @@ export default function RootLayout() {
     const linkingSub = Linking.addEventListener('url', ({ url }) => handleAuthDeepLink(url));
 
     return () => {
-      subscription.unsubscribe();
       appStateSub.remove();
       linkingSub.remove();
     };
@@ -83,7 +51,7 @@ export default function RootLayout() {
     const inSetup = segments[0] === 'setup';
 
     if (!session) {
-      if (!inAuth) router.replace('/(auth)');
+      if (!inAuth && !isGuest) router.replace('/(auth)');
       return;
     }
 
@@ -96,10 +64,9 @@ export default function RootLayout() {
       if (profileComplete) router.replace('/(tabs)');
       else if (!inSetup) router.replace('/setup');
     }
-  }, [session, initialised, profileComplete, segments]);
+  }, [session, initialised, profileComplete, isGuest, segments]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -116,6 +83,15 @@ export default function RootLayout() {
       <Stack.Screen name="set/new" options={{ presentation: 'modal', title: 'New Set', headerTintColor: '#d97706' }} />
       <Stack.Screen name="song/[id]" options={{ headerTintColor: '#d97706' }} />
     </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }

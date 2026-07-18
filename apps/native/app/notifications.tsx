@@ -5,6 +5,8 @@ import {
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import SignInPrompt from '@/components/SignInPrompt';
 
 type Notification = {
   id: string;
@@ -117,6 +119,9 @@ export default function NotificationsScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to see your notifications" />;
 
   function handlePress(notif: Notification) {
     if (!notif.link) return;

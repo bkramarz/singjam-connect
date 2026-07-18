@@ -4,9 +4,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { matchesSearch, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import SongRow from '@/components/SongRow';
 import AddSongModal from '@/components/AddSongModal';
 import AddToSetModal from '@/components/AddToSetModal';
+import SignInPrompt from '@/components/SignInPrompt';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -440,6 +442,9 @@ export default function RepertoireScreen() {
     ),
     [userId, songs, selectMode, selectedIds]
   );
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to see your repertoire" />;
 
   return (
     <View className="flex-1 bg-white">
