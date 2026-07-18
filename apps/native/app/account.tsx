@@ -6,6 +6,8 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
+
 type Section = 'none' | 'email' | 'password' | 'delete';
 
 export default function AccountScreen() {
@@ -62,10 +64,20 @@ export default function AccountScreen() {
   async function deleteAccount() {
     setDeleting(true);
     setDeleteError(null);
-    const { error } = await supabase.rpc('delete_own_account');
-    if (error) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       setDeleting(false);
-      setDeleteError(error.message);
+      setDeleteError('You must be signed in.');
+      return;
+    }
+    const res = await fetch(`${WEB_URL}/api/account/delete`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setDeleting(false);
+      setDeleteError(body.error ?? 'Failed to delete account.');
       return;
     }
     await supabase.auth.signOut();

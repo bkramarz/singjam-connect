@@ -1,17 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { deleteContact } from "@/lib/activecampaign";
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   try {
+    const admin = supabaseAdmin();
     const supabase = await supabaseServer();
-    const { data: { user } } = await supabase.auth.getUser();
+    let user = (await supabase.auth.getUser()).data.user ?? null;
+    if (!user) {
+      const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+      if (bearer) user = (await admin.auth.getUser(bearer)).data.user ?? null;
+    }
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const admin = supabaseAdmin();
+    if (user.email) {
+      await deleteContact(user.email).catch(() => {});
+    }
+
     const { error } = await admin.auth.admin.deleteUser(user.id);
 
     if (error) {
