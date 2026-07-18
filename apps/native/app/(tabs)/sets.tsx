@@ -5,6 +5,8 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import SignInPrompt from '@/components/SignInPrompt';
 
 type SetItem = {
   id: string;
@@ -159,6 +161,9 @@ export default function SetsScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to see your sets" />;
 
   return (
     <View className="flex-1 bg-slate-50">

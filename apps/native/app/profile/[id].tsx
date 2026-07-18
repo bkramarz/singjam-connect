@@ -6,6 +6,8 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import SignInPrompt from '@/components/SignInPrompt';
 import { fetchProfileSongs } from '@singjam/core';
 import InviteToJamModal from '@/components/InviteToJamModal';
 
@@ -80,6 +82,9 @@ export default function UserProfileScreen() {
     }
     if (id) load();
   }, [id]);
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to view profiles" />;
 
   const fullName = profile ? [profile.display_name, profile.last_name].filter(Boolean).join(' ') : '';
   const displayName = fullName || profile?.username || '';

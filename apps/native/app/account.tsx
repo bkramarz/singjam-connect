@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import SignInPrompt from '@/components/SignInPrompt';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -32,6 +34,9 @@ export default function AccountScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const router = useRouter();
+
+  const { session, initialised } = useAuth();
+  if (initialised && !session) return <SignInPrompt message="Sign in to manage your account" />;
 
   function openSection(section: Section) {
     setOpen(section);

@@ -307,7 +307,8 @@ export default function SongDetailScreen() {
   }
 
   async function handleAddToRepertoire() {
-    if (!myUserId || !song) return;
+    if (!song) return;
+    if (!myUserId) { router.push('/(auth)/sign-in' as any); return; }
     const options = ['Lead', 'Support', 'Learn', 'Cancel'];
     const values = ['lead', 'support', 'learn'];
 
@@ -495,14 +496,14 @@ export default function SongDetailScreen() {
                   <Text className="text-slate-600 text-sm font-medium">Add to set</Text>
                 </TouchableOpacity>
               </>
-            ) : myUserId ? (
+            ) : (
               <TouchableOpacity
                 onPress={handleAddToRepertoire}
                 className="bg-amber-500 rounded-full px-4 py-2"
               >
                 <Text className="text-white text-sm font-semibold">+ Add to repertoire</Text>
               </TouchableOpacity>
-            ) : null}
+            )}
           </View>
         </View>
 

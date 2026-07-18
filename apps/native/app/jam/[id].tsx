@@ -274,8 +274,7 @@ export default function JamDetailScreen() {
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setMyUserId(user.id);
+    setMyUserId(user?.id ?? null);
 
     const [jamResult, rsvpsResult, inviteResult, setsResult] = await Promise.all([
       supabase
@@ -294,12 +293,9 @@ export default function JamDetailScreen() {
         .eq('jam_id', id)
         .in('status', ['attending', 'waitlist'])
         .limit(30),
-      supabase
-        .from('jam_invites')
-        .select('status')
-        .eq('jam_id', id)
-        .eq('invited_user_id', user.id)
-        .maybeSingle(),
+      user
+        ? supabase.from('jam_invites').select('status').eq('jam_id', id).eq('invited_user_id', user.id).maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase
         .from('sets')
         .select('id, name')
@@ -343,7 +339,7 @@ export default function JamDetailScreen() {
     }));
 
     setAttendees(rawRsvps.filter(r => r.status === 'attending'));
-    const myRsvp = rawRsvps.find(r => r.user_id === user.id);
+    const myRsvp = user ? rawRsvps.find(r => r.user_id === user.id) : undefined;
     setMyRsvpStatus(myRsvp?.status ?? null);
     setMyInviteStatus(inviteResult.data?.status ?? null);
     setJamSets((setsResult.data ?? []).map((s: any) => ({ id: s.id, name: s.name })));
@@ -351,7 +347,8 @@ export default function JamDetailScreen() {
   }
 
   async function handleRsvp() {
-    if (!myUserId || !jam) return;
+    if (!jam) return;
+    if (!myUserId) { router.push('/(auth)/sign-in' as any); return; }
     if (jam.visibility === 'official') {
       Alert.alert('External ticketing', 'Official SingJam events use external ticketing.');
       return;
