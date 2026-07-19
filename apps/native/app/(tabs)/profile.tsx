@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
+import BrandHeader from '@/components/BrandHeader';
 
 type Profile = {
   display_name: string | null;
@@ -33,7 +34,7 @@ const SINGING_LABEL: Record<string, string> = {
 
 function SkeletonProfile() {
   return (
-    <View className="items-center pt-14 pb-6 border-b border-slate-100">
+    <View className="items-center pt-6 pb-6 border-b border-slate-100">
       <View className="w-20 h-20 rounded-full bg-slate-200 mb-3" />
       <View className="h-5 bg-slate-200 rounded w-36 mb-2" />
       <View className="h-4 bg-slate-100 rounded w-24" />
@@ -153,16 +154,9 @@ export default function ProfileScreen() {
     : [];
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="flex-row justify-end px-4 pt-14 pb-0">
-        <TouchableOpacity
-          onPress={() => router.push('/notifications' as any)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="notifications-outline" size={22} color="#64748b" />
-        </TouchableOpacity>
-      </View>
-
+    <View className="flex-1 bg-white">
+      <BrandHeader />
+      <ScrollView className="flex-1">
       {loading ? (
         <SkeletonProfile />
       ) : (
@@ -231,6 +225,7 @@ export default function ProfileScreen() {
           <Text className="text-red-500 font-medium">Sign out</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

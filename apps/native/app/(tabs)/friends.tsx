@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import InviteToJamModal from '@/components/InviteToJamModal';
 import SignInPrompt from '@/components/SignInPrompt';
+import BrandHeader from '@/components/BrandHeader';
 
 type Match = {
   user_id: string;
@@ -262,7 +263,8 @@ export default function FriendsScreen() {
         onClose={() => setInviteTarget(null)}
       />
 
-      <View className="px-4 pt-14 pb-3 bg-white border-b border-slate-100">
+      <BrandHeader />
+      <View className="px-4 pt-4 pb-3 bg-white border-b border-slate-100">
         <Text className="text-2xl font-bold text-slate-900 mb-3">Find jammers</Text>
         <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
           <Text className="text-slate-400 mr-2">🔍</Text>
