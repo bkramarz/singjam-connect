@@ -16,15 +16,7 @@ type Profile = {
   singing_voice: string | null;
   neighborhood: string | null;
   instrument_levels: Record<string, string> | null;
-};
-
-type InstrumentLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'Professional';
-
-const LEVEL_STYLE: Record<InstrumentLevel, string> = {
-  Beginner: 'bg-slate-100 text-slate-500',
-  Intermediate: 'bg-sky-50 text-sky-700',
-  Advanced: 'bg-amber-50 text-amber-700',
-  Professional: 'bg-green-50 text-green-700',
+  favorite_genres: string[] | null;
 };
 
 const SINGING_LABEL: Record<string, string> = {
@@ -32,12 +24,33 @@ const SINGING_LABEL: Record<string, string> = {
   backup: 'Backup vocals',
 };
 
+// Matches web's voiceBadgeClass in @singjam/core
+const VOICE_BADGE: Record<string, { box: string; text: string }> = {
+  lead: { box: 'bg-amber-50 border-amber-200', text: 'text-amber-700' },
+  backup: { box: 'bg-violet-50 border-violet-200', text: 'text-violet-700' },
+};
+
+function ProfileCard({ label, children }: { label?: string; children: React.ReactNode }) {
+  return (
+    <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
+      {label ? (
+        <Text className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-400">{label}</Text>
+      ) : null}
+      {children}
+    </View>
+  );
+}
+
 function SkeletonProfile() {
   return (
-    <View className="items-center pt-6 pb-6 border-b border-slate-100">
-      <View className="w-20 h-20 rounded-full bg-slate-200 mb-3" />
-      <View className="h-5 bg-slate-200 rounded w-36 mb-2" />
-      <View className="h-4 bg-slate-100 rounded w-24" />
+    <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
+      <View className="flex-row items-center" style={{ gap: 16 }}>
+        <View className="h-20 w-20 rounded-full bg-slate-200" />
+        <View className="flex-1 gap-2">
+          <View className="h-5 w-36 rounded bg-slate-200" />
+          <View className="h-4 w-24 rounded bg-slate-100" />
+        </View>
+      </View>
     </View>
   );
 }
@@ -57,7 +70,7 @@ export default function ProfileScreen() {
         setEmail(user.email ?? null);
         const { data } = await supabase
           .from('profiles')
-          .select('display_name, last_name, username, avatar_url, singing_voice, neighborhood, instrument_levels')
+          .select('display_name, last_name, username, avatar_url, singing_voice, neighborhood, instrument_levels, favorite_genres')
           .eq('id', user.id)
           .single();
         setProfile(data);
@@ -145,86 +158,119 @@ export default function ProfileScreen() {
   const displayName = fullName || email || '';
   const initial = displayName[0]?.toUpperCase() ?? '?';
 
-  const singingLabels = profile?.singing_voice
-    ? profile.singing_voice.split(',').filter(Boolean).map(v => SINGING_LABEL[v] ?? v)
+  const singingVoices = profile?.singing_voice
+    ? profile.singing_voice.split(',').filter(v => v && v !== 'none')
     : [];
 
   const instrumentEntries = profile?.instrument_levels
     ? Object.entries(profile.instrument_levels).filter(([, level]) => level)
     : [];
 
+  const favoriteGenres = [...(profile?.favorite_genres ?? [])].sort((a, b) => a.localeCompare(b));
+
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-slate-50">
       <BrandHeader />
-      <ScrollView className="flex-1">
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
       {loading ? (
         <SkeletonProfile />
       ) : (
-        <View className="items-center px-4 pt-4 pb-6 border-b border-slate-100">
-          <TouchableOpacity onPress={handleAvatarPress} className="relative mb-3">
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} className="w-20 h-20 rounded-full" />
-            ) : (
-              <View className="w-20 h-20 rounded-full bg-amber-500 items-center justify-center">
-                <Text className="text-white text-3xl font-semibold">{initial}</Text>
-              </View>
-            )}
-            {uploadingAvatar ? (
-              <View className="absolute inset-0 rounded-full bg-black/40 items-center justify-center">
-                <ActivityIndicator color="white" size="small" />
-              </View>
-            ) : (
-              <View className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-slate-700 items-center justify-center border-2 border-white">
-                <Ionicons name="camera" size={10} color="white" />
-              </View>
-            )}
-          </TouchableOpacity>
-          <Text className="text-xl font-bold text-slate-900">{displayName}</Text>
-          {profile?.username ? (
-            <Text className="text-slate-400 mt-1">@{profile.username}</Text>
-          ) : null}
-          {singingLabels.length > 0 ? (
-            <Text className="text-slate-400 text-sm mt-1">{singingLabels.join(' · ')}</Text>
-          ) : null}
-          {profile?.neighborhood ? (
-            <View className="flex-row items-center mt-1 gap-1">
-              <Ionicons name="location-outline" size={13} color="#94a3b8" />
-              <Text className="text-slate-400 text-sm">{profile.neighborhood}</Text>
-            </View>
-          ) : null}
-          {instrumentEntries.length > 0 ? (
-            <View className="flex-row flex-wrap justify-center gap-2 mt-3 px-2">
-              {instrumentEntries.map(([name, level]) => {
-                const style = LEVEL_STYLE[level as InstrumentLevel] ?? 'bg-slate-100 text-slate-500';
-                const [bgStyle, textStyle] = style.split(' ');
-                return (
-                  <View key={name} className={`flex-row items-center px-2.5 py-1 rounded-full ${bgStyle}`}>
-                    <Text className={`text-xs font-medium ${textStyle}`}>{name} · {level}</Text>
+        <>
+          <ProfileCard>
+            <View className="flex-row items-center" style={{ gap: 16 }}>
+              <TouchableOpacity onPress={handleAvatarPress} className="relative">
+                {profile?.avatar_url ? (
+                  <Image source={{ uri: profile.avatar_url }} className="h-20 w-20 rounded-full" />
+                ) : (
+                  <View className="h-20 w-20 items-center justify-center rounded-full bg-zinc-100">
+                    <Text className="text-3xl text-zinc-400">{initial}</Text>
                   </View>
-                );
-              })}
+                )}
+                {uploadingAvatar ? (
+                  <View className="absolute inset-0 items-center justify-center rounded-full bg-black/40">
+                    <ActivityIndicator color="white" size="small" />
+                  </View>
+                ) : (
+                  <View className="absolute bottom-0 right-0 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-slate-700">
+                    <Ionicons name="camera" size={10} color="white" />
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View className="min-w-0 flex-1">
+                <Text className="text-xl font-semibold text-zinc-900" numberOfLines={1}>{displayName}</Text>
+                {profile?.username ? (
+                  <Text className="text-sm text-zinc-500">@{profile.username}</Text>
+                ) : null}
+                {profile?.neighborhood ? (
+                  <Text className="mt-1 text-sm text-zinc-500">{profile.neighborhood}</Text>
+                ) : null}
+              </View>
             </View>
-          ) : null}
-        </View>
+          </ProfileCard>
+
+          {singingVoices.length > 0 && (
+            <ProfileCard label="Singing">
+              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                {singingVoices.map((v) => {
+                  const badge = VOICE_BADGE[v] ?? { box: 'bg-zinc-50 border-zinc-200', text: 'text-zinc-600' };
+                  return (
+                    <View key={v} className={`rounded-full border px-3 py-1 ${badge.box}`}>
+                      <Text className={`text-sm ${badge.text}`}>{SINGING_LABEL[v] ?? v}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </ProfileCard>
+          )}
+
+          {instrumentEntries.length > 0 && (
+            <ProfileCard label="Instruments">
+              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                {instrumentEntries.map(([name, level]) => (
+                  <View key={name} className="flex-row items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1" style={{ gap: 6 }}>
+                    <Text className="text-sm font-medium text-zinc-700">{name}</Text>
+                    <Text className="text-sm text-zinc-400">·</Text>
+                    <Text className="text-sm text-zinc-500">{level}</Text>
+                  </View>
+                ))}
+              </View>
+            </ProfileCard>
+          )}
+
+          {favoriteGenres.length > 0 && (
+            <ProfileCard label="Favorite genres">
+              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                {favoriteGenres.map((g) => (
+                  <View key={g} className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1">
+                    <Text className="text-sm text-zinc-700">{g}</Text>
+                  </View>
+                ))}
+              </View>
+            </ProfileCard>
+          )}
+        </>
       )}
 
-      <View className="mt-6 mx-4 rounded-xl border border-slate-100 overflow-hidden">
+      <View className="mx-4 mt-6 flex-row" style={{ gap: 8 }}>
         <TouchableOpacity
           onPress={() => router.push('/profile-edit')}
-          className="px-4 py-4 border-b border-slate-100"
+          className="flex-1 items-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5"
         >
-          <Text className="text-slate-900 font-medium">Edit Profile</Text>
+          <Text className="text-sm text-zinc-600">Edit profile</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => router.push('/account' as any)}
-          className="px-4 py-4 border-b border-slate-100"
+          onPress={handleSignOut}
+          className="items-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5"
         >
-          <Text className="text-slate-900 font-medium">Account</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleSignOut} className="px-4 py-4">
-          <Text className="text-red-500 font-medium">Sign out</Text>
+          <Text className="text-sm text-zinc-600">Log out</Text>
         </TouchableOpacity>
       </View>
+      <TouchableOpacity
+        onPress={() => router.push('/account' as any)}
+        className="mx-4 mt-2 items-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5"
+      >
+        <Text className="text-sm text-zinc-600">Account settings</Text>
+      </TouchableOpacity>
       </ScrollView>
     </View>
   );
