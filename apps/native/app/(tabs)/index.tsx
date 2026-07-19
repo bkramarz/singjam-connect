@@ -9,6 +9,7 @@ import SongRow from '@/components/SongRow';
 import AddSongModal from '@/components/AddSongModal';
 import AddToSetModal from '@/components/AddToSetModal';
 import SignInPrompt from '@/components/SignInPrompt';
+import BrandHeader from '@/components/BrandHeader';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -456,8 +457,10 @@ export default function RepertoireScreen() {
         onClose={() => setFilterModalVisible(false)}
       />
 
+      <BrandHeader />
+
       {/* Header */}
-      <View className="flex-row items-center justify-between px-4 pt-14 pb-3 border-b border-slate-100">
+      <View className="flex-row items-center justify-between px-4 pt-4 pb-3 border-b border-slate-100">
         {selectMode ? (
           <>
             <TouchableOpacity onPress={exitSelectMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -492,9 +495,6 @@ export default function RepertoireScreen() {
                   <Text className="text-amber-600 font-medium text-sm">Select</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={() => router.push('/songs' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="search" size={22} color="#94a3b8" />
-              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setShowAdd(true)}
                 className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
