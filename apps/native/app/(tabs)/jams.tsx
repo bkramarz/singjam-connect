@@ -6,16 +6,16 @@ import { supabase } from '@/lib/supabase';
 import JamCard, { type JamItem } from '@/components/JamCard';
 import BrandHeader from '@/components/BrandHeader';
 
-type Section = { title: string; data: JamItem[] };
+type Section = { title: string; data: JamItem[]; hosting?: boolean };
 
 function SkeletonCard() {
   return (
-    <View className="flex-row px-4 py-3 border-b border-slate-100">
-      <View className="w-12 h-16 bg-slate-200 rounded-lg mr-3" />
-      <View className="flex-1 justify-center gap-2">
-        <View className="h-4 bg-slate-200 rounded w-3/4" />
-        <View className="h-3 bg-slate-100 rounded w-1/2" />
-        <View className="h-3 bg-slate-100 rounded w-2/3" />
+    <View className="mx-4 mb-3 flex-row overflow-hidden rounded-2xl border border-slate-100 bg-white">
+      <View className="w-20 bg-slate-100" />
+      <View className="flex-1 justify-center gap-2 p-4">
+        <View className="h-4 w-3/4 rounded bg-slate-200" />
+        <View className="h-3 w-1/2 rounded bg-slate-100" />
+        <View className="h-3 w-2/3 rounded bg-slate-100" />
       </View>
     </View>
   );
@@ -23,6 +23,7 @@ function SkeletonCard() {
 
 export default function JamsScreen() {
   const [sections, setSections] = useState<Section[]>([]);
+  const [hasHostingJams, setHasHostingJams] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -34,23 +35,25 @@ export default function JamsScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     setUserId(user?.id ?? null);
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Same 90-day lookback as web's JamsContent
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - 90);
 
     const [jamsResult, rsvpsResult, invitesResult] = await Promise.all([
       supabase
         .from('jams')
         .select(`
           id, name, visibility, starts_at, ends_at, timezone,
-          neighborhood, notes, image_url, capacity, host_user_id,
+          neighborhood, notes, image_url, tickets_url, capacity, host_user_id,
           profiles!host_user_id ( display_name, username ),
-          jam_genres ( genres ( name ) )
+          jam_genres ( genres ( name ) ),
+          jam_themes ( themes ( name ) )
         `)
-        .gte('starts_at', thirtyDaysAgo.toISOString())
-        .order('starts_at')
-        .limit(100),
+        .gte('starts_at', windowStart.toISOString())
+        .order('starts_at', { ascending: true })
+        .limit(200),
       user
-        ? supabase.from('jam_rsvps').select('jam_id, status').eq('user_id', user.id)
+        ? supabase.from('jam_rsvps').select('jam_id, status, waitlist_position').eq('user_id', user.id)
         : Promise.resolve({ data: null }),
       user
         ? supabase.from('jam_invites').select('jam_id, status').eq('invited_user_id', user.id)
@@ -58,7 +61,7 @@ export default function JamsScreen() {
     ]);
 
     const rsvpMap = new Map(
-      (rsvpsResult.data ?? []).map((r: { jam_id: string; status: string }) => [r.jam_id, r.status])
+      (rsvpsResult.data ?? []).map((r: any) => [r.jam_id, r])
     );
     const inviteMap = new Map(
       (invitesResult.data ?? []).map((i: { jam_id: string; status: string }) => [i.jam_id, i.status])
@@ -74,30 +77,62 @@ export default function JamsScreen() {
       neighborhood: j.neighborhood,
       notes: j.notes,
       image_url: j.image_url,
+      tickets_url: j.tickets_url,
       capacity: j.capacity,
       host_id: j.host_user_id,
       host_display_name: j.profiles?.display_name ?? null,
       host_username: j.profiles?.username ?? null,
-      genres: (j.jam_genres ?? []).map((jg: any) => jg.genres?.name).filter(Boolean),
-      rsvp_status: rsvpMap.get(j.id) ?? null,
+      tags: [
+        ...(j.jam_genres ?? []).map((jg: any) => jg.genres?.name),
+        ...(j.jam_themes ?? []).map((jt: any) => jt.themes?.name),
+      ].filter(Boolean),
+      rsvp_status: rsvpMap.get(j.id)?.status ?? null,
+      rsvp_waitlist_position: rsvpMap.get(j.id)?.waitlist_position ?? null,
       invite_status: inviteMap.get(j.id) ?? null,
     }));
 
-    const now = new Date();
-    const invited = items.filter(j => j.invite_status === 'pending');
-    const invitedIds = new Set(invited.map(j => j.id));
-    const upcoming = items.filter(j =>
-      !invitedIds.has(j.id) && j.starts_at && new Date(j.starts_at) >= now
-    );
-    const past = items.filter(j =>
-      j.starts_at && new Date(j.starts_at) < now
-    ).reverse();
+    // Section logic mirrors web's JamsContent
+    const now = new Date().toISOString();
+    const uid = user?.id ?? null;
+    const isUpcoming = (j: JamItem) => (j.ends_at ?? j.starts_at ?? '') >= now;
+
+    const hosting = uid
+      ? items.filter(j => j.visibility !== 'official' && j.host_id === uid && isUpcoming(j))
+      : [];
+    const upcomingOfficial = items.filter(j => j.visibility === 'official' && isUpcoming(j));
+    const invitations = uid
+      ? items.filter(j => j.host_id !== uid && j.invite_status === 'pending' && isUpcoming(j))
+      : [];
+    const community = uid
+      ? items.filter(j =>
+          j.visibility === 'community' && j.host_id !== uid &&
+          j.invite_status !== 'pending' && isUpcoming(j)
+        )
+      : [];
+    const privateJams = uid
+      ? items.filter(j =>
+          j.visibility === 'private' && j.host_id !== uid &&
+          (j.invite_status === 'accepted' || j.invite_status === 'declined') && isUpcoming(j)
+        )
+      : [];
+    const past = [...items].reverse().filter(j => {
+      if (isUpcoming(j)) return false;
+      if (j.visibility === 'official') return true;
+      if (!uid) return false;
+      if (j.host_id === uid) return true;
+      if (j.rsvp_status) return true;
+      return j.invite_status === 'accepted' || j.invite_status === 'declined';
+    });
 
     const built: Section[] = [];
-    if (invited.length > 0) built.push({ title: 'Invited', data: invited });
-    if (upcoming.length > 0) built.push({ title: 'Upcoming', data: upcoming });
-    if (past.length > 0) built.push({ title: 'Recent', data: past });
+    if (uid) built.push({ title: "Jams you're hosting", data: hosting, hosting: true });
+    if (upcomingOfficial.length > 0) built.push({ title: 'Upcoming SingJam events', data: upcomingOfficial });
+    if (invitations.length > 0) built.push({ title: 'Invitations', data: invitations });
+    if (community.length > 0) built.push({ title: 'Community jams', data: community });
+    if (privateJams.length > 0) built.push({ title: 'Private jams', data: privateJams });
+    if (past.length > 0) built.push({ title: 'Past events', data: past });
 
+    setHasHostingJams(hosting.length > 0);
     setSections(built);
     setLoading(false);
     setRefreshing(false);
@@ -105,55 +140,67 @@ export default function JamsScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const isEmpty = !loading && sections.length === 0;
+  const isEmpty = !loading && sections.every(s => s.data.length === 0);
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-slate-50">
       <BrandHeader />
-      <View className="px-4 pt-4 pb-3 border-b border-slate-100 flex-row items-center justify-between">
-        <View>
-          <Text className="text-2xl font-bold text-slate-900">Jams</Text>
-          <Text className="text-sm text-slate-500 mt-0.5">Browse open jams or post your own.</Text>
-        </View>
-        <TouchableOpacity
-          onPress={() => router.push((userId ? '/jam/new' : '/(auth)/sign-in') as any)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          className="w-8 h-8 rounded-full bg-amber-500 items-center justify-center"
-        >
-          <Ionicons name="add" size={20} color="white" />
-        </TouchableOpacity>
+      <View className="border-b border-slate-100 bg-white px-4 pb-3 pt-4">
+        <Text className="text-2xl font-bold text-slate-900">Jams</Text>
+        <Text className="mt-0.5 text-sm text-slate-500">Browse open jams or post your own.</Text>
       </View>
 
       {loading ? (
-        <View>
-          {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
+        <View className="pt-4">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
         </View>
       ) : isEmpty ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-slate-900 font-semibold text-base mb-1">No upcoming jams</Text>
-          <Text className="text-slate-400 text-sm text-center px-8">
-            Check singjam.org to browse and RSVP to community events
+          <Text className="mb-1 text-base font-semibold text-slate-900">No upcoming jams</Text>
+          <Text className="px-8 text-center text-sm text-slate-400">
+            Check back soon for SingJam events, or post a jam of your own.
           </Text>
         </View>
       ) : (
         <SectionList
           sections={sections}
           keyExtractor={item => item.id}
-          renderItem={({ item, section }) => (
+          renderItem={({ item }) => (
             <JamCard
               jam={item}
               myId={userId}
-              isPast={section.title === 'Recent'}
               onPress={() => router.push({ pathname: '/jam/[id]', params: { id: item.id } })}
             />
           )}
           renderSectionHeader={({ section }) => (
-            <View className="px-4 py-2 bg-slate-50 border-b border-slate-100">
-              <Text className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+            <View className="flex-row items-center justify-between px-4 pb-2 pt-5">
+              <Text className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
                 {section.title}
               </Text>
+              {section.hosting && (
+                <TouchableOpacity
+                  onPress={() => router.push('/jam/new' as any)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel="Post a jam"
+                >
+                  <Ionicons name="add" size={18} color="#a1a1aa" />
+                </TouchableOpacity>
+              )}
             </View>
           )}
+          renderSectionFooter={({ section }) =>
+            section.hosting && !hasHostingJams ? (
+              <TouchableOpacity
+                onPress={() => router.push('/jam/new' as any)}
+                className="mx-4 mb-3 items-center rounded-2xl border-2 border-dashed border-zinc-200 py-6"
+              >
+                <View className="flex-row items-center" style={{ gap: 6 }}>
+                  <Ionicons name="add" size={16} color="#71717a" />
+                  <Text className="text-sm text-zinc-500">Post a jam</Text>
+                </View>
+              </TouchableOpacity>
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -162,6 +209,7 @@ export default function JamsScreen() {
             />
           }
           stickySectionHeadersEnabled={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
         />
       )}
     </View>
