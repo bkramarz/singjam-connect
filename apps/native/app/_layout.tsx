@@ -1,12 +1,14 @@
 import '../global.css';
 
 import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
+import { hrefForNotificationLink } from '@/lib/notification-links';
 
 async function handleAuthDeepLink(url: string) {
   // Email confirmation links arrive as singjam://#access_token=...&refresh_token=...
@@ -25,6 +27,29 @@ function RootNavigator() {
   const { session, initialised, profileComplete, isGuest } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const [pendingNotificationLink, setPendingNotificationLink] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Notification taps: cold start (app launched by the tap) and warm start.
+    // The link is held in state and navigated once auth has settled, so the
+    // auth-guard redirect below doesn't wipe the pushed screen.
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      const link = response.notification.request.content.data?.link;
+      if (typeof link === 'string') setPendingNotificationLink(link);
+    };
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) handleResponse(response);
+    });
+    const notificationSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    return () => notificationSub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pendingNotificationLink || !initialised || !session || profileComplete === null) return;
+    const href = hrefForNotificationLink(pendingNotificationLink);
+    setPendingNotificationLink(null);
+    if (href) router.push(href as any);
+  }, [pendingNotificationLink, initialised, session, profileComplete]);
 
   useEffect(() => {
     // Refresh session when app returns to foreground (mirrors web's visibilitychange handler)

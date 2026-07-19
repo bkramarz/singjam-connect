@@ -4,6 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
+import { unregisterPushToken } from '@/lib/push';
 import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
@@ -149,7 +150,14 @@ export default function ProfileScreen() {
 
   function handleSignOut() {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Sign out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await unregisterPushToken();
+          supabase.auth.signOut();
+        },
+      },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
