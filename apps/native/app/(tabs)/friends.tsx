@@ -152,12 +152,20 @@ function MatchCard({ match, onPress, onInvite }: { match: Match; onPress: () => 
         </Text>
       ) : null}
 
-      <TouchableOpacity
-        onPress={onInvite}
-        className="mt-3 border border-amber-300 rounded-full py-1.5 items-center"
-      >
-        <Text className="text-amber-700 text-xs font-semibold">Invite to jam</Text>
-      </TouchableOpacity>
+      <View className="flex-row gap-2 mt-3">
+        <TouchableOpacity
+          onPress={onPress}
+          className="flex-1 border border-slate-200 rounded-xl py-2 items-center"
+        >
+          <Text className="text-slate-800 text-sm font-medium">View profile</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onInvite}
+          className="flex-1 border border-slate-200 rounded-xl py-2 items-center"
+        >
+          <Text className="text-slate-800 text-sm font-medium">Invite to jam</Text>
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -255,12 +263,12 @@ export default function FriendsScreen() {
       />
 
       <View className="px-4 pt-14 pb-3 bg-white border-b border-slate-100">
-        <Text className="text-2xl font-bold text-slate-900 mb-3">Find Jammers</Text>
+        <Text className="text-2xl font-bold text-slate-900 mb-3">Find jammers</Text>
         <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
           <Text className="text-slate-400 mr-2">🔍</Text>
           <TextInput
             className="flex-1 text-slate-900"
-            placeholder="Search by name or @username…"
+            placeholder="Search by name, username, or email"
             placeholderTextColor="#94a3b8"
             value={query}
             onChangeText={handleSearchChange}
@@ -334,8 +342,8 @@ export default function FriendsScreen() {
           }
           ListHeaderComponent={
             matches.length > 0 ? (
-              <Text className="px-4 pb-2 text-xs text-slate-400">
-                Ranked by shared songs and genre overlap
+              <Text className="px-4 pb-2 text-sm text-slate-500">
+                Matches are ranked by shared songs and genre overlap.
               </Text>
             ) : null
           }
