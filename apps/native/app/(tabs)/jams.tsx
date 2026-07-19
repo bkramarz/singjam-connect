@@ -4,6 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import JamCard, { type JamItem } from '@/components/JamCard';
+import BrandHeader from '@/components/BrandHeader';
 
 type Section = { title: string; data: JamItem[] };
 
@@ -108,8 +109,12 @@ export default function JamsScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <View className="px-4 pt-14 pb-3 border-b border-slate-100 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-slate-900">Jams</Text>
+      <BrandHeader />
+      <View className="px-4 pt-4 pb-3 border-b border-slate-100 flex-row items-center justify-between">
+        <View>
+          <Text className="text-2xl font-bold text-slate-900">Jams</Text>
+          <Text className="text-sm text-slate-500 mt-0.5">Browse open jams or post your own.</Text>
+        </View>
         <TouchableOpacity
           onPress={() => router.push((userId ? '/jam/new' : '/(auth)/sign-in') as any)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
