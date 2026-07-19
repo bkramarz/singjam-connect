@@ -1,131 +1,169 @@
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Linking } from 'react-native';
 
 export type JamItem = {
   id: string;
   name: string | null;
-  visibility: string;
+  visibility: string | null;
   starts_at: string | null;
   ends_at: string | null;
   timezone: string | null;
   neighborhood: string | null;
   notes: string | null;
   image_url: string | null;
+  tickets_url: string | null;
+  capacity: number | null;
   host_id: string | null;
   host_display_name: string | null;
   host_username: string | null;
-  genres: string[];
+  tags: string[];
   rsvp_status: string | null;
+  rsvp_waitlist_position: number | null;
   invite_status: string | null;
-  capacity: number | null;
 };
 
-type BadgeStatus = 'attending' | 'waitlist' | 'hosting' | 'invited' | null;
+function fmt(iso: string, timezone: string | null, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat('en-US', { ...options, timeZone: timezone ?? undefined }).format(new Date(iso));
+}
 
-function StatusBadge({ status }: { status: BadgeStatus }) {
-  if (status === 'attending') return (
-    <View className="px-2 py-0.5 rounded-full bg-green-100">
-      <Text className="text-xs font-medium text-green-700">Going</Text>
-    </View>
-  );
-  if (status === 'waitlist') return (
-    <View className="px-2 py-0.5 rounded-full bg-blue-100">
-      <Text className="text-xs font-medium text-blue-700">Waitlisted</Text>
-    </View>
-  );
-  if (status === 'hosting') return (
-    <View className="px-2 py-0.5 rounded-full bg-amber-100">
-      <Text className="text-xs font-medium text-amber-700">Hosting</Text>
-    </View>
-  );
-  if (status === 'invited') return (
-    <View className="px-2 py-0.5 rounded-full bg-indigo-100">
-      <Text className="text-xs font-medium text-indigo-700">Invited</Text>
-    </View>
-  );
+function RsvpBadge({ status, waitlistPosition }: { status: string; waitlistPosition: number | null }) {
+  if (status === 'attending') {
+    return (
+      <View className="shrink-0 rounded-full bg-green-50 px-2 py-0.5">
+        <Text className="text-xs font-medium text-green-700">Attending</Text>
+      </View>
+    );
+  }
+  if (status === 'waitlist') {
+    return (
+      <View className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5">
+        <Text className="text-xs font-medium text-amber-700">
+          Waitlisted{waitlistPosition != null ? ` #${waitlistPosition}` : ''}
+        </Text>
+      </View>
+    );
+  }
   return null;
 }
 
-function DateBox({ startsAt }: { startsAt: string | null }) {
-  if (!startsAt) {
-    return <View className="w-12 mr-3" />;
-  }
-  const d = new Date(startsAt);
-  const day = d.getDate().toString();
-  const month = d.toLocaleString('en', { month: 'short' }).toUpperCase();
-  const weekday = d.toLocaleString('en', { weekday: 'short' }).toUpperCase();
-  return (
-    <View className="w-12 items-center bg-slate-50 rounded-lg py-2 mr-3">
-      <Text className="text-slate-400 text-xs font-medium">{weekday}</Text>
-      <Text className="text-slate-900 text-xl font-bold leading-tight">{day}</Text>
-      <Text className="text-slate-400 text-xs font-medium">{month}</Text>
-    </View>
-  );
-}
-
-function compactTime(startsAt: string | null, timezone: string | null): string | null {
-  if (!startsAt) return null;
-  return new Date(startsAt).toLocaleString('en-US', {
-    timeZone: timezone ?? undefined,
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-type Props = {
+// Mirrors web's JamListCard (apps/web/components/JamsContent.tsx): poster image
+// or date block on the left, badge line, name + RSVP/Invited badge, date·time,
+// neighborhood, tags, hosted-by, and View details / Get tickets for official events.
+export default function JamCard({ jam, myId, onPress }: {
   jam: JamItem;
   myId: string | null;
   onPress: () => void;
-  isPast?: boolean;
-};
-
-export default function JamCard({ jam, myId, onPress, isPast }: Props) {
-  const isHosting = jam.host_id === myId;
-
-  const badgeStatus: BadgeStatus = isHosting ? 'hosting'
-    : jam.invite_status === 'pending' ? 'invited'
-    : jam.rsvp_status === 'attending' ? 'attending'
-    : jam.rsvp_status === 'waitlist' ? 'waitlist'
-    : null;
-
-  const timeStr = compactTime(jam.starts_at, jam.timezone);
+}) {
+  const isOfficial = jam.visibility === 'official';
+  const isHosting = !!myId && jam.host_id === myId;
+  const isInvited = jam.invite_status === 'pending';
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.7}
-      className={`flex-row px-4 py-3 border-b border-slate-100 ${isPast ? 'opacity-50' : ''}`}
+      className={`mx-4 mb-3 flex-row overflow-hidden rounded-2xl border bg-white ${isOfficial ? 'border-amber-200' : 'border-zinc-200'}`}
     >
-      <DateBox startsAt={jam.starts_at} />
-
-      <View className="flex-1">
-        <View className="flex-row items-start justify-between mb-0.5">
-          <Text className="flex-1 font-semibold text-slate-900 mr-2" numberOfLines={1}>
-            {jam.name ?? 'Jam Session'}
+      {jam.image_url ? (
+        <View className="relative w-24 shrink-0 overflow-hidden bg-black">
+          <Image
+            source={{ uri: jam.image_url }}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            resizeMode="contain"
+          />
+        </View>
+      ) : jam.starts_at ? (
+        <View className={`w-20 shrink-0 items-center justify-center border-r px-2 py-4 ${isOfficial ? 'bg-amber-50 border-amber-200' : 'bg-zinc-50 border-zinc-100'}`}>
+          <Text className={`text-xs font-semibold uppercase tracking-wide ${isOfficial ? 'text-amber-500' : 'text-zinc-400'}`}>
+            {fmt(jam.starts_at, jam.timezone, { weekday: 'short' })}
           </Text>
-          <StatusBadge status={badgeStatus} />
+          <Text className="text-3xl font-bold leading-none text-zinc-900">
+            {fmt(jam.starts_at, jam.timezone, { day: 'numeric' })}
+          </Text>
+          <Text className={`text-xs font-semibold uppercase tracking-wide ${isOfficial ? 'text-amber-500' : 'text-zinc-400'}`}>
+            {fmt(jam.starts_at, jam.timezone, { month: 'short' })}
+          </Text>
+        </View>
+      ) : null}
+
+      <View className="min-w-0 flex-1 p-4">
+        {isOfficial && (
+          <Text className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-amber-500">
+            Official SingJam event
+          </Text>
+        )}
+        {!isOfficial && (jam.visibility === 'community' || jam.visibility === 'private' || isHosting) && (
+          <View className="mb-0.5 flex-row items-center" style={{ gap: 8 }}>
+            {jam.visibility === 'community' && (
+              <Text className="text-xs font-semibold uppercase tracking-wide text-sky-600">Public</Text>
+            )}
+            {jam.visibility === 'private' && (
+              <Text className="text-xs font-semibold uppercase tracking-wide text-violet-600">Private</Text>
+            )}
+            {isHosting && (
+              <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Hosting</Text>
+            )}
+          </View>
+        )}
+
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Text className="min-w-0 flex-1 font-semibold text-zinc-900" numberOfLines={1}>
+            {jam.name ?? (isOfficial ? 'SingJam event' : 'Community jam')}
+          </Text>
+          {isInvited && !jam.rsvp_status && (
+            <View className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5">
+              <Text className="text-xs font-medium text-indigo-700">Invited</Text>
+            </View>
+          )}
+          {jam.rsvp_status && (
+            <RsvpBadge status={jam.rsvp_status} waitlistPosition={jam.rsvp_waitlist_position} />
+          )}
         </View>
 
-        {!isHosting && jam.host_username ? (
-          <Text className="text-slate-400 text-xs mb-0.5">@{jam.host_username}</Text>
-        ) : null}
+        {jam.starts_at && (
+          <Text className="mt-0.5 text-xs text-zinc-500">
+            {fmt(jam.starts_at, jam.timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
+            {' · '}
+            {fmt(jam.starts_at, jam.timezone, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+            {jam.ends_at ? ` – ${fmt(jam.ends_at, jam.timezone, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` : ''}
+          </Text>
+        )}
+        {jam.neighborhood ? <Text className="mt-0.5 text-xs text-zinc-400">{jam.neighborhood}</Text> : null}
 
-        {timeStr ? (
-          <Text className="text-slate-500 text-sm mb-0.5">{timeStr}</Text>
-        ) : null}
-
-        {jam.neighborhood ? (
-          <Text className="text-slate-400 text-sm" numberOfLines={1}>{jam.neighborhood}</Text>
-        ) : null}
-
-        {jam.genres.length > 0 ? (
-          <View className="flex-row flex-wrap mt-1 gap-1">
-            {jam.genres.slice(0, 3).map(g => (
-              <View key={g} className="bg-slate-100 rounded-full px-2 py-0.5">
-                <Text className="text-slate-500 text-xs">{g}</Text>
+        {jam.tags.length > 0 && (
+          <View className="mt-2 flex-row flex-wrap" style={{ gap: 4 }}>
+            {jam.tags.map((t) => (
+              <View key={t} className={`rounded-full px-2 py-0.5 ${isOfficial ? 'bg-amber-50' : 'bg-zinc-100'}`}>
+                <Text className={`text-xs ${isOfficial ? 'text-amber-700' : 'text-zinc-600'}`}>{t}</Text>
               </View>
             ))}
           </View>
-        ) : null}
+        )}
+
+        {isOfficial ? (
+          <Text className="mt-2 text-xs text-zinc-400">
+            Hosted by <Text className="font-medium text-zinc-500">SingJam</Text>
+          </Text>
+        ) : (!isHosting && jam.host_display_name ? (
+          <Text className="mt-2 text-xs text-zinc-400">
+            Hosted by <Text className="font-medium text-zinc-500">{jam.host_display_name}</Text>
+            {jam.host_username ? <Text> @{jam.host_username}</Text> : null}
+          </Text>
+        ) : null)}
+
+        {isOfficial && (
+          <View className="mt-2 flex-row flex-wrap" style={{ gap: 12 }}>
+            <TouchableOpacity onPress={onPress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text className="text-xs font-medium text-zinc-500">View details →</Text>
+            </TouchableOpacity>
+            {jam.tickets_url ? (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(jam.tickets_url!)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text className="text-xs font-medium text-amber-600">Get tickets ↗</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
