@@ -2,10 +2,17 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
+type LiteProfile = {
+  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+};
+
 type AuthContextValue = {
   session: Session | null;
   initialised: boolean;
   profileComplete: boolean | null;
+  profile: LiteProfile | null;
   isGuest: boolean;
   continueAsGuest: () => void;
 };
@@ -16,20 +23,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initialised, setInitialised] = useState(false);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
+  const [profile, setProfile] = useState<LiteProfile | null>(null);
   const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
+    async function loadProfile(userId: string) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('display_name, username, avatar_url')
+        .eq('id', userId)
+        .single();
+      setProfile(data ?? null);
+      setProfileComplete(!!data?.display_name);
+    }
+
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      if (session) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', session.user.id)
-          .single();
-        setProfileComplete(!!data?.display_name);
-      }
+      if (session) await loadProfile(session.user.id);
       setInitialised(true);
     }
     init();
@@ -39,14 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) setIsGuest(false);
       if (!session) {
         setProfileComplete(null);
+        setProfile(null);
         return;
       }
-      supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', session.user.id)
-        .single()
-        .then(({ data }) => setProfileComplete(!!data?.display_name));
+      loadProfile(session.user.id);
     });
 
     return () => subscription.unsubscribe();
@@ -54,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, initialised, profileComplete, isGuest, continueAsGuest: () => setIsGuest(true) }}
+      value={{ session, initialised, profileComplete, profile, isGuest, continueAsGuest: () => setIsGuest(true) }}
     >
       {children}
     </AuthContext.Provider>
