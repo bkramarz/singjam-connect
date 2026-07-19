@@ -1,10 +1,21 @@
 import { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
+import { useRouter, useFocusEffect, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+
+// Web's `sm:` breakpoint — above this the header grows nav links and the
+// bottom tab bar hides, mirroring web's tablet/desktop top nav.
+export const WIDE_BREAKPOINT = 640;
+
+const NAV_LINKS = [
+  { label: 'Jams', path: '/jams' },
+  { label: 'Sets', path: '/sets' },
+  { label: 'Repertoire', path: '/' },
+  { label: 'Friends', path: '/friends' },
+] as const;
 
 // Mirrors the web mobile header (apps/web/app/layout.tsx + MobileHeaderProfile):
 // slate-900 bar, amber logo tile + wordmark, search + notification bell,
@@ -12,8 +23,12 @@ import { useAuth } from '@/lib/auth-context';
 export default function BrandHeader() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { session } = useAuth();
+  const pathname = usePathname();
+  const { width } = useWindowDimensions();
+  const wide = width >= WIDE_BREAKPOINT;
+  const { session, profile } = useAuth();
   const [unread, setUnread] = useState(0);
+  const initial = (profile?.display_name ?? profile?.username ?? '?')[0].toUpperCase();
 
   useFocusEffect(
     useCallback(() => {
@@ -40,6 +55,21 @@ export default function BrandHeader() {
         </View>
 
         <View className="flex-row items-center" style={{ gap: 4 }}>
+          {wide && NAV_LINKS.map((link) => {
+            const active = link.path === '/' ? pathname === '/' : pathname.startsWith(link.path);
+            return (
+              <TouchableOpacity
+                key={link.path}
+                onPress={() => router.navigate(link.path as any)}
+                className="rounded-lg px-3 py-1.5"
+              >
+                <Text className={`text-sm ${active ? 'text-white font-semibold' : 'text-slate-300'}`}>
+                  {link.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {wide && <View className="mx-2 h-4 w-px bg-slate-700" />}
           <TouchableOpacity
             onPress={() => router.push('/songs' as any)}
             className="h-9 w-9 items-center justify-center rounded-lg"
@@ -50,6 +80,7 @@ export default function BrandHeader() {
           </TouchableOpacity>
 
           {session ? (
+            <>
             <TouchableOpacity
               onPress={() => router.push('/notifications' as any)}
               className="h-9 w-9 items-center justify-center rounded-lg"
@@ -63,6 +94,22 @@ export default function BrandHeader() {
                 </View>
               )}
             </TouchableOpacity>
+            {wide && (
+              <TouchableOpacity
+                onPress={() => router.navigate('/profile' as any)}
+                className="ml-1 h-8 w-8 overflow-hidden rounded-full"
+                accessibilityLabel="Profile"
+              >
+                {profile?.avatar_url ? (
+                  <Image source={{ uri: profile.avatar_url }} className="h-full w-full" />
+                ) : (
+                  <View className="h-full w-full items-center justify-center bg-slate-600">
+                    <Text className="text-xs font-medium text-slate-200">{initial}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+            </>
           ) : (
             <TouchableOpacity
               onPress={() => router.push('/(auth)/sign-in' as any)}
