@@ -1,12 +1,57 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { View, Text, SectionList, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { readCache, writeCache } from '@/lib/cache';
 import JamCard, { type JamItem } from '@/components/JamCard';
 import BrandHeader from '@/components/BrandHeader';
 
 type Section = { title: string; data: JamItem[]; hosting?: boolean };
+
+// Section logic mirrors web's JamsContent. Pure so cached items can be
+// re-sectioned at hydrate time (past/upcoming shifts as time passes).
+function buildSections(items: JamItem[], uid: string | null): Section[] {
+  const now = new Date().toISOString();
+  const isUpcoming = (j: JamItem) => (j.ends_at ?? j.starts_at ?? '') >= now;
+
+  const hosting = uid
+    ? items.filter(j => j.visibility !== 'official' && j.host_id === uid && isUpcoming(j))
+    : [];
+  const upcomingOfficial = items.filter(j => j.visibility === 'official' && isUpcoming(j));
+  const invitations = uid
+    ? items.filter(j => j.host_id !== uid && j.invite_status === 'pending' && isUpcoming(j))
+    : [];
+  const community = uid
+    ? items.filter(j =>
+        j.visibility === 'community' && j.host_id !== uid &&
+        j.invite_status !== 'pending' && isUpcoming(j)
+      )
+    : [];
+  const privateJams = uid
+    ? items.filter(j =>
+        j.visibility === 'private' && j.host_id !== uid &&
+        (j.invite_status === 'accepted' || j.invite_status === 'declined') && isUpcoming(j)
+      )
+    : [];
+  const past = [...items].reverse().filter(j => {
+    if (isUpcoming(j)) return false;
+    if (j.visibility === 'official') return true;
+    if (!uid) return false;
+    if (j.host_id === uid) return true;
+    if (j.rsvp_status) return true;
+    return j.invite_status === 'accepted' || j.invite_status === 'declined';
+  });
+
+  const built: Section[] = [];
+  if (uid) built.push({ title: "Jams you're hosting", data: hosting, hosting: true });
+  if (upcomingOfficial.length > 0) built.push({ title: 'Upcoming SingJam events', data: upcomingOfficial });
+  if (invitations.length > 0) built.push({ title: 'Invitations', data: invitations });
+  if (community.length > 0) built.push({ title: 'Community jams', data: community });
+  if (privateJams.length > 0) built.push({ title: 'Private jams', data: privateJams });
+  if (past.length > 0) built.push({ title: 'Past events', data: past });
+  return built;
+}
 
 function SkeletonCard() {
   return (
@@ -91,51 +136,31 @@ export default function JamsScreen() {
       invite_status: inviteMap.get(j.id) ?? null,
     }));
 
-    // Section logic mirrors web's JamsContent
-    const now = new Date().toISOString();
     const uid = user?.id ?? null;
-    const isUpcoming = (j: JamItem) => (j.ends_at ?? j.starts_at ?? '') >= now;
+    writeCache('/jams', uid, items);
 
-    const hosting = uid
-      ? items.filter(j => j.visibility !== 'official' && j.host_id === uid && isUpcoming(j))
-      : [];
-    const upcomingOfficial = items.filter(j => j.visibility === 'official' && isUpcoming(j));
-    const invitations = uid
-      ? items.filter(j => j.host_id !== uid && j.invite_status === 'pending' && isUpcoming(j))
-      : [];
-    const community = uid
-      ? items.filter(j =>
-          j.visibility === 'community' && j.host_id !== uid &&
-          j.invite_status !== 'pending' && isUpcoming(j)
-        )
-      : [];
-    const privateJams = uid
-      ? items.filter(j =>
-          j.visibility === 'private' && j.host_id !== uid &&
-          (j.invite_status === 'accepted' || j.invite_status === 'declined') && isUpcoming(j)
-        )
-      : [];
-    const past = [...items].reverse().filter(j => {
-      if (isUpcoming(j)) return false;
-      if (j.visibility === 'official') return true;
-      if (!uid) return false;
-      if (j.host_id === uid) return true;
-      if (j.rsvp_status) return true;
-      return j.invite_status === 'accepted' || j.invite_status === 'declined';
-    });
-
-    const built: Section[] = [];
-    if (uid) built.push({ title: "Jams you're hosting", data: hosting, hosting: true });
-    if (upcomingOfficial.length > 0) built.push({ title: 'Upcoming SingJam events', data: upcomingOfficial });
-    if (invitations.length > 0) built.push({ title: 'Invitations', data: invitations });
-    if (community.length > 0) built.push({ title: 'Community jams', data: community });
-    if (privateJams.length > 0) built.push({ title: 'Private jams', data: privateJams });
-    if (past.length > 0) built.push({ title: 'Past events', data: past });
-
-    setHasHostingJams(hosting.length > 0);
+    const built = buildSections(items, uid);
+    setHasHostingJams(built.some(s => s.hosting && s.data.length > 0));
     setSections(built);
     setLoading(false);
     setRefreshing(false);
+  }, []);
+
+  useEffect(() => {
+    // Show cached jams immediately on launch; the focus-effect load() below
+    // still runs and silently replaces them (web's sessionStorage hydrate)
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user.id ?? null;
+      const cached = await readCache<JamItem[]>('/jams', uid);
+      if (cached) {
+        const built = buildSections(cached, uid);
+        setUserId(uid);
+        setHasHostingJams(built.some(s => s.hosting && s.data.length > 0));
+        setSections(built);
+        setLoading(false);
+      }
+    })();
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
