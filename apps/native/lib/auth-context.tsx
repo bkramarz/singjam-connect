@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
+import { registerForPushNotifications } from '@/lib/push';
 import type { Session } from '@supabase/supabase-js';
 
 type LiteProfile = {
@@ -25,8 +26,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<LiteProfile | null>(null);
   const [isGuest, setIsGuest] = useState(false);
+  const pushRegisteredFor = useRef<string | null>(null);
 
   useEffect(() => {
+    function maybeRegisterPush(userId: string) {
+      if (pushRegisteredFor.current === userId) return;
+      pushRegisteredFor.current = userId;
+      registerForPushNotifications();
+    }
+
     async function loadProfile(userId: string) {
       const { data } = await supabase
         .from('profiles')
@@ -40,7 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      if (session) await loadProfile(session.user.id);
+      if (session) {
+        maybeRegisterPush(session.user.id);
+        await loadProfile(session.user.id);
+      }
       setInitialised(true);
     }
     init();
@@ -49,10 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       if (session) setIsGuest(false);
       if (!session) {
+        pushRegisteredFor.current = null;
         setProfileComplete(null);
         setProfile(null);
         return;
       }
+      maybeRegisterPush(session.user.id);
       loadProfile(session.user.id);
     });
 

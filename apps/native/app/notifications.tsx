@@ -6,6 +6,7 @@ import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { hrefForNotificationLink } from '@/lib/notification-links';
 import SignInPrompt from '@/components/SignInPrompt';
 
 type Notification = {
@@ -125,13 +126,8 @@ export default function NotificationsScreen() {
 
   function handlePress(notif: Notification) {
     if (!notif.link) return;
-    // Internal links like /jam/abc or /set/abc
-    const link = notif.link;
-    if (link.startsWith('/jam/')) {
-      router.push({ pathname: '/jam/[id]' as any, params: { id: link.replace('/jam/', '') } });
-    } else if (link.startsWith('/set/')) {
-      router.push({ pathname: '/set/[id]' as any, params: { id: link.replace('/set/', '') } });
-    }
+    const href = hrefForNotificationLink(notif.link);
+    if (href) router.push(href as any);
   }
 
   const allItems = sections.flatMap(s => [
