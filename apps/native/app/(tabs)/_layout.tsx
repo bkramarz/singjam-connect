@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Text, View } from 'react-native';
+import { Image, Text, View, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { useAuth } from '@/lib/auth-context';
+import { WIDE_BREAKPOINT } from '@/components/BrandHeader';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -45,6 +46,8 @@ export default function TabLayout() {
   const { session, profile } = useAuth();
   const signedIn = !!session;
   const initial = (profile?.display_name ?? profile?.username ?? '?')[0].toUpperCase();
+  const { width } = useWindowDimensions();
+  const wide = width >= WIDE_BREAKPOINT;
 
   return (
     <Tabs
@@ -53,6 +56,9 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#f59e0b',
         tabBarInactiveTintColor: '#94a3b8',
         headerShown: false,
+        // Wide layouts (tablet / landscape) use the BrandHeader top nav instead,
+        // mirroring web's sm: breakpoint behavior
+        tabBarStyle: wide ? { display: 'none' } : undefined,
       }}
     >
       <Tabs.Screen

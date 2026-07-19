@@ -9,14 +9,14 @@
       "ios",
       "android"
     ],
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "org.singjam.app",
       "usesAppleSignIn": true,
       "infoPlist": {
@@ -36,7 +36,9 @@
       "expo-font",
       [
         "@react-native-google-signin/google-signin",
-        { "iosUrlScheme": "com.googleusercontent.apps.557301235221-ddalr5lli87u06df4s3gh5vd2se1k1m9" }
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.557301235221-ddalr5lli87u06df4s3gh5vd2se1k1m9"
+        }
       ],
       "./plugins/withGoogleSignInPodfileFix"
     ],
