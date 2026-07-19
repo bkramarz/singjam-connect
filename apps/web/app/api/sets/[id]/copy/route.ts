@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseFromBearer } from "@/lib/supabase/bearer";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  let supabase = await supabaseServer();
+  let user = (await supabase.auth.getUser()).data.user ?? null;
+  if (!user) {
+    // Native app authenticates with a bearer token instead of cookies
+    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (bearer) {
+      const bearerClient = supabaseFromBearer(bearer);
+      user = (await bearerClient.auth.getUser()).data.user ?? null;
+      if (user) supabase = bearerClient as typeof supabase;
+    }
+  }
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const [setRes, songsRes] = await Promise.all([

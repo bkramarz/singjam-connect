@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, RefreshControl,
+  Alert, ActionSheetIOS, Platform, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +9,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 type SetItem = {
   id: string;
@@ -37,7 +40,13 @@ function SkeletonCard() {
   );
 }
 
-function SetCard({ set, onPress }: { set: SetItem; onPress: () => void }) {
+function SetCard({ set, onPress, onMenu, onCopy, busy }: {
+  set: SetItem;
+  onPress: () => void;
+  onMenu?: () => void;
+  onCopy?: () => void;
+  busy?: boolean;
+}) {
   const badge = set.link_sharing ? SHARING_BADGE[set.link_sharing] : null;
 
   return (
@@ -64,11 +73,35 @@ function SetCard({ set, onPress }: { set: SetItem; onPress: () => void }) {
             <Text className="text-sm text-slate-400 mt-0.5" numberOfLines={1}>{set.description}</Text>
           ) : null}
         </View>
-        {badge && set.isOwner ? (
-          <View className={`rounded-full px-2 py-0.5 ${badge.className.split(' ')[0]}`}>
-            <Text className={`text-xs font-medium ${badge.className.split(' ')[1]}`}>{badge.label}</Text>
-          </View>
-        ) : null}
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          {badge && set.isOwner ? (
+            <View className={`rounded-full px-2 py-0.5 ${badge.className.split(' ')[0]}`}>
+              <Text className={`text-xs font-medium ${badge.className.split(' ')[1]}`}>{badge.label}</Text>
+            </View>
+          ) : null}
+          {onMenu ? (
+            busy ? (
+              <ActivityIndicator size="small" color="#94a3b8" />
+            ) : (
+              <TouchableOpacity onPress={onMenu} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="More options">
+                <Ionicons name="ellipsis-horizontal" size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            )
+          ) : null}
+          {onCopy ? (
+            busy ? (
+              <ActivityIndicator size="small" color="#94a3b8" />
+            ) : (
+              <TouchableOpacity
+                onPress={onCopy}
+                className="rounded-lg border border-zinc-200 px-3 py-1.5"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text className="text-xs font-medium text-zinc-600">Copy</Text>
+              </TouchableOpacity>
+            )
+          ) : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -163,6 +196,70 @@ export default function SetsScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function apiFetch(path: string, method: 'POST' | 'DELETE') {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    return fetch(`${WEB_URL}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+  }
+
+  async function copySet(set: SetItem) {
+    setBusyId(set.id);
+    try {
+      const res = await apiFetch(`/api/sets/${set.id}/copy`, 'POST');
+      if (res?.ok) {
+        const { id } = await res.json();
+        router.push({ pathname: '/set/[id]' as any, params: { id } });
+      } else {
+        Alert.alert('Copy failed', 'Something went wrong copying this set.');
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function confirmDelete(set: SetItem) {
+    Alert.alert('Delete this set?', "This can't be undone.", [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Yes, delete',
+        style: 'destructive',
+        onPress: async () => {
+          setBusyId(set.id);
+          try {
+            const res = await apiFetch(`/api/sets/${set.id}`, 'DELETE');
+            if (res?.ok) load();
+            else Alert.alert('Delete failed', 'Something went wrong deleting this set.');
+          } finally {
+            setBusyId(null);
+          }
+        },
+      },
+    ]);
+  }
+
+  function openSetMenu(set: SetItem) {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Copy set', 'Delete set', 'Cancel'], destructiveButtonIndex: 1, cancelButtonIndex: 2 },
+        (index) => {
+          if (index === 0) copySet(set);
+          if (index === 1) confirmDelete(set);
+        }
+      );
+    } else {
+      Alert.alert(set.name, undefined, [
+        { text: 'Copy set', onPress: () => copySet(set) },
+        { text: 'Delete set', style: 'destructive', onPress: () => confirmDelete(set) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  }
+
   const { session, initialised } = useAuth();
   if (initialised && !session) return <SignInPrompt message="Sign in to see your sets" />;
 
@@ -195,6 +292,9 @@ export default function SetsScreen() {
             <SetCard
               set={item}
               onPress={() => router.push({ pathname: '/set/[id]' as any, params: { id: item.id } })}
+              onMenu={item.isOwner ? () => openSetMenu(item) : undefined}
+              onCopy={!item.isOwner && item.link_sharing === 'public' ? () => copySet(item) : undefined}
+              busy={busyId === item.id}
             />
           )}
           renderSectionHeader={({ section }) => (
