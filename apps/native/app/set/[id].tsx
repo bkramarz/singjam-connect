@@ -8,7 +8,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { supabase } from '@/lib/supabase';
-import { formatComposers } from '@singjam/core';
+import { formatComposers, reorderSongsForPlayed } from '@singjam/core';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -30,6 +30,7 @@ type SetSong = {
   song_id: string;
   position: number;
   key_note: string | null;
+  played: boolean;
   leader_user_ids: string[];
   songs: {
     title: string;
@@ -104,7 +105,7 @@ function AddSongModal({
         position: nextPosition,
         leader_user_ids: [],
       })
-      .select('id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, song_composers(people(name)))')
+      .select('id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, song_composers(people(name)))')
       .single();
 
     setPendingId(null);
@@ -241,6 +242,7 @@ function SongRow({
   onRemove,
   onKeyChange,
   onLeaderToggle,
+  onTogglePlayed,
 }: {
   song: SetSong;
   canEdit: boolean;
@@ -251,6 +253,7 @@ function SongRow({
   onRemove: () => void;
   onKeyChange: (key: string | null) => void;
   onLeaderToggle: (newLeaderIds: string[]) => void;
+  onTogglePlayed: () => void;
 }) {
   const [keyPickerVisible, setKeyPickerVisible] = useState(false);
   const composerNames = (song.songs.song_composers ?? [])
@@ -298,6 +301,23 @@ function SongRow({
             <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{artist}</Text>
           ) : null}
         </View>
+        {canEdit ? (
+          <TouchableOpacity
+            onPress={onTogglePlayed}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            className="mr-3"
+          >
+            <Ionicons
+              name={song.played ? 'checkmark-circle' : 'checkmark-circle-outline'}
+              size={18}
+              color={song.played ? '#16a34a' : '#94a3b8'}
+            />
+          </TouchableOpacity>
+        ) : song.played ? (
+          <View className="mr-3">
+            <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+          </View>
+        ) : null}
         {canEdit ? (
           <TouchableOpacity
             onPress={() => setKeyPickerVisible(true)}
@@ -558,6 +578,116 @@ export default function SetDetailScreen() {
     if (id) load();
   }, [id]);
 
+  // Live-sync the set the same way the web SetDetail does. Supabase can't
+  // filter DELETE events (the old row is primary-key-only under RLS), so the
+  // set_songs/set_collaborators DELETE handlers subscribe unfiltered and match
+  // on the local `id` instead of trusting payload.old.
+  useEffect(() => {
+    if (!id) return;
+    const bySong = 'id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, song_composers(people(name)))';
+    const sortByPosition = (rows: SetSong[]) => [...rows].sort((a, b) => a.position - b.position);
+
+    const channel = supabase
+      .channel(`set-detail-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'set_songs', filter: `set_id=eq.${id}` },
+        async (payload) => {
+          const row = payload.new as any;
+          const { data } = await supabase.from('set_songs').select(bySong).eq('id', row.id).single();
+          if (!data) return;
+          setSongs((prev) =>
+            prev.some((s) => s.id === row.id) ? prev : sortByPosition([...prev, data as any as SetSong])
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'set_songs', filter: `set_id=eq.${id}` },
+        (payload) => {
+          const row = payload.new as any;
+          setSongs((prev) =>
+            sortByPosition(
+              prev.map((s) =>
+                s.id === row.id
+                  ? { ...s, position: row.position, key_note: row.key_note, played: row.played, leader_user_ids: row.leader_user_ids }
+                  : s
+              )
+            )
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'set_songs' },
+        (payload) => {
+          const row = payload.old as any;
+          setSongs((prev) => prev.filter((s) => s.id !== row.id));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sets', filter: `id=eq.${id}` },
+        (payload) => {
+          const row = payload.new as any;
+          setSet((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  name: row.name,
+                  description: row.description ?? null,
+                  link_sharing: row.link_sharing,
+                  spotify_playlist_id: row.spotify_playlist_id ?? null,
+                }
+              : prev
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'set_collaborators', filter: `set_id=eq.${id}` },
+        async (payload) => {
+          const row = payload.new as any;
+          if (row.status !== 'accepted') return;
+          const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', row.user_id).single();
+          setCollaborators((prev) =>
+            prev.some((c) => c.id === row.id)
+              ? prev
+              : [...prev, { id: row.id, user_id: row.user_id, role: row.role, display_name: (prof as any)?.display_name ?? null, username: (prof as any)?.username ?? null }]
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'set_collaborators', filter: `set_id=eq.${id}` },
+        async (payload) => {
+          const row = payload.new as any;
+          const old = payload.old as any;
+          if (row.status === 'accepted' && old.status !== 'accepted') {
+            const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', row.user_id).single();
+            setCollaborators((prev) =>
+              prev.some((c) => c.id === row.id)
+                ? prev
+                : [...prev, { id: row.id, user_id: row.user_id, role: row.role, display_name: (prof as any)?.display_name ?? null, username: (prof as any)?.username ?? null }]
+            );
+          } else if (row.status === 'accepted') {
+            setCollaborators((prev) => prev.map((c) => (c.id === row.id ? { ...c, role: row.role } : c)));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'set_collaborators' },
+        (payload) => {
+          const row = payload.old as any;
+          setCollaborators((prev) => prev.filter((c) => c.id !== row.id));
+        }
+      );
+
+    channel.subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id]);
+
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -571,7 +701,7 @@ export default function SetDetailScreen() {
         .single(),
       supabase
         .from('set_songs')
-        .select('id, song_id, position, key_note, leader_user_ids, songs(title, display_artist, song_composers(people(name)))')
+        .select('id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, song_composers(people(name)))')
         .eq('set_id', id)
         .order('position', { ascending: true }),
       supabase
@@ -646,6 +776,21 @@ export default function SetDetailScreen() {
     await Promise.all(
       reordered.map(s => supabase.from('set_songs').update({ position: s.position }).eq('id', s.id))
     );
+  }
+
+  async function handleTogglePlayed(setsSongId: string, played: boolean) {
+    const previous = songs;
+    const reordered = reorderSongsForPlayed(songs, setsSongId, played)
+      .map((s, i) => ({ ...s, position: i + 1 }));
+    setSongs(reordered);
+    const results = await Promise.all([
+      supabase.from('set_songs').update({ played }).eq('id', setsSongId),
+      ...reordered.map(s => supabase.from('set_songs').update({ position: s.position }).eq('id', s.id)),
+    ]);
+    if (results.some(r => r.error)) {
+      setSongs(previous);
+      Alert.alert('Error', 'Could not update the set.');
+    }
   }
 
   async function handleSpotifyExport() {
@@ -856,6 +1001,7 @@ export default function SetDetailScreen() {
                   onRemove={() => handleRemoveSong(item.id)}
                   onKeyChange={(key) => handleKeyChange(item.id, key)}
                   onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
+                  onTogglePlayed={() => handleTogglePlayed(item.id, !item.played)}
                 />
               </ScaleDecorator>
             )}
@@ -879,6 +1025,7 @@ export default function SetDetailScreen() {
                 onRemove={() => handleRemoveSong(item.id)}
                 onKeyChange={(key) => handleKeyChange(item.id, key)}
                 onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
+                onTogglePlayed={() => handleTogglePlayed(item.id, !item.played)}
               />
             )}
           />

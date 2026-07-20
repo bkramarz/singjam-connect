@@ -4,6 +4,7 @@ export * from './utils/formatComposers';
 export * from './utils/formatJamTime';
 export * from './utils/generateSlug';
 export * from './utils/normalizeSearch';
+export * from './utils/reorderSongsForPlayed';
 export * from './utils/setDisplayedSongs';
 export * from './utils/singingVoice';
 export * from './utils/sortRepertoireSearchResults';
