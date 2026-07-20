@@ -6,11 +6,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import {
+  USERNAME_REGEX, USERNAME_MIN_LENGTH, RESERVED_USERNAMES, normalizeUsername,
+} from '@singjam/core';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
-
-const RESERVED = new Set(['admin', 'support', 'help', 'singjam', 'sing', 'jam', 'connect', 'api', 'www', 'mail']);
-const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
@@ -397,18 +398,19 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     setUsername(val);
     setUsernameStatus('idle');
     if (usernameTimer.current) clearTimeout(usernameTimer.current);
-    if (val.length < 3) return;
-    if (!USERNAME_RE.test(val)) { setUsernameStatus('invalid'); return; }
-    if (RESERVED.has(val.toLowerCase())) { setUsernameStatus('taken'); return; }
-    usernameTimer.current = setTimeout(() => checkUsername(val), 400);
+    const normalized = normalizeUsername(val);
+    if (normalized.length < USERNAME_MIN_LENGTH) return;
+    if (!USERNAME_REGEX.test(normalized)) { setUsernameStatus('invalid'); return; }
+    if (RESERVED_USERNAMES.has(normalized)) { setUsernameStatus('taken'); return; }
+    usernameTimer.current = setTimeout(() => checkUsername(normalized), 400);
   }
 
-  async function checkUsername(val: string) {
+  async function checkUsername(normalized: string) {
     setUsernameStatus('checking');
     const { data } = await supabase
       .from('profiles')
       .select('id')
-      .eq('username', val.toLowerCase())
+      .eq('username', normalized)
       .neq('id', userId.current ?? '')
       .maybeSingle();
     setUsernameStatus(data ? 'taken' : 'available');
@@ -448,24 +450,27 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
   async function handleSave() {
     setError(null);
     if (!firstName.trim()) { setError('First name is required.'); return; }
-    if (username.length < 3) { setError('Username must be at least 3 characters.'); return; }
-    if (!USERNAME_RE.test(username)) { setError('Username can only contain letters, numbers, and underscores.'); return; }
+    const normalizedUsername = normalizeUsername(username);
+    if (normalizedUsername.length < USERNAME_MIN_LENGTH) { setError('Username must be at least 3 characters.'); return; }
+    if (!USERNAME_REGEX.test(normalizedUsername)) { setError('Username must be 3–20 characters: letters, numbers, and underscores only.'); return; }
     if (usernameStatus === 'taken' || usernameStatus === 'invalid') { setError('Please choose a valid username.'); return; }
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { setSaving(false); return; }
 
     const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+    const singingVoice = Array.from(singing);
+    const neighborhoodValue = neighborhood.trim() || null;
 
     const [{ error: saveError }] = await Promise.all([
       supabase.from('profiles').upsert({
         id: user.id,
         display_name: firstName.trim(),
         last_name: lastName.trim() || null,
-        username: username.toLowerCase().trim(),
-        singing_voice: Array.from(singing).join(',') || null,
-        neighborhood: neighborhood.trim() || null,
+        username: normalizedUsername,
+        singing_voice: singingVoice.join(',') || null,
+        neighborhood: neighborhoodValue,
         instrument_levels: Object.keys(instruments).length > 0 ? instruments : null,
         favorite_genres: favoriteGenres.length > 0 ? favoriteGenres : null,
         updated_at: new Date().toISOString(),
@@ -475,6 +480,27 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
 
     setSaving(false);
     if (saveError) { setError(saveError.message); return; }
+
+    // Mirror web AccountPanel: sync the profile to ActiveCampaign via the web API.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      fetch(`${WEB_URL}/api/account/sync-ac`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          neighborhood: neighborhoodValue || undefined,
+          singingVoice,
+          instrumentLevels: instruments,
+          favoriteGenres,
+        }),
+      }).catch(() => {});
+    }
+
     onSave();
   }
 

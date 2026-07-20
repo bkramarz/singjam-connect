@@ -7,3 +7,4 @@ export * from './utils/normalizeSearch';
 export * from './utils/setDisplayedSongs';
 export * from './utils/singingVoice';
 export * from './utils/sortRepertoireSearchResults';
+export * from './utils/username';

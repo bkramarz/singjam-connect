@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import LocationAutocomplete from "./LocationAutocomplete";
+import { USERNAME_REGEX, RESERVED_USERNAMES, normalizeUsername } from "@singjam/core";
 
 const SEEDED_INSTRUMENTS = [
   "Guitar", "Electric Bass", "Upright Bass", "Piano/Keys", "Drums", "Percussion", "Violin/Fiddle", "Viola", "Cello",
@@ -24,9 +25,6 @@ const SINGING_OPTIONS = [
   { value: "backup", label: "Backup vocals" },
   { value: "none", label: "I don't sing" },
 ] as const;
-const RESERVED = new Set(["admin", "support", "help", "singjam", "sing", "jam", "connect", "api", "www", "mail"]);
-const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
-
 type SingingVoice = string[];
 
 const FEATURED_INSTRUMENTS = ["Guitar", "Piano/Keys", "Electric Bass", "Upright Bass", "Drums", "Percussion", "Violin/Fiddle", "Cello", "Saxophone", "Clarinet", "Trumpet"];
@@ -154,8 +152,8 @@ function GenreSearch({
 
 function suggestUsername(email: string): string {
   const prefix = email.split("@")[0] ?? "";
-  const clean = prefix.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
-  return USERNAME_RE.test(clean) && !RESERVED.has(clean) ? clean : "";
+  const clean = normalizeUsername(prefix).slice(0, 20);
+  return USERNAME_REGEX.test(clean) && !RESERVED_USERNAMES.has(clean) ? clean : "";
 }
 
 export default function AccountPanel() {
@@ -247,7 +245,7 @@ export default function AccountPanel() {
   }, []);
 
   function handleUsernameChange(val: string) {
-    const lower = val.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const lower = normalizeUsername(val);
     setUsername(lower);
 
     if (usernameTimerRef.current) clearTimeout(usernameTimerRef.current);
@@ -257,7 +255,7 @@ export default function AccountPanel() {
       return;
     }
 
-    if (!USERNAME_RE.test(lower) || RESERVED.has(lower)) {
+    if (!USERNAME_REGEX.test(lower) || RESERVED_USERNAMES.has(lower)) {
       setUsernameStatus("invalid");
       return;
     }
