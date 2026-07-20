@@ -6,7 +6,7 @@ import { matchesSearch, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
-import SongRow from '@/components/SongRow';
+import RepertoireCard from '@/components/RepertoireCard';
 import AddSongModal from '@/components/AddSongModal';
 import AddToSetModal from '@/components/AddToSetModal';
 import SignInPrompt from '@/components/SignInPrompt';
@@ -18,6 +18,7 @@ type RichUserSong = UserSong & {
   genres: string[];
   languages: string[];
   themes: string[];
+  productions: string[];
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
@@ -25,10 +26,9 @@ type RichUserSong = UserSong & {
 };
 
 type ConfidenceFilter = 'all' | 'lead' | 'support' | 'learn';
-type SortOrder = 'title_asc' | 'title_desc' | 'recent' | 'popular';
+type SortOrder = 'title_asc' | 'title_desc' | 'popularity';
 
 type ExtFilters = {
-  sortBy: SortOrder;
   genres: Set<string>;
   cultures: Set<string>;
   languages: Set<string>;
@@ -38,10 +38,9 @@ type ExtFilters = {
   meter: string;
 };
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Constants (mirror web repertoire/page.tsx) ────────────────────────────────
 
-const CONFIDENCE_CHIPS: { key: ConfidenceFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
+const CONFIDENCE_LEVELS: { key: Exclude<ConfidenceFilter, 'all'>; label: string }[] = [
   { key: 'lead', label: 'Lead' },
   { key: 'support', label: 'Support' },
   { key: 'learn', label: 'Learn' },
@@ -50,12 +49,11 @@ const CONFIDENCE_CHIPS: { key: ConfidenceFilter; label: string }[] = [
 const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
   { key: 'title_asc', label: 'A → Z' },
   { key: 'title_desc', label: 'Z → A' },
-  { key: 'recent', label: 'Recent' },
-  { key: 'popular', label: 'Popular' },
+  { key: 'popularity', label: 'Popular' },
 ];
 
 function emptyExtFilters(): ExtFilters {
-  return { sortBy: 'title_asc', genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '' };
+  return { genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '' };
 }
 
 function countExtFilters(f: ExtFilters): number {
@@ -68,13 +66,31 @@ function toggleSet(set: Set<string>, value: string): Set<string> {
   return next;
 }
 
+function showOptionsSheet(title: string, labels: string[], onPick: (index: number) => void) {
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, title },
+      (index) => { if (index < labels.length) onPick(index); }
+    );
+  } else {
+    Alert.alert(title, undefined, [
+      ...labels.map((label, i) => ({ text: label, onPress: () => onPick(i) })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
+}
+
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-function SkeletonRow() {
+function SkeletonCard() {
   return (
-    <View className="px-4 py-3 border-b border-slate-100">
+    <View className="mx-4 border-x border-b border-zinc-200 bg-white p-4">
       <View className="h-4 bg-slate-200 rounded w-2/3 mb-2" />
-      <View className="h-3 bg-slate-100 rounded w-1/2" />
+      <View className="h-3 bg-slate-100 rounded w-1/2 mb-3" />
+      <View className="flex-row gap-2 ml-8">
+        <View className="h-8 w-20 bg-slate-100 rounded-xl" />
+        <View className="h-8 w-20 bg-slate-100 rounded-xl" />
+      </View>
     </View>
   );
 }
@@ -133,13 +149,6 @@ function FilterModal({
         </View>
 
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
-          <SectionLabel title="Sort" />
-          <View className="flex-row flex-wrap">
-            {SORT_OPTIONS.map(opt => (
-              <Chip key={opt.key} label={opt.label} selected={filters.sortBy === opt.key} onPress={() => set({ sortBy: opt.key })} />
-            ))}
-          </View>
-
           {options.genres.length > 0 && (
             <>
               <SectionLabel title="Genre" />
@@ -210,55 +219,30 @@ function FilterModal({
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
-async function fetchRichUserSongs(userId: string): Promise<RichUserSong[]> {
-  const [{ data, error }, { data: popData }] = await Promise.all([
-    supabase
-      .from('user_songs')
-      .select(`
-        song_id, confidence, updated_at,
-        songs (
-          title, slug, display_artist, vibe, tonality, meter,
-          song_composers ( people ( name ) ),
-          song_lyricists ( people ( name ) ),
-          song_cultures ( cultures ( name ) ),
-          song_genres ( genres ( name ) ),
-          song_languages ( languages ( name ) ),
-          song_themes ( themes ( name ) )
-        )
-      `)
-      .eq('user_id', userId)
-      .limit(1000),
-    supabase.rpc('song_popularity_counts'),
-  ]);
-
+// Same my_repertoire() RPC web's /repertoire uses (single source of truth per
+// the parity rule); its composers union also dedupes writer/lyricist overlap.
+async function fetchRichUserSongs(): Promise<RichUserSong[]> {
+  const { data, error } = await supabase.rpc('my_repertoire');
   if (error) throw error;
 
-  const popularityMap = new Map<string, number>();
-  (popData ?? []).forEach((row: any) => popularityMap.set(row.song_id, Number(row.user_count)));
-
-  return ((data ?? []) as any[])
-    .filter(row => row.songs)
-    .map(row => ({
-      song_id: row.song_id,
-      slug: row.songs.slug ?? null,
-      confidence: row.confidence ?? 'learn',
-      updated_at: row.updated_at,
-      title: row.songs.title ?? '',
-      display_artist: row.songs.display_artist ?? null,
-      composers: [
-        ...(row.songs.song_composers?.map((c: any) => c.people?.name).filter(Boolean) ?? []),
-        ...(row.songs.song_lyricists?.map((l: any) => l.people?.name).filter(Boolean) ?? []),
-      ],
-      cultures: row.songs.song_cultures?.map((c: any) => c.cultures?.name).filter(Boolean) ?? [],
-      genres: row.songs.song_genres?.map((g: any) => g.genres?.name).filter(Boolean) ?? [],
-      languages: row.songs.song_languages?.map((l: any) => l.languages?.name).filter(Boolean) ?? [],
-      themes: row.songs.song_themes?.map((t: any) => t.themes?.name).filter(Boolean) ?? [],
-      vibe: row.songs.vibe ?? null,
-      tonality: row.songs.tonality ?? null,
-      meter: row.songs.meter ?? null,
-      popularity: popularityMap.get(row.song_id) ?? 0,
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title));
+  return ((data ?? []) as any[]).map(row => ({
+    song_id: row.song_id,
+    slug: row.slug ?? null,
+    confidence: row.confidence ?? 'learn',
+    updated_at: row.updated_at,
+    title: row.title ?? '',
+    display_artist: row.display_artist ?? null,
+    composers: row.composers ?? [],
+    cultures: row.cultures ?? [],
+    genres: row.genres ?? [],
+    languages: row.languages ?? [],
+    themes: row.themes ?? [],
+    productions: row.productions ?? [],
+    vibe: row.vibe ?? null,
+    tonality: row.tonality ?? null,
+    meter: row.meter ?? null,
+    popularity: Number(row.popularity ?? 0),
+  }));
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -267,18 +251,19 @@ export default function RepertoireScreen() {
   const router = useRouter();
   const [songs, setSongs] = useState<RichUserSong[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [singingVoice, setSingingVoice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
+  const [sortBy, setSortBy] = useState<SortOrder>('title_asc');
   const [extFilters, setExtFilters] = useState<ExtFilters>(emptyExtFilters());
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [addToSetSongs, setAddToSetSongs] = useState<{ id: string; title: string }[] | null>(null);
-
-  // Bulk selection
-  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const canLead = !!singingVoice && singingVoice !== 'none';
 
   async function load(showRefresh = false) {
     if (showRefresh) setRefreshing(true);
@@ -286,8 +271,12 @@ export default function RepertoireScreen() {
     if (!user) return;
     setUserId(user.id);
     try {
-      const data = await fetchRichUserSongs(user.id);
+      const [data, profileRes] = await Promise.all([
+        fetchRichUserSongs(),
+        supabase.from('profiles').select('singing_voice').eq('id', user.id).single(),
+      ]);
       setSongs(data);
+      setSingingVoice(profileRes.data?.singing_voice ?? null);
       writeCache('/repertoire', user.id, data);
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -330,13 +319,12 @@ export default function RepertoireScreen() {
     let result: RichUserSong[] = songs;
 
     if (query.trim()) {
-      result = result.filter(s => matchesSearch([s.title, s.display_artist ?? ''].join(' '), query));
+      result = result.filter(s => matchesSearch([s.title, s.display_artist ?? '', ...s.composers].join(' '), query));
     }
     if (confidenceFilter !== 'all') {
       result = result.filter(s => s.confidence === confidenceFilter);
     }
 
-    // Extended filters
     if (extFilters.genres.size > 0) result = result.filter(s => s.genres.some(g => extFilters.genres.has(g)));
     if (extFilters.cultures.size > 0) result = result.filter(s => s.cultures.some(c => extFilters.cultures.has(c)));
     if (extFilters.languages.size > 0) result = result.filter(s => s.languages.some(l => extFilters.languages.has(l)));
@@ -345,25 +333,14 @@ export default function RepertoireScreen() {
     if (extFilters.tonality) result = result.filter(s => s.tonality?.split(/,\s*/).includes(extFilters.tonality));
     if (extFilters.meter) result = result.filter(s => s.meter === extFilters.meter);
 
-    // Sort
-    if (extFilters.sortBy === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
-    if (extFilters.sortBy === 'recent') return [...result].sort((a, b) => {
-      if (!a.updated_at && !b.updated_at) return 0;
-      if (!a.updated_at) return 1;
-      if (!b.updated_at) return -1;
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-    });
-    if (extFilters.sortBy === 'popular') return [...result].sort((a, b) => b.popularity - a.popularity);
+    if (sortBy === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
+    if (sortBy === 'popularity') return [...result].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
     return result;
-  }, [songs, query, confidenceFilter, extFilters]);
+  }, [songs, query, confidenceFilter, extFilters, sortBy]);
 
   const existingIds = useMemo(() => new Set(songs.map(s => s.song_id)), [songs]);
   const extFilterCount = countExtFilters(extFilters);
-
-  function exitSelectMode() {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  }
+  const allSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id));
 
   async function handleConfidenceChange(songId: string, confidence: string) {
     setSongs(prev => prev.map(s => s.song_id === songId ? { ...s, confidence } : s));
@@ -373,51 +350,40 @@ export default function RepertoireScreen() {
 
   async function handleRemove(songId: string) {
     setSongs(prev => prev.filter(s => s.song_id !== songId));
+    setSelectedIds(prev => { const next = new Set(prev); next.delete(songId); return next; });
     const { error } = await supabase.from('user_songs').delete().eq('user_id', userId).eq('song_id', songId);
     if (error) { Alert.alert('Error', error.message); load(); }
   }
 
   function handleAdded() { setShowAdd(false); load(); }
 
-  function handleAddToSet(songId: string) {
-    const song = songs.find(s => s.song_id === songId);
-    setAddToSetSongs([{ id: songId, title: song?.title ?? '' }]);
+  function toggleSelect(songId: string) {
+    setSelectedIds(prev => toggleSet(prev, songId));
   }
 
-  // ── Bulk actions ─────────────────────────────────────────────────────────────
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? new Set() : new Set(filtered.map(s => s.song_id)));
+  }
+
+  // ── Bulk actions (bar mirrors web's amber bulk bar) ──────────────────────────
 
   function handleBulkAddToSet() {
     const selected = songs.filter(s => selectedIds.has(s.song_id)).map(s => ({ id: s.song_id, title: s.title }));
     setAddToSetSongs(selected);
-    exitSelectMode();
   }
 
   function handleBulkConfidence() {
     const ids = Array.from(selectedIds);
-    const options = ['Lead', 'Support', 'Learn', 'Cancel'];
-    const values = ['lead', 'support', 'learn'];
-
-    const apply = async (confidence: string) => {
+    const labels = CONFIDENCE_LEVELS.filter(l => l.key !== 'lead' || canLead).map(l => l.label);
+    const values = CONFIDENCE_LEVELS.filter(l => l.key !== 'lead' || canLead).map(l => l.key);
+    showOptionsSheet(`Change role for ${ids.length} ${ids.length === 1 ? 'song' : 'songs'}`, labels, async (index) => {
+      const confidence = values[index];
       setSongs(prev => prev.map(s => selectedIds.has(s.song_id) ? { ...s, confidence } : s));
-      exitSelectMode();
+      setSelectedIds(new Set());
       for (const songId of ids) {
         await supabase.from('user_songs').update({ confidence }).eq('user_id', userId).eq('song_id', songId);
       }
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 3, title: `Change level for ${ids.length} songs` },
-        (index) => { if (index < 3) apply(values[index]); }
-      );
-    } else {
-      Alert.alert(`Change level for ${ids.length} songs`, undefined, [
-        { text: 'Lead', onPress: () => apply('lead') },
-        { text: 'Support', onPress: () => apply('support') },
-        { text: 'Learn', onPress: () => apply('learn') },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    });
   }
 
   function handleBulkRemove() {
@@ -431,7 +397,7 @@ export default function RepertoireScreen() {
           style: 'destructive',
           onPress: async () => {
             setSongs(prev => prev.filter(s => !selectedIds.has(s.song_id)));
-            exitSelectMode();
+            setSelectedIds(new Set());
             for (const songId of ids) {
               await supabase.from('user_songs').delete().eq('user_id', userId).eq('song_id', songId);
             }
@@ -443,30 +409,128 @@ export default function RepertoireScreen() {
   }
 
   const renderItem = useCallback(
-    ({ item }: { item: RichUserSong }) => (
-      <SongRow
-        song={item}
-        onConfidenceChange={handleConfidenceChange}
-        onRemove={handleRemove}
-        onAddToSet={handleAddToSet}
-        onPress={!selectMode && item.song_id ? () => router.push(`/song/${item.song_id}` as any) : undefined}
-        bulkMode={selectMode}
+    ({ item, index }: { item: RichUserSong; index: number }) => (
+      <RepertoireCard
+        song={{ ...item, productions: item.productions ?? [] }}
         selected={selectedIds.has(item.song_id)}
-        onToggle={() => setSelectedIds(prev => {
-          const next = new Set(prev);
-          next.has(item.song_id) ? next.delete(item.song_id) : next.add(item.song_id);
-          return next;
-        })}
+        canLead={canLead}
+        isLast={index === filtered.length - 1}
+        onToggleSelect={() => toggleSelect(item.song_id)}
+        onConfidenceChange={(confidence) => handleConfidenceChange(item.song_id, confidence)}
+        onAddToSet={() => setAddToSetSongs([{ id: item.song_id, title: item.title }])}
+        onView={() => router.push(`/song/${item.song_id}` as any)}
+        onRemove={() => handleRemove(item.song_id)}
       />
     ),
-    [userId, songs, selectMode, selectedIds]
+    [userId, songs, selectedIds, canLead, filtered.length]
+  );
+
+  const roleLabel = confidenceFilter === 'all'
+    ? 'Any role'
+    : CONFIDENCE_LEVELS.find(l => l.key === confidenceFilter)?.label ?? 'Any role';
+  const sortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label ?? 'A → Z';
+
+  const listHeader = (
+    <View>
+      {/* Search card — mirrors web's bordered search panel */}
+      <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+        <View className="flex-row items-center bg-white border border-zinc-200 rounded-xl px-3 py-2">
+          <Ionicons name="search" size={16} color="#94a3b8" />
+          <TextInput
+            className="flex-1 text-slate-900 ml-2"
+            placeholder="Search by title, songwriter, or artist…"
+            placeholderTextColor="#94a3b8"
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => setQuery('')}>
+              <Text className="text-slate-400 ml-2">✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={() => showOptionsSheet('Role', ['Any role', ...CONFIDENCE_LEVELS.map(l => l.label)], (index) =>
+            setConfidenceFilter(index === 0 ? 'all' : CONFIDENCE_LEVELS[index - 1].key)
+          )}
+          className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
+        >
+          <Text className="text-sm text-slate-700">{roleLabel}</Text>
+          <Ionicons name="chevron-down" size={14} color="#71717a" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Count / sort / filters toolbar */}
+      <View className="mx-4 mt-4 flex-row items-center justify-between">
+        <Text className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
+          {filtered.length} of {songs.length}
+        </Text>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={() => showOptionsSheet('Sort', SORT_OPTIONS.map(o => o.label), (index) => setSortBy(SORT_OPTIONS[index].key))}
+            className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
+          >
+            <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
+            <Ionicons name="chevron-down" size={11} color="#71717a" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setFilterModalVisible(true)}
+            className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${
+              extFilterCount > 0 ? 'border-amber-400 bg-amber-50' : 'border-zinc-200'
+            }`}
+          >
+            <Ionicons name="filter" size={12} color={extFilterCount > 0 ? '#b45309' : '#71717a'} />
+            <Text className={`text-xs font-medium ${extFilterCount > 0 ? 'text-amber-700' : 'text-zinc-500'}`}>
+              Filters{extFilterCount > 0 ? ` · ${extFilterCount}` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <View className="mx-4 mt-3 flex-row flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <Text className="text-sm font-medium text-amber-800">{selectedIds.size} selected</Text>
+          <TouchableOpacity onPress={() => setSelectedIds(new Set())}>
+            <Text className="text-xs text-amber-700 underline">Deselect all</Text>
+          </TouchableOpacity>
+          <View className="flex-row items-center gap-2 ml-auto">
+            <TouchableOpacity onPress={handleBulkAddToSet} className="rounded-xl border border-zinc-300 bg-white px-2 py-1.5">
+              <Text className="text-xs text-slate-700">Add to set…</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleBulkConfidence} className="rounded-xl border border-zinc-300 bg-white px-2 py-1.5">
+              <Text className="text-xs text-slate-700">Change role…</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleBulkRemove} className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5">
+              <Text className="text-xs text-zinc-500">Remove</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Select all — top row of the list container */}
+      {filtered.length > 0 && (
+        <View className="mx-4 mt-4 flex-row items-center gap-3 rounded-t-md border border-zinc-200 bg-zinc-50 px-4 py-2">
+          <TouchableOpacity onPress={toggleSelectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons
+              name={allSelected ? 'checkbox' : 'square-outline'}
+              size={18}
+              color={allSelected ? '#d97706' : '#d4d4d8'}
+            />
+          </TouchableOpacity>
+          <Text className="text-xs text-zinc-400">Select all</Text>
+        </View>
+      )}
+    </View>
   );
 
   const { session, initialised } = useAuth();
   if (initialised && !session) return <SignInPrompt message="Sign in to see your repertoire" />;
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-slate-50">
       <FilterModal
         visible={filterModalVisible}
         filters={extFilters}
@@ -478,160 +542,61 @@ export default function RepertoireScreen() {
       <BrandHeader />
 
       {/* Header */}
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-3 border-b border-slate-100">
-        {selectMode ? (
-          <>
-            <TouchableOpacity onPress={exitSelectMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text className="text-amber-600 font-medium">Cancel</Text>
-            </TouchableOpacity>
-            <Text className="text-base font-semibold text-slate-900">
-              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select songs'}
+      <View className="flex-row items-center justify-between px-4 pt-4 pb-3 bg-white border-b border-slate-100">
+        <View>
+          <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
+          {!loading && (
+            <Text className="text-slate-400 text-sm mt-0.5">
+              {songs.length} {songs.length === 1 ? 'song' : 'songs'}
             </Text>
-            <TouchableOpacity
-              onPress={() => setSelectedIds(new Set(filtered.map(s => s.song_id)))}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text className="text-amber-600 font-medium">All</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <View>
-              <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
-              {!loading && (
-                <Text className="text-slate-400 text-sm mt-0.5">
-                  {songs.length} {songs.length === 1 ? 'song' : 'songs'}
-                </Text>
-              )}
-            </View>
-            <View className="flex-row items-center gap-3">
-              {songs.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setSelectMode(true)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text className="text-amber-600 font-medium text-sm">Select</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                onPress={() => setShowAdd(true)}
-                className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
-              >
-                <Text className="text-white text-xl leading-none font-light">+</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={() => setShowAdd(true)}
+          className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
+        >
+          <Text className="text-white text-xl leading-none font-light">+</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Search + filter icon — hidden in select mode */}
-      {!selectMode && (
-        <View className="px-4 pt-2 pb-1 border-b border-slate-100">
-          <View className="flex-row items-center gap-2 mb-2">
-            <View className="flex-1 flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-              <Text className="text-slate-400 mr-2">🔍</Text>
-              <TextInput
-                className="flex-1 text-slate-900"
-                placeholder="Search your repertoire…"
-                placeholderTextColor="#94a3b8"
-                value={query}
-                onChangeText={setQuery}
-                autoCapitalize="none"
-                returnKeyType="search"
-              />
-              {query.length > 0 && (
-                <TouchableOpacity onPress={() => setQuery('')}>
-                  <Text className="text-slate-400 ml-2">✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity
-              onPress={() => setFilterModalVisible(true)}
-              className="relative"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="options-outline" size={22} color={extFilterCount > 0 ? '#d97706' : '#64748b'} />
-              {extFilterCount > 0 && (
-                <View className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 items-center justify-center">
-                  <Text className="text-white text-xs font-bold leading-none">{extFilterCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Confidence chips */}
-          <View className="flex-row gap-2 pb-1 mb-1">
-            {CONFIDENCE_CHIPS.map(chip => (
-              <TouchableOpacity
-                key={chip.key}
-                onPress={() => setConfidenceFilter(chip.key)}
-                className={`px-3 py-1 rounded-full border ${confidenceFilter === chip.key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
-              >
-                <Text className={`text-sm font-medium ${confidenceFilter === chip.key ? 'text-white' : 'text-slate-600'}`}>{chip.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* List */}
       {loading ? (
-        <FlatList
-          data={Array(8).fill(null)}
-          keyExtractor={(_, i) => String(i)}
-          renderItem={() => <SkeletonRow />}
-          scrollEnabled={false}
-        />
+        <View className="pt-4">
+          <View className="mx-4 h-24 rounded-2xl border border-zinc-200 bg-white mb-4" />
+          {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={item => item.song_id}
           renderItem={renderItem}
-          refreshControl={!selectMode ? <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#d97706" /> : undefined}
+          ListHeaderComponent={listHeader}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#d97706" />}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center pt-24">
-              <Text className="text-slate-400 text-base">
-                {query.trim() || confidenceFilter !== 'all' || extFilterCount > 0
-                  ? 'No songs match these filters'
-                  : 'Your repertoire is empty'}
-              </Text>
-              {!query.trim() && confidenceFilter === 'all' && extFilterCount === 0 ? (
-                <TouchableOpacity onPress={() => setShowAdd(true)} className="mt-4">
-                  <Text className="text-amber-600 font-medium">Add your first song</Text>
-                </TouchableOpacity>
-              ) : extFilterCount > 0 ? (
-                <TouchableOpacity onPress={() => setExtFilters(emptyExtFilters())} className="mt-3">
-                  <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
-                </TouchableOpacity>
-              ) : null}
+            <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
+              {query.trim() || confidenceFilter !== 'all' || extFilterCount > 0 ? (
+                <>
+                  <Text className="text-sm text-slate-500">No matches.</Text>
+                  {extFilterCount > 0 && (
+                    <TouchableOpacity onPress={() => setExtFilters(emptyExtFilters())} className="mt-3">
+                      <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text className="text-base font-semibold text-zinc-900">Your repertoire is empty</Text>
+                  <Text className="mt-1 text-sm text-zinc-500 text-center">
+                    Add songs you know and SingJam will match you with musicians who share your repertoire.
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowAdd(true)} className="mt-4">
+                    <Text className="text-amber-600 font-medium">Add your first song</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           }
-          contentContainerStyle={selectMode && selectedIds.size > 0 ? { paddingBottom: 100 } : undefined}
+          contentContainerStyle={{ paddingBottom: 32 }}
         />
-      )}
-
-      {/* Bulk action bar */}
-      {selectMode && selectedIds.size > 0 && (
-        <View className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-3 bg-white border-t border-slate-100 flex-row gap-2">
-          <TouchableOpacity
-            onPress={handleBulkAddToSet}
-            className="flex-1 py-2.5 rounded-xl border border-amber-400 items-center"
-          >
-            <Text className="text-amber-600 text-sm font-semibold">Add to set</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleBulkConfidence}
-            className="flex-1 py-2.5 rounded-xl border border-slate-200 items-center"
-          >
-            <Text className="text-slate-700 text-sm font-semibold">Change level</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleBulkRemove}
-            className="flex-1 py-2.5 rounded-xl border border-red-200 items-center"
-          >
-            <Text className="text-red-500 text-sm font-semibold">Remove</Text>
-          </TouchableOpacity>
-        </View>
       )}
 
       {userId && (
@@ -648,7 +613,7 @@ export default function RepertoireScreen() {
         <AddToSetModal
           visible={!!addToSetSongs}
           songs={addToSetSongs}
-          onClose={() => setAddToSetSongs(null)}
+          onClose={() => { setAddToSetSongs(null); setSelectedIds(new Set()); }}
         />
       )}
     </View>
