@@ -1,11 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
-import { View, Text, SectionList, RefreshControl, TouchableOpacity } from 'react-native';
+import {
+  View, Text, SectionList, RefreshControl, TouchableOpacity,
+  Alert, ActionSheetIOS, Platform,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
+import { duplicateJam } from '@/lib/jams';
 import JamCard, { type JamItem } from '@/components/JamCard';
 import BrandHeader from '@/components/BrandHeader';
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 type Section = { title: string; data: JamItem[]; hosting?: boolean };
 
@@ -167,6 +173,60 @@ export default function JamsScreen() {
 
   const isEmpty = !loading && sections.every(s => s.data.length === 0);
 
+  // Host card ⋯ menu — mirrors web's JamListCard overflow menu (Edit / Copy /
+  // Cancel). Cancel routes through the web DELETE endpoint so attendees are
+  // notified + emailed (single source of truth).
+  function openJamMenu(jam: JamItem) {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Edit details', 'Copy event', 'Cancel jam', 'Close'], destructiveButtonIndex: 2, cancelButtonIndex: 3 },
+        (index) => {
+          if (index === 0) editJam(jam);
+          if (index === 1) copyJam(jam);
+          if (index === 2) confirmCancel(jam);
+        }
+      );
+    } else {
+      Alert.alert(jam.name ?? 'Jam', undefined, [
+        { text: 'Edit details', onPress: () => editJam(jam) },
+        { text: 'Copy event', onPress: () => copyJam(jam) },
+        { text: 'Cancel jam', style: 'destructive', onPress: () => confirmCancel(jam) },
+        { text: 'Close', style: 'cancel' },
+      ]);
+    }
+  }
+
+  function editJam(jam: JamItem) {
+    router.push({ pathname: '/jam/edit' as any, params: { id: jam.id } });
+  }
+
+  async function copyJam(jam: JamItem) {
+    if (!userId) return;
+    const newId = await duplicateJam(jam.id, userId);
+    if (newId) router.push({ pathname: '/jam/[id]', params: { id: newId } });
+    else Alert.alert('Copy failed', 'Something went wrong copying this jam.');
+  }
+
+  function confirmCancel(jam: JamItem) {
+    Alert.alert('Cancel this jam?', "This can't be undone. Attendees will be notified.", [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Yes, cancel',
+        style: 'destructive',
+        onPress: async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) return;
+          const res = await fetch(`${WEB_URL}/api/jam/${jam.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (res.ok) load();
+          else Alert.alert('Cancel failed', 'Something went wrong cancelling this jam.');
+        },
+      },
+    ]);
+  }
+
   return (
     <View className="flex-1 bg-slate-50">
       <BrandHeader />
@@ -195,6 +255,7 @@ export default function JamsScreen() {
               jam={item}
               myId={userId}
               onPress={() => router.push({ pathname: '/jam/[id]', params: { id: item.id } })}
+              onManage={() => openJamMenu(item)}
             />
           )}
           renderSectionHeader={({ section }) => (

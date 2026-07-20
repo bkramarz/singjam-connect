@@ -8,6 +8,9 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { formatJamTime } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import { duplicateJam } from '@/lib/jams';
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 type JamDetail = {
   id: string;
@@ -346,6 +349,23 @@ export default function JamDetailScreen() {
     setLoading(false);
   }
 
+  // RSVP, cancel, and invite responses all run the capacity/waitlist rules,
+  // set-collaborator linking, notifications, and emails server-side. They live
+  // in the web API routes (single source of truth) and are called here with a
+  // bearer token instead of being reimplemented against the client.
+  async function jamApiFetch(path: string, method: 'POST' | 'DELETE', body?: object) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    return fetch(`${WEB_URL}${path}`, {
+      method,
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  }
+
   async function handleRsvp() {
     if (!jam) return;
     if (!myUserId) { router.push('/(auth)/sign-in' as any); return; }
@@ -354,90 +374,14 @@ export default function JamDetailScreen() {
       return;
     }
     setRsvpLoading(true);
-
-    const { count: attendingCount } = await supabase
-      .from('jam_rsvps')
-      .select('id', { count: 'exact', head: true })
-      .eq('jam_id', jam.id)
-      .eq('status', 'attending');
-
-    const isFull = jam.capacity !== null && (attendingCount ?? 0) >= jam.capacity;
-    const newStatus: 'attending' | 'waitlist' = isFull ? 'waitlist' : 'attending';
-
-    let waitlistPosition: number | null = null;
-    if (isFull) {
-      const { count: waitlistCount } = await supabase
-        .from('jam_rsvps')
-        .select('id', { count: 'exact', head: true })
-        .eq('jam_id', jam.id)
-        .eq('status', 'waitlist');
-      waitlistPosition = (waitlistCount ?? 0) + 1;
-    }
-
-    const { data: existing } = await supabase
-      .from('jam_rsvps')
-      .select('id')
-      .eq('jam_id', jam.id)
-      .eq('user_id', myUserId)
-      .maybeSingle();
-
-    const rsvpMutation = existing
-      ? supabase.from('jam_rsvps').update({ status: newStatus, waitlist_position: waitlistPosition }).eq('id', existing.id)
-      : supabase.from('jam_rsvps').insert({ jam_id: jam.id, user_id: myUserId, status: newStatus, waitlist_position: waitlistPosition });
-
-    const { error } = await rsvpMutation;
-    if (error) {
-      Alert.alert('Error', error.message);
+    const res = await jamApiFetch(`/api/jam/${jam.id}/rsvp`, 'POST');
+    if (!res?.ok) {
+      const msg = res ? (await res.json().catch(() => null))?.error : null;
+      Alert.alert('Error', msg ?? 'Something went wrong.');
       setRsvpLoading(false);
       return;
     }
-
-    if (newStatus === 'attending') {
-      const { data: linkedSet } = await supabase
-        .from('sets')
-        .select('id, owner_user_id')
-        .eq('jam_id', jam.id)
-        .maybeSingle();
-      if (linkedSet && linkedSet.owner_user_id !== myUserId) {
-        const { data: existingCollab } = await supabase
-          .from('set_collaborators')
-          .select('id')
-          .eq('set_id', linkedSet.id)
-          .eq('user_id', myUserId)
-          .maybeSingle();
-        if (!existingCollab) {
-          await supabase.from('set_collaborators').insert({
-            set_id: linkedSet.id,
-            user_id: myUserId,
-            invited_by: linkedSet.owner_user_id,
-            status: 'accepted',
-          });
-        }
-      }
-    }
-
-    if (jam.host_id && jam.host_id !== myUserId) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('display_name, username')
-        .eq('id', myUserId)
-        .maybeSingle();
-      const name = (profile as any)?.display_name ?? (profile as any)?.username ?? 'Someone';
-      await supabase.from('notifications').insert({
-        user_id: jam.host_id,
-        type: 'jam_rsvp',
-        title: `${name} is ${newStatus === 'waitlist' ? 'on the waitlist for' : 'going to'} ${jam.name ?? 'your jam'}`,
-        link: `/jam/${jam.id}`,
-      });
-    }
-
-    setMyRsvpStatus(newStatus);
-    if (newStatus === 'attending') {
-      setAttendees(prev => [
-        ...prev.filter(a => a.user_id !== myUserId),
-        { user_id: myUserId, status: 'attending', display_name: null, username: null, avatar_url: null },
-      ]);
-    }
+    await load();
     setRsvpLoading(false);
   }
 
@@ -449,54 +393,13 @@ export default function JamDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           setRsvpLoading(true);
-
-          const { data: rsvp } = await supabase
-            .from('jam_rsvps')
-            .select('id, status')
-            .eq('jam_id', jam.id)
-            .eq('user_id', myUserId)
-            .maybeSingle();
-
-          if (!rsvp) { setRsvpLoading(false); return; }
-
-          const { error } = await supabase
-            .from('jam_rsvps')
-            .update({ status: 'cancelled', waitlist_position: null })
-            .eq('id', rsvp.id);
-
-          if (error) {
-            Alert.alert('Error', error.message);
+          const res = await jamApiFetch(`/api/jam/${jam.id}/rsvp`, 'DELETE');
+          if (!res?.ok) {
+            Alert.alert('Error', 'Something went wrong.');
             setRsvpLoading(false);
             return;
           }
-
-          setMyRsvpStatus('cancelled');
-          setAttendees(prev => prev.filter(a => a.user_id !== myUserId));
-
-          if (rsvp.status === 'attending') {
-            const { data: next } = await supabase
-              .from('jam_rsvps')
-              .select('id, user_id')
-              .eq('jam_id', jam.id)
-              .eq('status', 'waitlist')
-              .order('waitlist_position', { ascending: true })
-              .limit(1)
-              .maybeSingle();
-
-            if (next) {
-              await supabase
-                .from('jam_rsvps')
-                .update({ status: 'attending', waitlist_position: null })
-                .eq('id', next.id);
-              await supabase.from('notifications').insert({
-                user_id: next.user_id,
-                type: 'jam_rsvp',
-                title: `A spot opened up at ${jam.name ?? 'the jam'} — you're in!`,
-                link: `/jam/${jam.id}`,
-              });
-            }
-          }
-
+          await load();
           setRsvpLoading(false);
         },
       },
@@ -507,104 +410,13 @@ export default function JamDetailScreen() {
   async function handleInviteResponse(response: 'accepted' | 'declined') {
     if (!myUserId || !jam) return;
     setRsvpLoading(true);
-
-    const { data: invite } = await supabase
-      .from('jam_invites')
-      .select('id, invited_by')
-      .eq('jam_id', jam.id)
-      .eq('invited_user_id', myUserId)
-      .maybeSingle();
-
-    if (!invite) { setRsvpLoading(false); return; }
-
-    await supabase.from('jam_invites').update({ status: response }).eq('id', invite.id);
-
-    if (response === 'accepted') {
-      const { count: attendingCount } = await supabase
-        .from('jam_rsvps')
-        .select('id', { count: 'exact', head: true })
-        .eq('jam_id', jam.id)
-        .eq('status', 'attending');
-
-      const isFull = jam.capacity !== null && (attendingCount ?? 0) >= jam.capacity;
-      let waitlistPosition: number | null = null;
-      if (isFull) {
-        const { count: waitlistCount } = await supabase
-          .from('jam_rsvps')
-          .select('id', { count: 'exact', head: true })
-          .eq('jam_id', jam.id)
-          .eq('status', 'waitlist');
-        waitlistPosition = (waitlistCount ?? 0) + 1;
-      }
-      const rsvpStatus: 'attending' | 'waitlist' = isFull ? 'waitlist' : 'attending';
-
-      const { data: existingRsvp } = await supabase
-        .from('jam_rsvps')
-        .select('id')
-        .eq('jam_id', jam.id)
-        .eq('user_id', myUserId)
-        .maybeSingle();
-
-      if (existingRsvp) {
-        await supabase.from('jam_rsvps').update({ status: rsvpStatus, waitlist_position: waitlistPosition }).eq('id', existingRsvp.id);
-      } else {
-        await supabase.from('jam_rsvps').insert({ jam_id: jam.id, user_id: myUserId, status: rsvpStatus, waitlist_position: waitlistPosition });
-      }
-
-      if (rsvpStatus === 'attending') {
-        const { data: linkedSet } = await supabase
-          .from('sets')
-          .select('id, owner_user_id')
-          .eq('jam_id', jam.id)
-          .maybeSingle();
-        if (linkedSet && linkedSet.owner_user_id !== myUserId) {
-          const { data: existingCollab } = await supabase
-            .from('set_collaborators')
-            .select('id')
-            .eq('set_id', linkedSet.id)
-            .eq('user_id', myUserId)
-            .maybeSingle();
-          if (!existingCollab) {
-            await supabase.from('set_collaborators').insert({
-              set_id: linkedSet.id,
-              user_id: myUserId,
-              invited_by: linkedSet.owner_user_id,
-              status: 'accepted',
-            });
-          }
-        }
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('display_name, username')
-        .eq('id', myUserId)
-        .maybeSingle();
-      const accepterName = (profile as any)?.display_name ?? (profile as any)?.username ?? 'Someone';
-
-      await Promise.all([
-        invite.invited_by && invite.invited_by !== jam.host_id
-          ? supabase.from('notifications').insert({
-              user_id: invite.invited_by,
-              type: 'invite_accepted',
-              title: `${accepterName} accepted your invite to ${jam.name ?? 'your jam'}`,
-              link: `/jam/${jam.id}`,
-            })
-          : Promise.resolve(),
-        jam.host_id && jam.host_id !== myUserId
-          ? supabase.from('notifications').insert({
-              user_id: jam.host_id,
-              type: 'jam_rsvp',
-              title: `${accepterName} is going to ${jam.name ?? 'your jam'}`,
-              link: `/jam/${jam.id}`,
-            })
-          : Promise.resolve(),
-      ]);
-
-      setMyRsvpStatus(rsvpStatus);
+    const res = await jamApiFetch(`/api/jam/${jam.id}/invite/respond`, 'POST', { response });
+    if (!res?.ok) {
+      Alert.alert('Error', 'Something went wrong.');
+      setRsvpLoading(false);
+      return;
     }
-
-    setMyInviteStatus(response);
+    await load();
     setRsvpLoading(false);
   }
 
@@ -632,33 +444,9 @@ export default function JamDetailScreen() {
 
   async function handleDuplicate() {
     if (!jam || !myUserId) return;
-    const { data, error: insertError } = await supabase.from('jams').insert({
-      host_user_id: myUserId,
-      name: `${jam.name ?? 'Jam'} (copy)`,
-      starts_at: jam.starts_at,
-      ends_at: jam.ends_at,
-      neighborhood: jam.neighborhood,
-      full_address: jam.full_address,
-      notes: jam.notes,
-      visibility: jam.visibility === 'official' ? 'community' : jam.visibility,
-      capacity: jam.capacity,
-      timezone: jam.timezone,
-      created_at: new Date().toISOString(),
-    }).select('id').single();
-
-    if (insertError || !data?.id) { Alert.alert('Error', insertError?.message ?? 'Could not duplicate jam.'); return; }
-
-    if (jam.genres.length > 0) {
-      const { data: genreRows } = await supabase
-        .from('genres')
-        .select('id, name')
-        .in('name', jam.genres);
-      if (genreRows && genreRows.length > 0) {
-        await supabase.from('jam_genres').insert(genreRows.map((g: any) => ({ jam_id: data.id, genre_id: g.id })));
-      }
-    }
-
-    router.push({ pathname: '/jam/[id]' as any, params: { id: data.id } });
+    const newId = await duplicateJam(jam.id, myUserId);
+    if (!newId) { Alert.alert('Error', 'Could not duplicate jam.'); return; }
+    router.push({ pathname: '/jam/[id]' as any, params: { id: newId } });
   }
 
   const isHosting = jam.host_id === myUserId;

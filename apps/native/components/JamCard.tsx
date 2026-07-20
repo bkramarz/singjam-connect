@@ -1,4 +1,5 @@
 import { View, Text, Image, TouchableOpacity, Linking } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export type JamItem = {
   id: string;
@@ -48,16 +49,18 @@ function RsvpBadge({ status, waitlistPosition }: { status: string; waitlistPosit
 // Mirrors web's JamListCard (apps/web/components/JamsContent.tsx): poster image
 // or date block on the left, badge line, name + RSVP/Invited badge, date·time,
 // neighborhood, tags, hosted-by, and View details / Get tickets for official events.
-export default function JamCard({ jam, myId, onPress }: {
+export default function JamCard({ jam, myId, onPress, onManage }: {
   jam: JamItem;
   myId: string | null;
   onPress: () => void;
+  onManage?: () => void;
 }) {
   const isOfficial = jam.visibility === 'official';
   const isHosting = !!myId && jam.host_id === myId;
   const isInvited = jam.invite_status === 'pending';
 
   return (
+    <View className="relative">
     <TouchableOpacity
       onPress={onPress}
       className={`mx-4 mb-3 flex-row overflow-hidden rounded-2xl border bg-white ${isOfficial ? 'border-amber-200' : 'border-zinc-200'}`}
@@ -166,5 +169,16 @@ export default function JamCard({ jam, myId, onPress }: {
         )}
       </View>
     </TouchableOpacity>
+    {isHosting && onManage ? (
+      <TouchableOpacity
+        onPress={onManage}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        className="absolute right-6 top-3 rounded-lg bg-white/90 p-1"
+        accessibilityLabel="More options"
+      >
+        <Ionicons name="ellipsis-horizontal" size={16} color="#a1a1aa" />
+      </TouchableOpacity>
+    ) : null}
+    </View>
   );
 }
