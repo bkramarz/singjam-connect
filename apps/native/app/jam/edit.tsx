@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 type LookupItem = { id: string; name: string };
 type PlaceSuggestion = { description: string; neighborhood: string; placeId: string };
@@ -344,7 +345,18 @@ export default function EditJamScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await supabase.from('jams').delete().eq('id', id);
+          // Route through the web DELETE endpoint so attendees get the
+          // cancellation notification + email (single source of truth).
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) return;
+          const res = await fetch(`${WEB_URL}/api/jam/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (!res.ok) {
+            Alert.alert('Error', 'Something went wrong deleting this jam.');
+            return;
+          }
           router.replace('/(tabs)/jams' as any);
         },
       },

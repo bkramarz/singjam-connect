@@ -92,7 +92,7 @@ function RootNavigator() {
   }, [session, initialised, profileComplete, isGuest, segments]);
 
   return (
-    <Stack>
+    <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="setup" options={{ headerShown: false }} />
