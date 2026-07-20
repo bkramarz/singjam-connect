@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { registerForPushNotifications } from '@/lib/push';
+import { clearCaches } from '@/lib/cache';
 import type { Session } from '@supabase/supabase-js';
 
 type LiteProfile = {
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) setIsGuest(false);
       if (!session) {
         pushRegisteredFor.current = null;
+        clearCaches();
         setProfileComplete(null);
         setProfile(null);
         return;

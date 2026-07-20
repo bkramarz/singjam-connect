@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { matchesSearch, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
 import SongRow from '@/components/SongRow';
 import AddSongModal from '@/components/AddSongModal';
@@ -287,6 +288,7 @@ export default function RepertoireScreen() {
     try {
       const data = await fetchRichUserSongs(user.id);
       setSongs(data);
+      writeCache('/repertoire', user.id, data);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -295,7 +297,23 @@ export default function RepertoireScreen() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Show the cached repertoire immediately; load() still runs and silently
+    // replaces it (mirrors web repertoire/page.tsx's sessionStorage hydrate)
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user.id ?? null;
+      if (uid) {
+        const cached = await readCache<RichUserSong[]>('/repertoire', uid);
+        if (cached) {
+          setUserId(uid);
+          setSongs(cached);
+          setLoading(false);
+        }
+      }
+      load();
+    })();
+  }, []);
 
   // Derive filter option lists from the user's own songs
   const options = useMemo<FilterOptions>(() => ({
