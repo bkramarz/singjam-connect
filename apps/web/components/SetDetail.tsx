@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
+import { reorderSongsForPlayed } from "@singjam/core";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import SearchInput from "@/components/SearchInput";
@@ -509,11 +510,7 @@ export default function SetDetail({
     const entry = songs.find((s) => s.id === id);
     if (!entry) return;
     const previous = songs;
-    const without = songs.filter((s) => s.id !== id);
-    const insertAt = without.filter((s) => s.played).length;
-    const updated = { ...entry, played };
-    const reordered = [...without.slice(0, insertAt), updated, ...without.slice(insertAt)]
-      .map((s, i) => ({ ...s, position: i }));
+    const reordered = reorderSongsForPlayed(songs, id, played).map((s, i) => ({ ...s, position: i }));
 
     setSongs(reordered);
     const [playedRes, reorderRes] = await Promise.all([
