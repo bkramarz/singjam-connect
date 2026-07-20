@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { supabase } from '@/lib/supabase';
 import { formatComposers, reorderSongsForPlayed } from '@singjam/core';
+import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -933,6 +934,7 @@ export default function SetDetailScreen() {
         onCollaboratorRemoved={(cid) => setCollaborators(prev => prev.filter(c => c.id !== cid))}
       />
 
+      <ContentContainer style={{ backgroundColor: 'white' }}>
       <View className="flex-1 bg-white">
         {set.description ? (
           <View className="px-4 py-3 border-b border-slate-100">
@@ -1064,6 +1066,7 @@ export default function SetDetailScreen() {
           </View>
         ) : null}
       </View>
+      </ContentContainer>
     </>
   );
 }

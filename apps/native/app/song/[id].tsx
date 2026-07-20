@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { supabase } from '@/lib/supabase';
 import AddToSetModal from '@/components/AddToSetModal';
+import ContentContainer from '@/components/ContentContainer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -454,6 +455,7 @@ export default function SongDetailScreen() {
         />
       )}
 
+      <ContentContainer style={{ backgroundColor: 'white' }}>
       <ScrollView className="flex-1 bg-white" contentContainerStyle={{ paddingBottom: 60 }}>
 
         {/* Title + meta */}
@@ -664,6 +666,7 @@ export default function SongDetailScreen() {
         ) : null}
 
       </ScrollView>
+      </ContentContainer>
     </>
   );
 }

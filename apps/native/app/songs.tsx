@@ -7,6 +7,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import ContentContainer from '@/components/ContentContainer';
 
 type SongMeta = {
   song_id: string;
@@ -466,6 +467,7 @@ export default function SongLibraryScreen() {
         onChange={setFilters}
         onClose={() => setFilterModalVisible(false)}
       />
+      <ContentContainer style={{ backgroundColor: 'white' }}>
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
         {/* Search + filter row */}
@@ -549,6 +551,7 @@ export default function SongLibraryScreen() {
           />
         )}
       </KeyboardAvoidingView>
+      </ContentContainer>
     </>
   );
 }
