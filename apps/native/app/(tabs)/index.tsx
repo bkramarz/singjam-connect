@@ -12,6 +12,7 @@ import AddSongModal from '@/components/AddSongModal';
 import AddToSetModal from '@/components/AddToSetModal';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
+import ContentContainer from '@/components/ContentContainer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -638,6 +639,7 @@ export default function RepertoireScreen() {
 
       <BrandHeader />
 
+      <ContentContainer>
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-4 pb-3 bg-white border-b border-slate-100">
         <View>
@@ -698,6 +700,7 @@ export default function RepertoireScreen() {
           contentContainerStyle={{ paddingBottom: 32 }}
         />
       )}
+      </ContentContainer>
 
       {userId && (
         <AddSongModal

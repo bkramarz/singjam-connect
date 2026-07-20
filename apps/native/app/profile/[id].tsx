@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
 import { fetchProfileSongs } from '@singjam/core';
 import InviteToJamModal from '@/components/InviteToJamModal';
+import ContentContainer from '@/components/ContentContainer';
 
 type Profile = {
   id: string;
@@ -131,6 +132,7 @@ export default function UserProfileScreen() {
         inviteeName={displayName}
         onClose={() => setShowInvite(false)}
       />
+      <ContentContainer style={{ backgroundColor: 'white' }}>
       <ScrollView className="flex-1 bg-white">
         {/* Header */}
         <View className="items-center px-4 pt-8 pb-6 border-b border-slate-100">
@@ -237,6 +239,7 @@ export default function UserProfileScreen() {
           </View>
         )}
       </ScrollView>
+      </ContentContainer>
     </>
   );
 }

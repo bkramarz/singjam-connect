@@ -8,6 +8,7 @@ import { unregisterPushToken } from '@/lib/push';
 import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
+import ContentContainer from '@/components/ContentContainer';
 
 type Profile = {
   display_name: string | null;
@@ -179,6 +180,7 @@ export default function ProfileScreen() {
   return (
     <View className="flex-1 bg-slate-50">
       <BrandHeader />
+      <ContentContainer>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
       {loading ? (
         <SkeletonProfile />
@@ -280,6 +282,7 @@ export default function ProfileScreen() {
         <Text className="text-sm text-zinc-600">Account settings</Text>
       </TouchableOpacity>
       </ScrollView>
+      </ContentContainer>
     </View>
   );
 }

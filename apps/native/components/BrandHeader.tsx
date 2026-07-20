@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { contentWidthStyle } from '@/components/ContentContainer';
 
 // Web's `sm:` breakpoint — above this the header grows nav links and the
 // bottom tab bar hides, mirroring web's tablet/desktop top nav.
@@ -46,7 +47,7 @@ export default function BrandHeader() {
 
   return (
     <View className="bg-slate-900" style={{ paddingTop: insets.top }}>
-      <View className="flex-row items-center justify-between px-4 py-3">
+      <View style={contentWidthStyle} className="flex-row items-center justify-between px-4 py-3">
         <View className="flex-row items-center" style={{ gap: 10 }}>
           <View className="h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
             <Ionicons name="musical-notes" size={16} color="white" />

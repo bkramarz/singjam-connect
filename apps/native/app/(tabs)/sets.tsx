@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
+import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -266,6 +267,7 @@ export default function SetsScreen() {
   return (
     <View className="flex-1 bg-slate-50">
       <BrandHeader />
+      <ContentContainer>
       <View className="px-4 pt-4 pb-3 bg-white border-b border-slate-100 flex-row items-center justify-between">
         <View>
           <Text className="text-2xl font-bold text-slate-900">Sets</Text>
@@ -341,6 +343,7 @@ export default function SetsScreen() {
           stickySectionHeadersEnabled={false}
         />
       )}
+      </ContentContainer>
     </View>
   );
 }

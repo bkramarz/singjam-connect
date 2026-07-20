@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { hrefForNotificationLink } from '@/lib/notification-links';
 import SignInPrompt from '@/components/SignInPrompt';
+import ContentContainer from '@/components/ContentContainer';
 
 type Notification = {
   id: string;
@@ -138,6 +139,7 @@ export default function NotificationsScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Notifications', headerTintColor: '#d97706' }} />
+      <ContentContainer style={{ backgroundColor: 'white' }}>
       <View className="flex-1 bg-white">
         {loading ? (
           <View>
@@ -173,6 +175,7 @@ export default function NotificationsScreen() {
           />
         )}
       </View>
+      </ContentContainer>
     </>
   );
 }

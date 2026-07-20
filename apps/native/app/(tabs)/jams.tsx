@@ -10,6 +10,7 @@ import { readCache, writeCache } from '@/lib/cache';
 import { duplicateJam } from '@/lib/jams';
 import JamCard, { type JamItem } from '@/components/JamCard';
 import BrandHeader from '@/components/BrandHeader';
+import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -230,6 +231,7 @@ export default function JamsScreen() {
   return (
     <View className="flex-1 bg-slate-50">
       <BrandHeader />
+      <ContentContainer>
       <View className="border-b border-slate-100 bg-white px-4 pb-3 pt-4">
         <Text className="text-2xl font-bold text-slate-900">Jams</Text>
         <Text className="mt-0.5 text-sm text-slate-500">Browse open jams or post your own.</Text>
@@ -298,6 +300,7 @@ export default function JamsScreen() {
           contentContainerStyle={{ paddingBottom: 24 }}
         />
       )}
+      </ContentContainer>
     </View>
   );
 }

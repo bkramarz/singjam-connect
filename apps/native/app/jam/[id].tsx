@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { formatJamTime } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { duplicateJam } from '@/lib/jams';
+import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -485,6 +486,7 @@ export default function JamDetailScreen() {
           ) : undefined,
         }}
       />
+      <ContentContainer style={{ backgroundColor: 'white' }}>
       <ScrollView className="flex-1 bg-white">
 
         {/* Header image or date block */}
@@ -701,6 +703,7 @@ export default function JamDetailScreen() {
           </View>
         ) : null}
       </ScrollView>
+      </ContentContainer>
     </>
   );
 }
