@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView, ActionSheetIOS, Platform } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView, ActionSheetIOS, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { matchesSearch, type UserSong } from '@singjam/core';
+import { matchesSearch, mergeSuggestionsById, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
 import RepertoireCard from '@/components/RepertoireCard';
+import SuggestionCard, { type Suggestion } from '@/components/SuggestionCard';
 import AddSongModal from '@/components/AddSongModal';
 import AddToSetModal from '@/components/AddToSetModal';
 import SignInPrompt from '@/components/SignInPrompt';
@@ -262,6 +263,11 @@ export default function RepertoireScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [addToSetSongs, setAddToSetSongs] = useState<{ id: string; title: string }[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestionsOffset, setSuggestionsOffset] = useState(0);
+  const [suggestionsHasMore, setSuggestionsHasMore] = useState(true);
+  const [suggestionsLoadingMore, setSuggestionsLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
 
   const canLead = !!singingVoice && singingVoice !== 'none';
 
@@ -271,12 +277,17 @@ export default function RepertoireScreen() {
     if (!user) return;
     setUserId(user.id);
     try {
-      const [data, profileRes] = await Promise.all([
+      const [data, profileRes, suggestionsRes] = await Promise.all([
         fetchRichUserSongs(),
         supabase.from('profiles').select('singing_voice').eq('id', user.id).single(),
+        supabase.rpc('suggest_songs_for_user', { p_user_id: user.id, p_limit: 20 }),
       ]);
       setSongs(data);
       setSingingVoice(profileRes.data?.singing_voice ?? null);
+      const initialSuggestions = (suggestionsRes.data ?? []) as Suggestion[];
+      setSuggestions(initialSuggestions);
+      setSuggestionsOffset(initialSuggestions.length);
+      setSuggestionsHasMore(initialSuggestions.length === 20);
       writeCache('/repertoire', user.id, data);
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -356,6 +367,67 @@ export default function RepertoireScreen() {
   }
 
   function handleAdded() { setShowAdd(false); load(); }
+
+  const loadMoreSuggestions = useCallback(async () => {
+    if (!suggestionsHasMore || loadingMoreRef.current || !userId) return;
+    loadingMoreRef.current = true;
+    setSuggestionsLoadingMore(true);
+    const { data } = await supabase.rpc('suggest_songs_for_user', {
+      p_user_id: userId,
+      p_limit: 20,
+      p_offset: suggestionsOffset,
+    });
+    if (data) {
+      const page = data as Suggestion[];
+      setSuggestions(prev => mergeSuggestionsById(prev, page));
+      setSuggestionsOffset(prev => prev + page.length);
+      setSuggestionsHasMore(page.length === 20);
+    }
+    loadingMoreRef.current = false;
+    setSuggestionsLoadingMore(false);
+  }, [suggestionsHasMore, userId, suggestionsOffset]);
+
+  // Mirrors web's addSong from the suggestions panel: optimistically drop the
+  // suggestion and insert it into the repertoire, reverting both on error.
+  async function addFromSuggestion(s: Suggestion, confidence: string) {
+    if (!userId) return;
+    const prevSongs = songs;
+    const prevSuggestions = suggestions;
+    setSuggestions(prev => prev.filter(x => x.song_id !== s.song_id));
+    setSongs(prev => {
+      if (prev.find(x => x.song_id === s.song_id)) {
+        return prev.map(x => x.song_id === s.song_id ? { ...x, confidence } : x);
+      }
+      const newSong: RichUserSong = {
+        song_id: s.song_id,
+        slug: s.slug,
+        confidence,
+        updated_at: new Date().toISOString(),
+        title: s.title,
+        display_artist: s.display_artist,
+        composers: s.composers,
+        cultures: s.cultures,
+        genres: s.genres,
+        languages: s.languages,
+        themes: [],
+        productions: s.productions,
+        vibe: null,
+        tonality: null,
+        meter: null,
+        popularity: s.popularity,
+      };
+      return [...prev, newSong];
+    });
+    const { error } = await supabase.from('user_songs').upsert(
+      { user_id: userId, song_id: s.song_id, confidence, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,song_id' }
+    );
+    if (error) {
+      Alert.alert('Error', error.message);
+      setSongs(prevSongs);
+      setSuggestions(prevSuggestions);
+    }
+  }
 
   function toggleSelect(songId: string) {
     setSelectedIds(prev => toggleSet(prev, songId));
@@ -526,6 +598,31 @@ export default function RepertoireScreen() {
     </View>
   );
 
+  // "Songs you might know" — mirrors web's SuggestionsPanel, shown below the
+  // list (and below the empty-state card) but hidden while searching.
+  const showSuggestions = !query.trim() && suggestions.length > 0;
+  const listFooter = showSuggestions ? (
+    <View>
+      <Text className="mx-4 px-1 mt-6 mb-2 text-sm font-medium text-zinc-500">
+        Songs you might know
+      </Text>
+      {suggestions.map(s => (
+        <SuggestionCard
+          key={s.song_id}
+          song={s}
+          canLead={canLead}
+          onAdd={(confidence) => addFromSuggestion(s, confidence)}
+          onView={() => router.push(`/song/${s.song_id}` as any)}
+        />
+      ))}
+      {suggestionsLoadingMore && (
+        <View className="py-3">
+          <ActivityIndicator size="small" color="#d97706" />
+        </View>
+      )}
+    </View>
+  ) : null;
+
   const { session, initialised } = useAuth();
   if (initialised && !session) return <SignInPrompt message="Sign in to see your repertoire" />;
 
@@ -570,6 +667,9 @@ export default function RepertoireScreen() {
           keyExtractor={item => item.song_id}
           renderItem={renderItem}
           ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
+          onEndReached={showSuggestions ? loadMoreSuggestions : undefined}
+          onEndReachedThreshold={0.5}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#d97706" />}
           ListEmptyComponent={
             <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">

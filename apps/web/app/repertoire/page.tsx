@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
+import { mergeSuggestionsById } from "@/lib/mergeSuggestionsById";
 import SubmitSongForm from "@/components/SubmitSongForm";
 import { useSongFilters } from "@/hooks/useSongFilters";
 import { useScrollRestoration } from "@/hooks/useScrollRestoration";
@@ -582,10 +583,7 @@ export default function RepertoirePage() {
     });
     if (data) {
       const page = data as SuggestionResult[];
-      setSuggestions((prev) => {
-        const seen = new Set(prev.map((s) => s.song_id));
-        return [...prev, ...page.filter((s) => !seen.has(s.song_id))];
-      });
+      setSuggestions((prev) => mergeSuggestionsById(prev, page));
       setSuggestionsOffset((prev) => prev + page.length);
       setSuggestionsHasMore(page.length === 20);
     }
