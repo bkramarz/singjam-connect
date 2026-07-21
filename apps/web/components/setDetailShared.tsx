@@ -37,7 +37,7 @@ export type Collaborator = {
   id: string;
   user_id: string | null;
   status: string;
-  role: "editor" | "viewer";
+  role: "editor" | "viewer" | "co-owner";
   profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
 

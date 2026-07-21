@@ -16,20 +16,26 @@ type Collaborator = {
   id: string;
   user_id: string | null;
   status: string;
-  role: "editor" | "viewer";
+  role: "editor" | "viewer" | "co-owner";
   profiles: { display_name: string | null; last_name: string | null; username: string | null; avatar_url: string | null } | null;
 };
 
 export default function SetInvitePanel({
   setId,
+  canAssignCoOwner = false,
   alreadyCollaboratorIds = [],
   onCollaboratorAdded,
 }: {
   setId: string;
+  canAssignCoOwner?: boolean;
   alreadyCollaboratorIds?: string[];
   onCollaboratorAdded?: (collaborator: Collaborator) => void;
 }) {
-  const [role, setRole] = useState<"editor" | "viewer">("editor");
+  const [role, setRole] = useState<"editor" | "viewer" | "co-owner">("editor");
+  // Co-owner can only be granted to a specific, named user, and only by the owner.
+  const roleOptions = canAssignCoOwner
+    ? (["editor", "viewer", "co-owner"] as const)
+    : (["editor", "viewer"] as const);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -210,22 +216,24 @@ export default function SetInvitePanel({
       <div>
         <label className="block text-sm font-medium mb-1.5">Role</label>
         <div className="flex gap-2">
-          {(["editor", "viewer"] as const).map((r) => (
+          {roleOptions.map((r) => (
             <button
               key={r}
               onClick={() => setRole(r)}
-              className={`rounded-xl border px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
+              className={`rounded-xl border px-4 py-1.5 text-sm font-medium transition-colors ${
                 role === r
                   ? "border-amber-500 bg-amber-50 text-amber-700"
                   : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {r}
+              {r === "co-owner" ? "Co-owner" : r.charAt(0).toUpperCase() + r.slice(1)}
             </button>
           ))}
         </div>
         <p className="mt-1.5 text-xs text-zinc-400">
-          {role === "editor"
+          {role === "co-owner"
+            ? "Co-owners can do everything you can except delete the set or assign other co-owners."
+            : role === "editor"
             ? "Editors can add, remove, and reorder songs, mark leaders, and invite others."
             : "Viewers can see the set but cannot change songs."}
         </p>

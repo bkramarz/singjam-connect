@@ -161,7 +161,10 @@ export default async function SetPage({
   }
 
   const isCollaborator = collaborators.some((c: any) => c.user_id === user?.id);
-  const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && c.role === "editor");
+  const isCoOwner = collaborators.some((c: any) => c.user_id === user?.id && c.role === "co-owner");
+  const isEditorCollaborator = collaborators.some((c: any) => c.user_id === user?.id && (c.role === "editor" || c.role === "co-owner"));
+  // Co-owners can do everything the owner can except delete the set or assign co-owners.
+  const canManage = isOwner || isCoOwner;
 
   // Gate by visibility mode
   if (!isOwner && !isCollaborator && !isAdmin && !isSongEditor) {
@@ -213,6 +216,7 @@ export default async function SetPage({
         currentUserSingingVoice={currentUserSingingVoice}
         canEdit={isOwner || isEditorCollaborator}
         isOwner={isOwner}
+        canManage={canManage}
         isAdmin={isAdmin}
         isSongEditor={isSongEditor}
         isPublicViewer={isPublicViewer}

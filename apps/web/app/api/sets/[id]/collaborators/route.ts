@@ -18,8 +18,8 @@ export async function PATCH(
   if (!collaboratorId || !role) {
     return NextResponse.json({ error: "Missing collaboratorId or role" }, { status: 400 });
   }
-  if (role !== "editor" && role !== "viewer") {
-    return NextResponse.json({ error: "role must be editor or viewer" }, { status: 400 });
+  if (role !== "editor" && role !== "viewer" && role !== "co-owner") {
+    return NextResponse.json({ error: "role must be editor, viewer, or co-owner" }, { status: 400 });
   }
 
   const admin = supabaseAdmin();
@@ -30,16 +30,34 @@ export async function PATCH(
     .eq("id", setId)
     .maybeSingle();
   if (!set) return NextResponse.json({ error: "Set not found" }, { status: 404 });
-  if ((set as any).owner_user_id !== user.id) {
-    return NextResponse.json({ error: "Only the set owner can change roles" }, { status: 403 });
-  }
+
+  const isOwner = (set as any).owner_user_id === user.id;
 
   const { data: existing } = await admin
     .from("set_collaborators")
-    .select("user_id, status")
+    .select("user_id, status, role")
     .eq("id", collaboratorId)
     .eq("set_id", setId)
     .maybeSingle();
+
+  // Owner and co-owners can manage collaborator roles, but only the owner may
+  // grant the co-owner role or change an existing co-owner.
+  if (!isOwner) {
+    const { data: callerCollab } = await admin
+      .from("set_collaborators")
+      .select("id")
+      .eq("set_id", setId)
+      .eq("user_id", user.id)
+      .eq("status", "accepted")
+      .eq("role", "co-owner")
+      .maybeSingle();
+    if (!callerCollab) {
+      return NextResponse.json({ error: "Only the set owner or co-owners can change roles" }, { status: 403 });
+    }
+    if (role === "co-owner" || (existing as any)?.role === "co-owner") {
+      return NextResponse.json({ error: "Only the set owner can assign or change co-owners" }, { status: 403 });
+    }
+  }
 
   const { error } = await admin
     .from("set_collaborators")

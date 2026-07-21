@@ -95,7 +95,7 @@ export async function POST(
       .eq("set_id", setId)
       .eq("user_id", user.id)
       .eq("status", "accepted")
-      .eq("role", "editor")
+      .in("role", ["editor", "co-owner"])
       .maybeSingle();
     if (!collab) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

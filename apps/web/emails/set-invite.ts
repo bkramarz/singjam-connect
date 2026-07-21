@@ -8,11 +8,11 @@ export function setCollaboratorInviteHtml({
   inviterName: string;
   inviteeName?: string | null;
   setName: string;
-  role: "editor" | "viewer";
+  role: "editor" | "viewer" | "co-owner";
   setUrl: string;
 }) {
   const greeting = inviteeName ? `Hi ${inviteeName},` : "Hi,";
-  const roleLabel = role === "editor" ? "editor" : "viewer";
+  const roleLabel = role === "co-owner" ? "co-owner" : role === "editor" ? "editor" : "viewer";
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;max-width:480px;margin:0 auto;color:#18181b;padding:32px 16px">

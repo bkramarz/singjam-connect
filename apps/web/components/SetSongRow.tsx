@@ -143,10 +143,9 @@ export default function SetSongRow({
   }
 
   const leaderIds = song.leader_user_ids ?? [];
-  // Public viewers only see designated leaders; everyone else sees all knowledge levels
-  const visibleParticipants = isPublicViewer
-    ? participants.filter((p) => leaderIds.includes(p.user_id))
-    : participants;
+  // Leader/support assignments are only shown to set collaborators; non-collaborator
+  // (public) viewers see no participants at all.
+  const visibleParticipants = isPublicViewer ? [] : participants;
 
   const leadParticipants = visibleParticipants.filter(
     (p) => leaderIds.includes(p.user_id) || participantKnowledge.get(p.user_id) === "lead"
