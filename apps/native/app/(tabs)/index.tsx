@@ -24,6 +24,7 @@ type RichUserSong = UserSong & {
   vibe: string | null;
   tonality: string | null;
   meter: string | null;
+  year: number | null;
   popularity: number;
 };
 
@@ -38,7 +39,11 @@ type ExtFilters = {
   vibe: string;
   tonality: string;
   meter: string;
+  yearMin: string;
+  yearMax: string;
 };
+
+type FilterDim = 'genres' | 'cultures' | 'languages' | 'themes' | 'vibe' | 'tonality' | 'meter' | 'year';
 
 // ── Constants (mirror web repertoire/page.tsx) ────────────────────────────────
 
@@ -55,11 +60,31 @@ const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
 ];
 
 function emptyExtFilters(): ExtFilters {
-  return { genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '' };
+  return { genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '', yearMin: '', yearMax: '' };
 }
 
 function countExtFilters(f: ExtFilters): number {
-  return f.genres.size + f.cultures.size + f.languages.size + f.themes.size + (f.vibe ? 1 : 0) + (f.tonality ? 1 : 0) + (f.meter ? 1 : 0);
+  return f.genres.size + f.cultures.size + f.languages.size + f.themes.size + (f.vibe ? 1 : 0) + (f.tonality ? 1 : 0) + (f.meter ? 1 : 0) + (f.yearMin || f.yearMax ? 1 : 0);
+}
+
+// Applies every active extended filter, optionally skipping one dimension so the
+// filter option lists can cascade (each dimension derived from songs passing the
+// other active filters) — mirrors web's useSongFilters.
+function matchesExt(song: RichUserSong, f: ExtFilters, exclude?: FilterDim): boolean {
+  if (exclude !== 'genres' && f.genres.size > 0 && !song.genres.some(g => f.genres.has(g))) return false;
+  if (exclude !== 'cultures' && f.cultures.size > 0 && !song.cultures.some(c => f.cultures.has(c))) return false;
+  if (exclude !== 'languages' && f.languages.size > 0 && !song.languages.some(l => f.languages.has(l))) return false;
+  if (exclude !== 'themes' && f.themes.size > 0 && !song.themes.some(t => f.themes.has(t))) return false;
+  if (exclude !== 'vibe' && f.vibe && song.vibe !== f.vibe) return false;
+  if (exclude !== 'tonality' && f.tonality && !song.tonality?.split(/,\s*/).includes(f.tonality)) return false;
+  if (exclude !== 'meter' && f.meter && song.meter !== f.meter) return false;
+  if (exclude !== 'year') {
+    const yMin = f.yearMin ? parseInt(f.yearMin, 10) : null;
+    const yMax = f.yearMax ? parseInt(f.yearMax, 10) : null;
+    if (yMin != null && (song.year == null || song.year < yMin)) return false;
+    if (yMax != null && (song.year == null || song.year > yMax)) return false;
+  }
+  return true;
 }
 
 function toggleSet(set: Set<string>, value: string): Set<string> {
@@ -122,11 +147,12 @@ type FilterOptions = {
 };
 
 function FilterModal({
-  visible, filters, options, onChange, onClose,
+  visible, filters, options, yearBounds, onChange, onClose,
 }: {
   visible: boolean;
   filters: ExtFilters;
   options: FilterOptions;
+  yearBounds: { min: number | null; max: number | null };
   onChange: (f: ExtFilters) => void;
   onClose: () => void;
 }) {
@@ -207,7 +233,33 @@ function FilterModal({
               </View>
             </>
           )}
-          {options.genres.length === 0 && options.cultures.length === 0 && options.languages.length === 0 && options.themes.length === 0 && (
+          {yearBounds.min != null && (
+            <>
+              <SectionLabel title="Year" />
+              <View className="flex-row items-center" style={{ gap: 8 }}>
+                <TextInput
+                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+                  placeholder={String(yearBounds.min)}
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  value={filters.yearMin}
+                  onChangeText={t => set({ yearMin: t.replace(/[^0-9]/g, '') })}
+                />
+                <Text className="text-slate-400">–</Text>
+                <TextInput
+                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+                  placeholder={yearBounds.max != null ? String(yearBounds.max) : 'To'}
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  value={filters.yearMax}
+                  onChangeText={t => set({ yearMax: t.replace(/[^0-9]/g, '') })}
+                />
+              </View>
+            </>
+          )}
+          {options.genres.length === 0 && options.cultures.length === 0 && options.languages.length === 0 && options.themes.length === 0 && yearBounds.min == null && (
             <View className="items-center pt-16">
               <Text className="text-slate-400 text-sm">No filter options available yet.</Text>
               <Text className="text-slate-400 text-sm mt-1">Add more songs to your repertoire.</Text>
@@ -243,6 +295,7 @@ async function fetchRichUserSongs(): Promise<RichUserSong[]> {
     vibe: row.vibe ?? null,
     tonality: row.tonality ?? null,
     meter: row.meter ?? null,
+    year: row.year ?? null,
     popularity: Number(row.popularity ?? 0),
   }));
 }
@@ -316,16 +369,26 @@ export default function RepertoireScreen() {
     })();
   }, []);
 
-  // Derive filter option lists from the user's own songs
-  const options = useMemo<FilterOptions>(() => ({
-    genres: Array.from(new Set(songs.flatMap(s => s.genres))).sort(),
-    cultures: Array.from(new Set(songs.flatMap(s => s.cultures))).sort(),
-    languages: Array.from(new Set(songs.flatMap(s => s.languages))).sort(),
-    themes: Array.from(new Set(songs.flatMap(s => s.themes))).sort(),
-    vibes: Array.from(new Set(songs.map(s => s.vibe).filter(Boolean) as string[])).sort(),
-    tonalities: Array.from(new Set(songs.flatMap(s => s.tonality ? s.tonality.split(/,\s*/) : []))).sort(),
-    meters: Array.from(new Set(songs.map(s => s.meter).filter(Boolean) as string[])).sort(),
-  }), [songs]);
+  // Derive each filter dimension's options from songs passing the OTHER active
+  // filters, so choosing one facet narrows the rest (cascading, like web).
+  const options = useMemo<FilterOptions>(() => {
+    const uniq = (xs: string[]) => Array.from(new Set(xs)).sort();
+    const forDim = (dim: FilterDim) => songs.filter(s => matchesExt(s, extFilters, dim));
+    return {
+      genres: uniq(forDim('genres').flatMap(s => s.genres)),
+      cultures: uniq(forDim('cultures').flatMap(s => s.cultures)),
+      languages: uniq(forDim('languages').flatMap(s => s.languages)),
+      themes: uniq(forDim('themes').flatMap(s => s.themes)),
+      vibes: uniq(forDim('vibe').map(s => s.vibe).filter(Boolean) as string[]),
+      tonalities: uniq(forDim('tonality').flatMap(s => s.tonality ? s.tonality.split(/,\s*/) : [])),
+      meters: uniq(forDim('meter').map(s => s.meter).filter(Boolean) as string[]),
+    };
+  }, [songs, extFilters]);
+
+  const yearBounds = useMemo(() => {
+    const years = songs.map(s => s.year).filter((y): y is number => y != null);
+    return years.length ? { min: Math.min(...years), max: Math.max(...years) } : { min: null, max: null };
+  }, [songs]);
 
   const filtered = useMemo(() => {
     let result: RichUserSong[] = songs;
@@ -337,13 +400,7 @@ export default function RepertoireScreen() {
       result = result.filter(s => s.confidence === confidenceFilter);
     }
 
-    if (extFilters.genres.size > 0) result = result.filter(s => s.genres.some(g => extFilters.genres.has(g)));
-    if (extFilters.cultures.size > 0) result = result.filter(s => s.cultures.some(c => extFilters.cultures.has(c)));
-    if (extFilters.languages.size > 0) result = result.filter(s => s.languages.some(l => extFilters.languages.has(l)));
-    if (extFilters.themes.size > 0) result = result.filter(s => s.themes.some(t => extFilters.themes.has(t)));
-    if (extFilters.vibe) result = result.filter(s => s.vibe === extFilters.vibe);
-    if (extFilters.tonality) result = result.filter(s => s.tonality?.split(/,\s*/).includes(extFilters.tonality));
-    if (extFilters.meter) result = result.filter(s => s.meter === extFilters.meter);
+    result = result.filter(s => matchesExt(s, extFilters));
 
     if (sortBy === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
     if (sortBy === 'popularity') return [...result].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
@@ -415,6 +472,7 @@ export default function RepertoireScreen() {
         vibe: null,
         tonality: null,
         meter: null,
+        year: s.year,
         popularity: s.popularity,
       };
       return [...prev, newSong];
@@ -633,6 +691,7 @@ export default function RepertoireScreen() {
         visible={filterModalVisible}
         filters={extFilters}
         options={options}
+        yearBounds={yearBounds}
         onChange={setExtFilters}
         onClose={() => setFilterModalVisible(false)}
       />
@@ -707,6 +766,7 @@ export default function RepertoireScreen() {
           visible={showAdd}
           userId={userId}
           existingIds={existingIds}
+          canLead={canLead}
           onClose={() => setShowAdd(false)}
           onAdded={handleAdded}
         />
