@@ -2,6 +2,13 @@
   base    = "apps/web"
   command = "npm run build"
   publish = ".next"
+  # Skip the build when a commit changes nothing the web app is built from —
+  # e.g. native-only merges — so those merges don't consume build credits.
+  # Runs from the base dir (apps/web); paths are relative to it. `git diff
+  # --quiet` exits 0 (→ Netlify cancels the build) only when NONE of apps/web,
+  # the shared packages, or the root build config changed. Any error (e.g. a
+  # missing ref on a shallow clone) exits non-zero, so it fails safe to a build.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ../../packages ../../package.json ../../package-lock.json ../../netlify.toml"
 
 [build.environment]
   NODE_VERSION = "20"

@@ -12,23 +12,32 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { formatComposers } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import SubmitMissingSong from '@/components/SubmitMissingSong';
 
 type SearchResult = {
   song_id: string;
   title: string;
   display_artist: string | null;
+  composers: string[];
+  cultures: string[];
+  productions: string[];
+  popularity: number;
 };
 
 type Props = {
   visible: boolean;
   userId: string;
   existingIds: Set<string>;
+  canLead: boolean;
   onClose: () => void;
   onAdded: (songId: string, confidence: string) => void;
 };
 
-export default function AddSongModal({ visible, userId, existingIds, onClose, onAdded }: Props) {
+export default function AddSongModal({ visible, userId, existingIds, canLead, onClose, onAdded }: Props) {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -40,24 +49,20 @@ export default function AddSongModal({ visible, userId, existingIds, onClose, on
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
-    const timer = setTimeout(() => search(query.trim()), 300);
+    const timer = setTimeout(() => search(query.trim()), 250);
     return () => clearTimeout(timer);
   }, [query]);
 
   async function search(q: string) {
     setSearching(true);
-    const { data } = await supabase
-      .from('songs')
-      .select('song_id, title, display_artist')
-      .or(`title.ilike.%${q}%,display_artist.ilike.%${q}%`)
-      .order('title')
-      .limit(30);
-    setResults(data ?? []);
+    // Ranked full-text search (matches title, artist, composers, aka) — same
+    // RPC web's add-song search uses, instead of a raw title/artist ilike.
+    const { data } = await supabase.rpc('search_songs', { q, limit_n: 30 });
+    setResults((data ?? []) as SearchResult[]);
     setSearching(false);
   }
 
   function pickConfidence(song: SearchResult) {
-    const options = ['Lead', 'Support', 'Learn', 'Cancel'];
     const values = ['lead', 'support', 'learn'];
 
     const add = async (confidence: string) => {
@@ -71,17 +76,25 @@ export default function AddSongModal({ visible, userId, existingIds, onClose, on
       onAdded(song.song_id, confidence);
     };
 
+    // "Lead" is gated on the user being a singer, same rule as the repertoire
+    // cards and SuggestionCard.
     if (Platform.OS === 'ios') {
+      const leadLabel = canLead ? 'Lead' : 'Lead (singers only)';
       ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 3, title: 'Add "' + song.title + '" as…' },
+        {
+          options: [leadLabel, 'Support', 'Learn', 'Cancel'],
+          cancelButtonIndex: 3,
+          title: `Add "${song.title}" as…`,
+          disabledButtonIndices: canLead ? [] : [0],
+        },
         (index) => { if (index < 3) add(values[index]); }
       );
     } else {
       Alert.alert('Add as…', song.title, [
-        { text: 'Lead', onPress: () => add('lead') },
+        ...(canLead ? [{ text: 'Lead', onPress: () => add('lead') }] : []),
         { text: 'Support', onPress: () => add('support') },
         { text: 'Learn', onPress: () => add('learn') },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' as const },
       ]);
     }
   }
@@ -89,13 +102,28 @@ export default function AddSongModal({ visible, userId, existingIds, onClose, on
   const renderItem = useCallback(({ item }: { item: SearchResult }) => {
     const already = existingIds.has(item.song_id);
     const pending = pendingId === item.song_id;
+    const composersLabel = item.composers?.length > 0
+      ? formatComposers(item.composers, item.cultures)
+      : null;
     return (
       <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
         <View className="flex-1 mr-3">
-          <Text className="text-slate-900 font-medium" numberOfLines={1}>{item.title}</Text>
-          {item.display_artist ? (
-            <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{item.display_artist}</Text>
-          ) : null}
+          <Text numberOfLines={2}>
+            <Text className="text-slate-900 font-medium">{item.title}</Text>
+            {composersLabel ? <Text className="text-slate-400"> ({composersLabel})</Text> : null}
+          </Text>
+          <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>
+            {item.productions?.length > 0 ? (
+              <>from <Text className="italic">{item.productions.join(', ')}</Text></>
+            ) : (
+              item.display_artist ?? '—'
+            )}
+          </Text>
+          {item.popularity > 0 && (
+            <Text className="text-xs text-zinc-400 mt-0.5">
+              {item.popularity} {item.popularity === 1 ? 'jammer' : 'jammers'}
+            </Text>
+          )}
         </View>
         {already ? (
           <Text className="text-slate-400 text-sm">Added</Text>
@@ -111,7 +139,7 @@ export default function AddSongModal({ visible, userId, existingIds, onClose, on
         )}
       </View>
     );
-  }, [existingIds, pendingId]);
+  }, [existingIds, pendingId, canLead]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -129,7 +157,7 @@ export default function AddSongModal({ visible, userId, existingIds, onClose, on
             <Text className="text-slate-400 mr-2">🔍</Text>
             <TextInput
               className="flex-1 text-slate-900"
-              placeholder="Search by title or artist…"
+              placeholder="Search by title, artist, or songwriter…"
               placeholderTextColor="#94a3b8"
               value={query}
               onChangeText={setQuery}
@@ -156,8 +184,14 @@ export default function AddSongModal({ visible, userId, existingIds, onClose, on
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              query.length > 0 ? (
-                <Text className="text-center text-slate-400 mt-12">No songs found</Text>
+              query.trim().length > 0 && !searching ? (
+                <View className="pt-8">
+                  <Text className="text-center text-slate-400">No songs found</Text>
+                  <SubmitMissingSong
+                    defaultTitle={query.trim()}
+                    onCreated={(songId) => { onClose(); router.push(`/song/${songId}` as any); }}
+                  />
+                </View>
               ) : null
             }
           />

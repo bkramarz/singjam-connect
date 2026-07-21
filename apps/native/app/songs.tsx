@@ -6,13 +6,17 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { formatComposers } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
+import SubmitMissingSong from '@/components/SubmitMissingSong';
 
 type SongMeta = {
   song_id: string;
   title: string;
   display_artist: string | null;
+  composers: string[];
+  productions: string[];
   popularity: number;
   genres: string[];
   cultures: string[];
@@ -72,7 +76,11 @@ type Filters = {
   vibe: string;
   tonality: string;
   meter: string;
+  yearMin: string;
+  yearMax: string;
 };
+
+type FilterDim = 'genres' | 'cultures' | 'languages' | 'themes' | 'vibe' | 'tonality' | 'meter' | 'year';
 
 function emptyFilters(): Filters {
   return {
@@ -85,6 +93,8 @@ function emptyFilters(): Filters {
     vibe: '',
     tonality: '',
     meter: '',
+    yearMin: '',
+    yearMax: '',
   };
 }
 
@@ -97,7 +107,8 @@ function countActiveFilters(f: Filters): number {
     f.themes.size +
     (f.vibe ? 1 : 0) +
     (f.tonality ? 1 : 0) +
-    (f.meter ? 1 : 0)
+    (f.meter ? 1 : 0) +
+    (f.yearMin || f.yearMax ? 1 : 0)
   );
 }
 
@@ -111,6 +122,7 @@ function FilterModal({
   visible,
   filters,
   options,
+  yearBounds,
   onChange,
   onClose,
 }: {
@@ -120,6 +132,7 @@ function FilterModal({
     genres: string[]; cultures: string[]; languages: string[];
     themes: string[]; vibes: string[]; tonalities: string[]; meters: string[];
   };
+  yearBounds: { min: number | null; max: number | null };
   onChange: (f: Filters) => void;
   onClose: () => void;
 }) {
@@ -137,11 +150,11 @@ function FilterModal({
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Filter & Sort</Text>
+          <Text className="flex-1 text-center font-semibold text-slate-900">Filters</Text>
           <TouchableOpacity
-            onPress={() => onChange(emptyFilters())}
+            onPress={() => onChange({ ...emptyFilters(), sortBy: filters.sortBy })}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            disabled={activeCount === 0 && filters.sortBy === 'popularity'}
+            disabled={activeCount === 0}
           >
             <Text className={`font-medium ${activeCount > 0 ? 'text-red-500' : 'text-slate-300'}`}>Clear</Text>
           </TouchableOpacity>
@@ -159,19 +172,6 @@ function FilterModal({
               <View className={`w-5 h-5 rounded-full bg-white shadow-sm absolute ${filters.hideMySongs ? 'right-0.5' : 'left-0.5'}`} />
             </View>
           </TouchableOpacity>
-
-          {/* Sort */}
-          <SectionHeader title="Sort" />
-          <View className="flex-row flex-wrap">
-            {SORT_OPTIONS.map(opt => (
-              <Chip
-                key={opt.key}
-                label={opt.label}
-                selected={filters.sortBy === opt.key}
-                onPress={() => set({ sortBy: opt.key })}
-              />
-            ))}
-          </View>
 
           {/* Genre */}
           {options.genres.length > 0 && (
@@ -257,6 +257,34 @@ function FilterModal({
             </>
           )}
 
+          {/* Year */}
+          {yearBounds.min != null && (
+            <>
+              <SectionHeader title="Year" />
+              <View className="flex-row items-center" style={{ gap: 8 }}>
+                <TextInput
+                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+                  placeholder={yearBounds.min != null ? String(yearBounds.min) : 'From'}
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  value={filters.yearMin}
+                  onChangeText={t => set({ yearMin: t.replace(/[^0-9]/g, '') })}
+                />
+                <Text className="text-slate-400">–</Text>
+                <TextInput
+                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+                  placeholder={yearBounds.max != null ? String(yearBounds.max) : 'To'}
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  value={filters.yearMax}
+                  onChangeText={t => set({ yearMax: t.replace(/[^0-9]/g, '') })}
+                />
+              </View>
+            </>
+          )}
+
         </ScrollView>
       </View>
     </Modal>
@@ -265,15 +293,24 @@ function FilterModal({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function matchesFilters(song: SongMeta, f: Filters, myIds: Set<string>): boolean {
+// Applies every active filter, optionally skipping one dimension. Passing an
+// `exclude` dimension is how the filter options cascade: each dimension's option
+// list is derived from the songs that pass all the *other* active filters.
+function matchesFilters(song: SongMeta, f: Filters, myIds: Set<string>, exclude?: FilterDim): boolean {
   if (f.hideMySongs && myIds.has(song.song_id)) return false;
-  if (f.genres.size > 0 && !song.genres.some(g => f.genres.has(g))) return false;
-  if (f.cultures.size > 0 && !song.cultures.some(c => f.cultures.has(c))) return false;
-  if (f.languages.size > 0 && !song.languages.some(l => f.languages.has(l))) return false;
-  if (f.themes.size > 0 && !song.themes.some(t => f.themes.has(t))) return false;
-  if (f.vibe && song.vibe !== f.vibe) return false;
-  if (f.tonality && !song.tonality?.split(/,\s*/).includes(f.tonality)) return false;
-  if (f.meter && song.meter !== f.meter) return false;
+  if (exclude !== 'genres' && f.genres.size > 0 && !song.genres.some(g => f.genres.has(g))) return false;
+  if (exclude !== 'cultures' && f.cultures.size > 0 && !song.cultures.some(c => f.cultures.has(c))) return false;
+  if (exclude !== 'languages' && f.languages.size > 0 && !song.languages.some(l => f.languages.has(l))) return false;
+  if (exclude !== 'themes' && f.themes.size > 0 && !song.themes.some(t => f.themes.has(t))) return false;
+  if (exclude !== 'vibe' && f.vibe && song.vibe !== f.vibe) return false;
+  if (exclude !== 'tonality' && f.tonality && !song.tonality?.split(/,\s*/).includes(f.tonality)) return false;
+  if (exclude !== 'meter' && f.meter && song.meter !== f.meter) return false;
+  if (exclude !== 'year') {
+    const yMin = f.yearMin ? parseInt(f.yearMin, 10) : null;
+    const yMax = f.yearMax ? parseInt(f.yearMax, 10) : null;
+    if (yMin != null && (song.year == null || song.year < yMin)) return false;
+    if (yMax != null && (song.year == null || song.year > yMax)) return false;
+  }
   return true;
 }
 
@@ -281,6 +318,20 @@ function applySort(songs: SongMeta[], sortBy: SortBy): SongMeta[] {
   if (sortBy === 'title_asc') return [...songs].sort((a, b) => a.title.localeCompare(b.title));
   if (sortBy === 'title_desc') return [...songs].sort((a, b) => b.title.localeCompare(a.title));
   return [...songs].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
+}
+
+function showOptionsSheet(title: string, labels: string[], onPick: (index: number) => void) {
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, title },
+      (index) => { if (index < labels.length) onPick(index); }
+    );
+  } else {
+    Alert.alert(title, undefined, [
+      ...labels.map((label, i) => ({ text: label, onPress: () => onPick(i) })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
@@ -295,6 +346,8 @@ export default function SongLibraryScreen() {
   const [searching, setSearching] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [singingVoice, setSingingVoice] = useState<string | null>(null);
+  const canLead = !!singingVoice && singingVoice !== 'none';
   const [filters, setFilters] = useState<Filters>(emptyFilters());
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -305,9 +358,11 @@ export default function SongLibraryScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id ?? null);
 
-      const [songsRes, popularityRes, myRes] = await Promise.all([
+      const [songsRes, popularityRes, myRes, profileRes] = await Promise.all([
         supabase.from('songs').select(`
           song_id:id, title, display_artist, vibe, tonality, meter, year:year_written,
+          song_composers ( people ( name ) ),
+          song_productions ( productions ( name ) ),
           song_genres ( genres ( name ) ),
           song_cultures ( cultures ( name ) ),
           song_languages ( languages ( name ) ),
@@ -317,9 +372,13 @@ export default function SongLibraryScreen() {
         user
           ? supabase.from('user_songs').select('song_id').eq('user_id', user.id)
           : Promise.resolve({ data: null }),
+        user
+          ? supabase.from('profiles').select('singing_voice').eq('id', user.id).single()
+          : Promise.resolve({ data: null }),
       ]);
 
       setMyIds(new Set((myRes.data ?? []).map((r: any) => r.song_id)));
+      setSingingVoice((profileRes.data as any)?.singing_voice ?? null);
 
       const countMap = new Map<string, number>(
         ((popularityRes.data ?? []) as { song_id: string; user_count: number }[])
@@ -330,6 +389,8 @@ export default function SongLibraryScreen() {
         song_id: s.song_id,
         title: s.title ?? '',
         display_artist: s.display_artist ?? null,
+        composers: (s.song_composers ?? []).map((x: any) => x.people?.name).filter(Boolean),
+        productions: (s.song_productions ?? []).map((x: any) => x.productions?.name).filter(Boolean),
         popularity: countMap.get(s.song_id) ?? 0,
         genres: (s.song_genres ?? []).map((x: any) => x.genres?.name).filter(Boolean),
         cultures: (s.song_cultures ?? []).map((x: any) => x.cultures?.name).filter(Boolean),
@@ -362,14 +423,16 @@ export default function SongLibraryScreen() {
           song_id: r.song_id,
           title: r.title,
           display_artist: r.display_artist ?? null,
-          popularity: 0,
-          genres: [],
-          cultures: [],
-          languages: [],
-          themes: [],
-          vibe: null,
-          tonality: null,
-          meter: null,
+          composers: r.composers ?? [],
+          productions: r.productions ?? [],
+          popularity: r.popularity ?? 0,
+          genres: r.genres ?? [],
+          cultures: r.cultures ?? [],
+          languages: r.languages ?? [],
+          themes: r.themes ?? [],
+          vibe: r.vibe ?? null,
+          tonality: r.tonality ?? null,
+          meter: r.meter ?? null,
           year: r.year ?? null,
         };
       });
@@ -378,16 +441,26 @@ export default function SongLibraryScreen() {
     }, 250);
   }, [query]);
 
-  // Derive filter option lists from the full song set
-  const options = useMemo(() => ({
-    genres: Array.from(new Set(allSongs.flatMap(s => s.genres))).sort(),
-    cultures: Array.from(new Set(allSongs.flatMap(s => s.cultures))).sort(),
-    languages: Array.from(new Set(allSongs.flatMap(s => s.languages))).sort(),
-    themes: Array.from(new Set(allSongs.flatMap(s => s.themes))).sort(),
-    vibes: Array.from(new Set(allSongs.map(s => s.vibe).filter(Boolean) as string[])).sort(),
-    tonalities: Array.from(new Set(allSongs.flatMap(s => s.tonality ? s.tonality.split(/,\s*/) : []))).sort(),
-    meters: Array.from(new Set(allSongs.map(s => s.meter).filter(Boolean) as string[])).sort(),
-  }), [allSongs]);
+  // Derive each filter dimension's options from songs passing the OTHER active
+  // filters, so choosing one facet narrows the rest (cascading, like web).
+  const options = useMemo(() => {
+    const uniq = (xs: string[]) => Array.from(new Set(xs)).sort();
+    const forDim = (dim: FilterDim) => allSongs.filter(s => matchesFilters(s, filters, myIds, dim));
+    return {
+      genres: uniq(forDim('genres').flatMap(s => s.genres)),
+      cultures: uniq(forDim('cultures').flatMap(s => s.cultures)),
+      languages: uniq(forDim('languages').flatMap(s => s.languages)),
+      themes: uniq(forDim('themes').flatMap(s => s.themes)),
+      vibes: uniq(forDim('vibe').map(s => s.vibe).filter(Boolean) as string[]),
+      tonalities: uniq(forDim('tonality').flatMap(s => s.tonality ? s.tonality.split(/,\s*/) : [])),
+      meters: uniq(forDim('meter').map(s => s.meter).filter(Boolean) as string[]),
+    };
+  }, [allSongs, filters, myIds]);
+
+  const yearBounds = useMemo(() => {
+    const years = allSongs.map(s => s.year).filter((y): y is number => y != null);
+    return years.length ? { min: Math.min(...years), max: Math.max(...years) } : { min: null, max: null };
+  }, [allSongs]);
 
   const displayedSongs = useMemo(() => {
     const base = query.trim() ? searchResults : allSongs;
@@ -409,17 +482,24 @@ export default function SongLibraryScreen() {
 
   function handleAdd(song: SongMeta) {
     const values = ['lead', 'support', 'learn'];
+    // "Lead" is gated on the user being a singer, same rule as the repertoire cards.
     if (Platform.OS === 'ios') {
+      const leadLabel = canLead ? 'Lead' : 'Lead (singers only)';
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Lead', 'Support', 'Learn', 'Cancel'], cancelButtonIndex: 3, title: `Add "${song.title}" as…` },
+        {
+          options: [leadLabel, 'Support', 'Learn', 'Cancel'],
+          cancelButtonIndex: 3,
+          title: `Add "${song.title}" as…`,
+          disabledButtonIndices: canLead ? [] : [0],
+        },
         index => { if (index < 3) addSong(song, values[index]); }
       );
     } else {
       Alert.alert('Add as…', song.title, [
-        { text: 'Lead', onPress: () => addSong(song, 'lead') },
+        ...(canLead ? [{ text: 'Lead', onPress: () => addSong(song, 'lead') }] : []),
         { text: 'Support', onPress: () => addSong(song, 'support') },
         { text: 'Learn', onPress: () => addSong(song, 'learn') },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' as const },
       ]);
     }
   }
@@ -427,6 +507,9 @@ export default function SongLibraryScreen() {
   const renderItem = useCallback(({ item }: { item: SongMeta }) => {
     const added = myIds.has(item.song_id);
     const pending = pendingId === item.song_id;
+    const composersLabel = item.composers.length > 0
+      ? formatComposers(item.composers, item.cultures)
+      : null;
     return (
       <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
         <TouchableOpacity
@@ -434,10 +517,22 @@ export default function SongLibraryScreen() {
           onPress={() => router.push(`/song/${item.song_id}` as any)}
           activeOpacity={0.6}
         >
-          <Text className="text-slate-900 font-medium" numberOfLines={1}>{item.title}</Text>
-          {item.display_artist ? (
-            <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{item.display_artist}</Text>
-          ) : null}
+          <Text numberOfLines={2}>
+            <Text className="text-slate-900 font-medium">{item.title}</Text>
+            {composersLabel ? <Text className="text-slate-400"> ({composersLabel})</Text> : null}
+          </Text>
+          <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>
+            {item.productions.length > 0 ? (
+              <>from <Text className="italic">{item.productions.join(', ')}</Text></>
+            ) : (
+              item.display_artist ?? '—'
+            )}
+          </Text>
+          {item.popularity > 0 && (
+            <Text className="text-xs text-zinc-400 mt-0.5">
+              {item.popularity} {item.popularity === 1 ? 'jammer' : 'jammers'}
+            </Text>
+          )}
         </TouchableOpacity>
         {added ? (
           <Text className="text-slate-400 text-sm">Added</Text>
@@ -453,9 +548,10 @@ export default function SongLibraryScreen() {
         )}
       </View>
     );
-  }, [myIds, pendingId]);
+  }, [myIds, pendingId, canLead]);
 
   const activeFilterCount = countActiveFilters(filters);
+  const sortLabel = SORT_OPTIONS.find(o => o.key === filters.sortBy)?.label ?? 'Popular';
 
   return (
     <>
@@ -464,14 +560,15 @@ export default function SongLibraryScreen() {
         visible={filterModalVisible}
         filters={filters}
         options={options}
+        yearBounds={yearBounds}
         onChange={setFilters}
         onClose={() => setFilterModalVisible(false)}
       />
       <ContentContainer style={{ backgroundColor: 'white' }}>
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
-        {/* Search + filter row */}
-        <View className="px-4 py-3 border-b border-slate-100 flex-row items-center gap-2">
+        {/* Search row */}
+        <View className="px-4 py-3 border-b border-slate-100">
           <View className="flex-1 flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
             <Text className="text-slate-400 mr-2">🔍</Text>
             <TextInput
@@ -489,33 +586,36 @@ export default function SongLibraryScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity
-            onPress={() => setFilterModalVisible(true)}
-            className="relative"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="options-outline" size={22} color={activeFilterCount > 0 ? '#d97706' : '#64748b'} />
-            {activeFilterCount > 0 && (
-              <View className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 items-center justify-center">
-                <Text className="text-white text-xs font-bold leading-none">{activeFilterCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
 
-        {/* Section label */}
+        {/* Count / sort / filters toolbar */}
         {!loadingAll && (
-          <View className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex-row items-center justify-between">
-            <Text className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+          <View className="mx-4 my-3 flex-row items-center justify-between">
+            <Text className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
               {query.trim()
                 ? searching ? 'Searching…' : `${displayedSongs.length} result${displayedSongs.length === 1 ? '' : 's'}`
-                : filters.sortBy === 'popularity' ? 'Popular songs' : 'All songs'}
+                : `${displayedSongs.length} songs`}
             </Text>
-            {activeFilterCount > 0 && (
-              <TouchableOpacity onPress={() => setFilters(f => ({ ...f, genres: new Set(), cultures: new Set(), languages: new Set(), themes: new Set(), vibe: '', tonality: '', meter: '' }))}>
-                <Text className="text-xs text-red-500 font-medium">{activeFilterCount} filter{activeFilterCount === 1 ? '' : 's'} · clear</Text>
+            <View className="flex-row items-center gap-2">
+              <TouchableOpacity
+                onPress={() => showOptionsSheet('Sort', SORT_OPTIONS.map(o => o.label), (index) => setFilters(f => ({ ...f, sortBy: SORT_OPTIONS[index].key })))}
+                className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
+              >
+                <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
+                <Ionicons name="chevron-down" size={11} color="#71717a" />
               </TouchableOpacity>
-            )}
+              <TouchableOpacity
+                onPress={() => setFilterModalVisible(true)}
+                className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${
+                  activeFilterCount > 0 ? 'border-amber-400 bg-amber-50' : 'border-zinc-200'
+                }`}
+              >
+                <Ionicons name="filter" size={12} color={activeFilterCount > 0 ? '#b45309' : '#71717a'} />
+                <Text className={`text-xs font-medium ${activeFilterCount > 0 ? 'text-amber-700' : 'text-zinc-500'}`}>
+                  Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -537,14 +637,20 @@ export default function SongLibraryScreen() {
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              <View className="items-center pt-16">
-                <Text className="text-slate-400">
+              <View className="pt-16">
+                <Text className="text-slate-400 text-center">
                   {query.trim() ? 'No songs match your search' : 'No songs match these filters'}
                 </Text>
                 {activeFilterCount > 0 && (
-                  <TouchableOpacity onPress={() => setFilters(emptyFilters())} className="mt-3">
+                  <TouchableOpacity onPress={() => setFilters(emptyFilters())} className="mt-3 items-center">
                     <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
                   </TouchableOpacity>
+                )}
+                {query.trim().length > 0 && activeFilterCount === 0 && (
+                  <SubmitMissingSong
+                    defaultTitle={query.trim()}
+                    onCreated={(songId) => router.push(`/song/${songId}` as any)}
+                  />
                 )}
               </View>
             }

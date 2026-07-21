@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 type UserSet = {
   id: string;
   name: string;
+  ownerName: string | null; // null when the current user owns the set
 };
 
 type SongEntry = { id: string; title: string };
@@ -20,6 +21,9 @@ type Props = {
 export default function AddToSetModal({ visible, songs, onClose }: Props) {
   const [sets, setSets] = useState<UserSet[]>([]);
   const [loading, setLoading] = useState(false);
+  // Sets that already contain every selected song (loaded up front), plus any
+  // added during this session — both render as a disabled "Added" state.
+  const [inSets, setInSets] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<string | null>(null);
 
@@ -34,14 +38,61 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data } = await supabase
-      .from('sets')
-      .select('id, name')
-      .eq('owner_user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    const songIds = songs.map((s) => s.id);
 
-    setSets((data ?? []).map((s: any) => ({ id: s.id, name: s.name })));
+    // Sets the user can add to (owned + accepted collaborations) and, in
+    // parallel, which sets already contain the selected song(s).
+    const [ownedRes, collabRes, membershipRes] = await Promise.all([
+      supabase
+        .from('sets')
+        .select('id, name')
+        .eq('owner_user_id', user.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('set_collaborators')
+        .select('sets(id, name, owner_user_id, profiles!owner_user_id(display_name, last_name, username))')
+        .eq('user_id', user.id)
+        .eq('status', 'accepted'),
+      supabase
+        .from('set_songs')
+        .select('set_id, song_id')
+        .in('song_id', songIds),
+    ]);
+
+    const owned: UserSet[] = (ownedRes.data ?? []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      ownerName: null,
+    }));
+
+    const ownedIds = new Set(owned.map((s) => s.id));
+    const collaborating: UserSet[] = ((collabRes.data ?? []) as any[])
+      .map((r) => r.sets)
+      .filter(Boolean)
+      .filter((s: any) => s.owner_user_id !== user.id && !ownedIds.has(s.id))
+      .map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        ownerName:
+          [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(' ') ||
+          s.profiles?.username ||
+          'Someone',
+      }));
+
+    // A set counts as "already added" only when it contains all selected songs
+    // (for a single song this is just "the set has this song", like web).
+    const bySet = new Map<string, Set<string>>();
+    for (const row of (membershipRes.data ?? []) as any[]) {
+      if (!bySet.has(row.set_id)) bySet.set(row.set_id, new Set());
+      bySet.get(row.set_id)!.add(row.song_id);
+    }
+    const fullyIn = new Set<string>();
+    for (const [setId, ids] of bySet) {
+      if (songIds.every((id) => ids.has(id))) fullyIn.add(setId);
+    }
+
+    setSets([...owned, ...collaborating]);
+    setInSets(fullyIn);
     setLoading(false);
   }
 
@@ -108,13 +159,18 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
             keyExtractor={item => item.id}
             contentContainerStyle={{ paddingTop: 8, paddingBottom: 40 }}
             renderItem={({ item }) => {
-              const isAdded = added.has(item.id);
+              const isAdded = added.has(item.id) || inSets.has(item.id);
               const isPending = pending === item.id;
               return (
                 <View className="mx-4 mb-2 rounded-xl border border-slate-100 bg-white px-4 py-3 flex-row items-center">
-                  <Text className="flex-1 font-semibold text-slate-900 mr-3" numberOfLines={1}>
-                    {item.name}
-                  </Text>
+                  <View className="flex-1 mr-3">
+                    <Text className="font-semibold text-slate-900" numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    {item.ownerName ? (
+                      <Text className="text-xs text-slate-400" numberOfLines={1}>Shared by {item.ownerName}</Text>
+                    ) : null}
+                  </View>
                   {isPending ? (
                     <ActivityIndicator size="small" color="#d97706" />
                   ) : isAdded ? (
