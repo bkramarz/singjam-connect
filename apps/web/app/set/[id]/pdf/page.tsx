@@ -51,6 +51,8 @@ export default async function SetPDFPage({ params, searchParams }: { params: Pro
     if (set.link_sharing === "link" && !user) redirect(`/set/${id}`);
     // "public" falls through
   }
+  // Leader assignments are collaborator-only — hide them from non-collaborator viewers.
+  const isPublicViewer = !isOwner && !isCollaborator;
 
   const participantMap = new Map<string, string>();
   if (set.profiles) {
@@ -74,9 +76,11 @@ export default async function SetPDFPage({ params, searchParams }: { params: Pro
       key: (s.key_note ?? null) as string | null,
       tonality: (s.songs?.tonality ?? null) as string | null,
       songwriters,
-      leaders: ((s.leader_user_ids ?? []) as string[])
-        .map((uid) => participantMap.get(uid))
-        .filter(Boolean) as string[],
+      leaders: isPublicViewer
+        ? []
+        : (((s.leader_user_ids ?? []) as string[])
+            .map((uid) => participantMap.get(uid))
+            .filter(Boolean) as string[]),
     };
   });
 

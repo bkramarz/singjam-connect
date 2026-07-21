@@ -20,7 +20,7 @@ import { POST } from "./route";
 // Returns a chainable Supabase query builder mock that resolves at the terminal methods.
 function chain(result: any) {
   const c: any = {};
-  for (const m of ["select", "eq", "insert", "is"]) c[m] = vi.fn().mockReturnValue(c);
+  for (const m of ["select", "eq", "insert", "is", "in"]) c[m] = vi.fn().mockReturnValue(c);
   c.maybeSingle = vi.fn().mockResolvedValue(result);
   c.single = vi.fn().mockResolvedValue(result);
   return c;

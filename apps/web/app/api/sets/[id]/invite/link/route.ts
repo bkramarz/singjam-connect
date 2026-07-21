@@ -30,11 +30,13 @@ export async function POST(
       .eq("set_id", setId)
       .eq("user_id", user.id)
       .eq("status", "accepted")
-      .eq("role", "editor")
+      .in("role", ["editor", "co-owner"])
       .maybeSingle();
     if (!collab) return NextResponse.json({ error: "Only editors can invite collaborators" }, { status: 403 });
   }
 
+  // Shareable links only ever grant editor/viewer — the higher-privilege co-owner
+  // role must be assigned to a specific, named user by the owner.
   const role: "editor" | "viewer" = body.role === "viewer" ? "viewer" : "editor";
 
   const { data: inserted } = await admin
@@ -75,16 +77,43 @@ export async function DELETE(
 
   const isOwner = (set as any)?.owner_user_id === user.id;
 
-  if (!isOwner) {
-    // Non-owners can only cancel their own pending (unclaimed) invites
-    await admin.from("set_collaborators").delete()
-      .eq("id", inviteId)
-      .eq("invited_by", user.id)
-      .is("user_id", null);
-  } else {
+  if (isOwner) {
     await admin.from("set_collaborators").delete()
       .eq("id", inviteId);
+    return NextResponse.json({ ok: true });
   }
+
+  // Co-owners can remove other collaborators, but not fellow co-owners.
+  const { data: callerCollab } = await admin
+    .from("set_collaborators")
+    .select("id")
+    .eq("set_id", setId)
+    .eq("user_id", user.id)
+    .eq("status", "accepted")
+    .eq("role", "co-owner")
+    .maybeSingle();
+
+  if (callerCollab) {
+    const { data: target } = await admin
+      .from("set_collaborators")
+      .select("role")
+      .eq("id", inviteId)
+      .eq("set_id", setId)
+      .maybeSingle();
+    if ((target as any)?.role === "co-owner") {
+      return NextResponse.json({ error: "Only the set owner can remove a co-owner" }, { status: 403 });
+    }
+    await admin.from("set_collaborators").delete()
+      .eq("id", inviteId)
+      .eq("set_id", setId);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Other non-owners can only cancel their own pending (unclaimed) invites.
+  await admin.from("set_collaborators").delete()
+    .eq("id", inviteId)
+    .eq("invited_by", user.id)
+    .is("user_id", null);
 
   return NextResponse.json({ ok: true });
 }

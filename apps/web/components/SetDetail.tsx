@@ -45,6 +45,7 @@ export default function SetDetail({
   currentUserSingingVoice = null,
   canEdit,
   isOwner,
+  canManage = false,
   isAdmin,
   isSongEditor = false,
   isPublicViewer = false,
@@ -59,6 +60,7 @@ export default function SetDetail({
   currentUserSingingVoice?: string | null;
   canEdit: boolean;
   isOwner: boolean;
+  canManage?: boolean;
   isAdmin: boolean;
   isSongEditor?: boolean;
   isPublicViewer?: boolean;
@@ -115,7 +117,7 @@ export default function SetDetail({
     tonality: false,
     meter: false,
     key: true,
-    leader: true,
+    leader: !isPublicViewer,
     songwriters: false,
     genres: false,
     themes: false,
@@ -149,7 +151,7 @@ export default function SetDetail({
   }, [currentUserId]);
 
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canManage) return;
     function onClickOutside(e: MouseEvent) {
       if (setMenuRef.current && !setMenuRef.current.contains(e.target as Node)) {
         setSetMenuOpen(false);
@@ -157,7 +159,7 @@ export default function SetDetail({
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [isOwner]);
+  }, [canManage]);
 
   useEffect(() => {
     participantIdsRef.current = new Set([
@@ -615,7 +617,7 @@ export default function SetDetail({
     setEditingName(false);
   }
 
-  async function handleChangeCollaboratorRole(collaboratorId: string, role: "editor" | "viewer") {
+  async function handleChangeCollaboratorRole(collaboratorId: string, role: "editor" | "viewer" | "co-owner") {
     const prev = collaborators;
     setCollaborators((cs) => cs.map((c) => c.id === collaboratorId ? { ...c, role } : c));
     const res = await fetch(`/api/sets/${set.id}/collaborators`, {
@@ -682,13 +684,15 @@ export default function SetDetail({
   }
 
   function handleCSVDownload() {
+    // Leaders are collaborator-only, so never export them for non-collaborator viewers.
+    const includeLeader = csvColumns.leader && !isPublicViewer;
     const headers: string[] = ["#", "Title"];
     if (csvColumns.artist)   headers.push("Artist");
     if (csvColumns.year)     headers.push("Year");
     if (csvColumns.tonality) headers.push("Tonality");
     if (csvColumns.meter)    headers.push("Meter");
     if (csvColumns.key)      headers.push("Key");
-    if (csvColumns.leader)   headers.push("Leader");
+    if (includeLeader)       headers.push("Leader");
     if (csvColumns.songwriters) { headers.push("Composers"); headers.push("Lyricists"); }
     if (csvColumns.genres)      headers.push("Genres");
     if (csvColumns.themes)      headers.push("Themes");
@@ -704,7 +708,7 @@ export default function SetDetail({
       if (csvColumns.tonality) cols.push(s.songs.tonality ?? "");
       if (csvColumns.meter)    cols.push(s.songs.meter ?? "");
       if (csvColumns.key)      cols.push(s.key_note ?? "");
-      if (csvColumns.leader) {
+      if (includeLeader) {
         const leaderNames = (s.leader_user_ids ?? [])
           .map((uid) => {
             const p = participants.find((pt) => pt.user_id === uid);
@@ -919,7 +923,7 @@ export default function SetDetail({
           )}
         </div>
 
-        {!isOwner && (
+        {!canManage && (
           currentUserId ? (
             <button
               onClick={handleCopySet}
@@ -938,7 +942,7 @@ export default function SetDetail({
           )
         )}
 
-        {isOwner && !editingName && (
+        {canManage && !editingName && (
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setEditingName(true)}
@@ -983,8 +987,8 @@ export default function SetDetail({
         )}
       </div>
 
-      {/* Visibility selector — owner only */}
-      {isOwner && (
+      {/* Visibility selector — owner and co-owners */}
+      {canManage && (
         <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5 space-y-2">
           <p className="text-xs font-medium text-zinc-500">Visibility</p>
           <div className="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5">
@@ -1037,7 +1041,7 @@ export default function SetDetail({
         </li>
 
         {/* Access request cards */}
-        {isOwner && accessRequests.map((r) => (
+        {canManage && accessRequests.map((r) => (
           <li key={r.id} className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
             <span className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber-100 text-xs font-medium text-amber-700">
               {r.profiles?.avatar_url
@@ -1095,20 +1099,20 @@ export default function SetDetail({
                 {[c.profiles?.display_name, c.profiles?.last_name].filter(Boolean).join(" ") || "Unknown"}
               </span>
             )}
-            {isOwner ? (
+            {canManage && (isOwner || c.role !== "co-owner") ? (
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex rounded-lg border border-zinc-200 overflow-hidden">
-                  {(["editor", "viewer"] as const).map((r) => (
+                  {(isOwner ? (["editor", "viewer", "co-owner"] as const) : (["editor", "viewer"] as const)).map((r) => (
                     <button
                       key={r}
                       onClick={() => handleChangeCollaboratorRole(c.id, r)}
-                      className={`px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors ${
                         c.role === r
                           ? "bg-zinc-100 text-zinc-700"
                           : "text-zinc-400 hover:text-zinc-600"
                       }`}
                     >
-                      {r}
+                      {r === "co-owner" ? "Co-owner" : r.charAt(0).toUpperCase() + r.slice(1)}
                     </button>
                   ))}
                 </div>
@@ -1119,11 +1123,13 @@ export default function SetDetail({
                   Remove
                 </button>
               </div>
-            ) : canEdit ? (
-              <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium capitalize ${
-                c.role === "editor" ? "bg-zinc-100 text-zinc-600" : "bg-zinc-50 text-zinc-400"
+            ) : canManage || canEdit ? (
+              <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${
+                c.role === "co-owner" ? "bg-amber-50 text-amber-700"
+                  : c.role === "editor" ? "bg-zinc-100 text-zinc-600"
+                  : "bg-zinc-50 text-zinc-400"
               }`}>
-                {c.role}
+                {c.role === "co-owner" ? "Co-owner" : c.role.charAt(0).toUpperCase() + c.role.slice(1)}
               </span>
             ) : null}
           </li>
@@ -1158,6 +1164,7 @@ export default function SetDetail({
               <div className="basis-full">
                 <SetInvitePanel
                   setId={set.id}
+                  canAssignCoOwner={isOwner}
                   alreadyCollaboratorIds={collaborators.filter((c) => c.user_id).map((c) => c.user_id!)}
                   onCollaboratorAdded={(c) => setCollaborators((prev) => {
                     if (prev.some((existing) => existing.id === c.id)) return prev;
@@ -1269,7 +1276,7 @@ export default function SetDetail({
           </a>
         ) : null}
 
-        {isOwner ? (
+        {canManage ? (
           ugPlaylistUrl ? (
             <>
               <div className="flex items-center rounded-xl border border-amber-200 overflow-hidden">
@@ -1362,7 +1369,7 @@ export default function SetDetail({
           <div className="hidden md:block basis-full rounded-xl border border-zinc-200 bg-white px-4 py-3 space-y-3">
             <p className="text-xs font-medium text-zinc-500">Columns to include</p>
             <div className="flex flex-wrap gap-x-5 gap-y-2">
-              {CSV_COLUMN_OPTIONS.map(({ key, label }) => (
+              {CSV_COLUMN_OPTIONS.filter(({ key }) => key !== "leader" || !isPublicViewer).map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-1.5 text-sm text-zinc-700 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1493,7 +1500,7 @@ export default function SetDetail({
               const knowledgeUserIds = new Set(knowledgeForSong.keys());
               const hasEligible = [...knowledgeForSong.values()].some((c) => c === "lead");
               const rowParticipants = isPublicViewer
-                ? participants.filter((p) => (song.leader_user_ids ?? []).includes(p.user_id))
+                ? []
                 : participants.filter((p) =>
                     knowledgeUserIds.has(p.user_id) || (song.leader_user_ids ?? []).includes(p.user_id)
                   );

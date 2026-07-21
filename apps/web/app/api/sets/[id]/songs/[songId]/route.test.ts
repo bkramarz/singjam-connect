@@ -20,7 +20,7 @@ import { PATCH } from "./route";
 // Chainable query builder mock for select().eq()...maybeSingle()/single() calls.
 function chain(result: any) {
   const c: any = {};
-  for (const m of ["select", "eq", "insert"]) c[m] = vi.fn().mockReturnValue(c);
+  for (const m of ["select", "eq", "insert", "in"]) c[m] = vi.fn().mockReturnValue(c);
   c.maybeSingle = vi.fn().mockResolvedValue(result);
   c.single = vi.fn().mockResolvedValue(result);
   return c;

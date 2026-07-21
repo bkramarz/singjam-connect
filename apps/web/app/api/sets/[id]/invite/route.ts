@@ -18,7 +18,8 @@ export async function POST(
   if (!inviteeUserId && !inviteeEmail) {
     return NextResponse.json({ error: "Provide inviteeUserId or inviteeEmail" }, { status: 400 });
   }
-  const collaboratorRole: "editor" | "viewer" = role === "viewer" ? "viewer" : "editor";
+  const collaboratorRole: "editor" | "viewer" | "co-owner" =
+    role === "co-owner" ? "co-owner" : role === "viewer" ? "viewer" : "editor";
 
   const admin = supabaseAdmin();
 
@@ -37,9 +38,13 @@ export async function POST(
       .eq("set_id", setId)
       .eq("user_id", user.id)
       .eq("status", "accepted")
-      .eq("role", "editor")
+      .in("role", ["editor", "co-owner"])
       .maybeSingle();
     if (!collab) return NextResponse.json({ error: "Only editors can invite collaborators" }, { status: 403 });
+  }
+  // Only the owner can grant co-owner.
+  if (collaboratorRole === "co-owner" && !isOwner) {
+    return NextResponse.json({ error: "Only the set owner can assign co-owners" }, { status: 403 });
   }
 
   const { data: inviterProfile } = await admin
