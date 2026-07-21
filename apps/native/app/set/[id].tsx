@@ -24,7 +24,21 @@ type SetData = {
   owner_user_id: string;
   link_sharing: 'private' | 'link' | 'public';
   spotify_playlist_id: string | null;
+  profiles: { display_name: string | null; last_name: string | null; username: string | null } | null;
 };
+
+// Owner + accepted collaborators, used to render per-song Lead/Support pills.
+type Participant = {
+  user_id: string;
+  display_name: string | null;
+  last_name: string | null;
+  username: string | null;
+};
+
+function participantLabel(p: Participant): string {
+  const first = p.display_name ?? p.username ?? '?';
+  return p.last_name ? `${first} ${p.last_name[0].toUpperCase()}.` : first;
+}
 
 type SetSong = {
   id: string;
@@ -239,7 +253,10 @@ function SongRow({
   displayPosition,
   drag,
   isActive,
-  myUserId,
+  participants,
+  participantKnowledge,
+  hasEligible,
+  isPublicViewer,
   onRemove,
   onKeyChange,
   onLeaderToggle,
@@ -250,7 +267,10 @@ function SongRow({
   displayPosition: number;
   drag?: () => void;
   isActive?: boolean;
-  myUserId: string | null;
+  participants: Participant[];
+  participantKnowledge: Map<string, string>;
+  hasEligible: boolean;
+  isPublicViewer: boolean;
   onRemove: () => void;
   onKeyChange: (key: string | null) => void;
   onLeaderToggle: (newLeaderIds: string[]) => void;
@@ -261,6 +281,20 @@ function SongRow({
     .map((sc) => sc.people?.name)
     .filter(Boolean) as string[];
   const artist = song.songs.display_artist ?? formatComposers(composerNames, []);
+
+  // Leader/support assignments are only shown to collaborators; public viewers
+  // see none. Mirrors web SetSongRow.
+  const leaderIds = song.leader_user_ids ?? [];
+  const visibleParticipants = isPublicViewer ? [] : participants;
+  const leadParticipants = visibleParticipants.filter(
+    (p) => leaderIds.includes(p.user_id) || participantKnowledge.get(p.user_id) === 'lead'
+  );
+  const supportParticipants = visibleParticipants.filter(
+    (p) => !leaderIds.includes(p.user_id) && participantKnowledge.get(p.user_id) === 'support'
+  );
+  const showLeaderBlock =
+    !isPublicViewer &&
+    (leadParticipants.length > 0 || supportParticipants.length > 0 || (canEdit && participants.length > 0));
 
   function confirmRemove() {
     Alert.alert(
@@ -281,88 +315,121 @@ function SongRow({
         onClose={() => setKeyPickerVisible(false)}
         onSelect={onKeyChange}
       />
-      <View className={`flex-row items-center px-4 py-3 border-b border-slate-100 ${isActive ? 'bg-amber-50' : 'bg-white'}`}>
-        {canEdit && drag ? (
-          <TouchableOpacity
-            onLongPress={drag}
-            delayLongPress={150}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            className="mr-3"
-          >
-            <Ionicons name="reorder-three-outline" size={20} color="#94a3b8" />
-          </TouchableOpacity>
-        ) : (
-          <View className="w-7 items-center mr-2">
-            <Text className="text-slate-300 text-sm font-medium">{displayPosition}</Text>
+      <View className={`px-4 py-3 border-b border-slate-100 ${isActive ? 'bg-amber-50' : 'bg-white'}`}>
+        <View className="flex-row items-center">
+          {canEdit && drag ? (
+            <TouchableOpacity
+              onLongPress={drag}
+              delayLongPress={150}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              className="mr-3"
+            >
+              <Ionicons name="reorder-three-outline" size={20} color="#94a3b8" />
+            </TouchableOpacity>
+          ) : (
+            <View className="w-7 items-center mr-2">
+              <Text className="text-slate-300 text-sm font-medium">{displayPosition}</Text>
+            </View>
+          )}
+          <View className="flex-1 min-w-0">
+            <Text className="text-slate-900 font-medium" numberOfLines={1}>{song.songs.title}</Text>
+            {artist ? (
+              <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{artist}</Text>
+            ) : null}
           </View>
-        )}
-        <View className="flex-1 min-w-0">
-          <Text className="text-slate-900 font-medium" numberOfLines={1}>{song.songs.title}</Text>
-          {artist ? (
-            <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{artist}</Text>
+          {canEdit ? (
+            <TouchableOpacity
+              onPress={onTogglePlayed}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              className="mr-3"
+            >
+              <Ionicons
+                name={song.played ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                size={18}
+                color={song.played ? '#16a34a' : '#94a3b8'}
+              />
+            </TouchableOpacity>
+          ) : song.played ? (
+            <View className="mr-3">
+              <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+            </View>
+          ) : null}
+          {canEdit ? (
+            <TouchableOpacity
+              onPress={() => setKeyPickerVisible(true)}
+              className={`mr-3 px-2.5 py-1 rounded-lg border ${song.key_note ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
+            >
+              <Text className={`text-xs font-medium ${song.key_note ? 'text-amber-700' : 'text-slate-400'}`}>
+                {song.key_note ?? 'Key'}
+              </Text>
+            </TouchableOpacity>
+          ) : song.key_note ? (
+            <View className="mr-3 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50">
+              <Text className="text-xs font-medium text-amber-700">{song.key_note}</Text>
+            </View>
+          ) : null}
+          {canEdit ? (
+            <TouchableOpacity onPress={confirmRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="trash-outline" size={16} color="#94a3b8" />
+            </TouchableOpacity>
           ) : null}
         </View>
-        {canEdit ? (
-          <TouchableOpacity
-            onPress={onTogglePlayed}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            className="mr-3"
-          >
-            <Ionicons
-              name={song.played ? 'checkmark-circle' : 'checkmark-circle-outline'}
-              size={18}
-              color={song.played ? '#16a34a' : '#94a3b8'}
-            />
-          </TouchableOpacity>
-        ) : song.played ? (
-          <View className="mr-3">
-            <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+
+        {showLeaderBlock ? (
+          <View className="mt-2 pl-9 gap-1">
+            {(leadParticipants.length > 0 || (canEdit && participants.length > 0)) ? (
+              <View className="flex-row items-start">
+                <Text className="text-amber-500 text-[10px] font-medium mr-1.5 mt-1">Lead</Text>
+                <View className="flex-row flex-wrap flex-1">
+                  {canEdit && leaderIds.length === 0 && !hasEligible ? (
+                    <View className="rounded-full border border-dashed border-amber-300 px-2 py-0.5 mr-1 mb-1">
+                      <Text className="text-amber-500 text-xs font-medium">No leader</Text>
+                    </View>
+                  ) : null}
+                  {leadParticipants.map((p) => {
+                    const isLeader = leaderIds.includes(p.user_id);
+                    const clickable = canEdit && participantKnowledge.get(p.user_id) === 'lead';
+                    return (
+                      <TouchableOpacity
+                        key={p.user_id}
+                        disabled={!clickable}
+                        onPress={() => {
+                          const next = isLeader
+                            ? leaderIds.filter((uid) => uid !== p.user_id)
+                            : [...leaderIds, p.user_id];
+                          onLeaderToggle(next);
+                        }}
+                        className={`rounded-full px-2 py-0.5 mr-1 mb-1 ${isLeader ? 'bg-amber-400' : 'bg-amber-100'}`}
+                      >
+                        <Text className={`text-xs font-medium ${isLeader ? 'text-white' : 'text-amber-700'}`}>
+                          {participantLabel(p)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+            {supportParticipants.length > 0 ? (
+              <View className="flex-row items-start">
+                <Text className="text-sky-500 text-[10px] font-medium mr-1.5 mt-1">Support</Text>
+                <View className="flex-row flex-wrap flex-1">
+                  {supportParticipants.map((p) => (
+                    <View key={p.user_id} className="rounded-full px-2 py-0.5 mr-1 mb-1 bg-sky-100">
+                      <Text className="text-sky-700 text-xs font-medium">{participantLabel(p)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
           </View>
-        ) : null}
-        {canEdit ? (
-          <TouchableOpacity
-            onPress={() => setKeyPickerVisible(true)}
-            className={`mr-3 px-2.5 py-1 rounded-lg border ${song.key_note ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
-          >
-            <Text className={`text-xs font-medium ${song.key_note ? 'text-amber-700' : 'text-slate-400'}`}>
-              {song.key_note ?? 'Key'}
-            </Text>
-          </TouchableOpacity>
-        ) : song.key_note ? (
-          <View className="mr-3 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50">
-            <Text className="text-xs font-medium text-amber-700">{song.key_note}</Text>
-          </View>
-        ) : null}
-        {canEdit && myUserId ? (
-          <TouchableOpacity
-            onPress={() => {
-              const isLeader = song.leader_user_ids.includes(myUserId);
-              const newIds = isLeader
-                ? song.leader_user_ids.filter(id => id !== myUserId)
-                : [...song.leader_user_ids, myUserId];
-              onLeaderToggle(newIds);
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            className="mr-3"
-          >
-            <Ionicons
-              name={song.leader_user_ids.includes(myUserId ?? '') ? 'star' : 'star-outline'}
-              size={16}
-              color={song.leader_user_ids.includes(myUserId ?? '') ? '#d97706' : '#94a3b8'}
-            />
-          </TouchableOpacity>
-        ) : null}
-        {canEdit ? (
-          <TouchableOpacity onPress={confirmRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="trash-outline" size={16} color="#94a3b8" />
-          </TouchableOpacity>
         ) : null}
       </View>
     </>
   );
 }
 
-type Collaborator = { id: string; user_id: string; role: string; display_name: string | null; username: string | null };
+type Collaborator = { id: string; user_id: string; role: string; display_name: string | null; last_name: string | null; username: string | null };
 
 function SetSettingsModal({
   visible,
@@ -428,6 +495,7 @@ function SetSettingsModal({
         user_id: data.user_id,
         role: data.role,
         display_name: user.display_name,
+        last_name: user.last_name,
         username: user.username,
       });
     }
@@ -566,11 +634,13 @@ export default function SetDetailScreen() {
   const [songs, setSongs] = useState<SetSong[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState(false);
+  const [isCollaborator, setIsCollaborator] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
-  const [collaborators, setCollaborators] = useState<{ id: string; user_id: string; role: string; display_name: string | null; username: string | null }[]>([]);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [songKnowledge, setSongKnowledge] = useState<{ user_id: string; song_id: string; confidence: string }[]>([]);
   const [sortBy, setSortBy] = useState<SetSortOrder>('custom');
   const [filterQuery, setFilterQuery] = useState('');
   const [spotifyExporting, setSpotifyExporting] = useState(false);
@@ -650,11 +720,11 @@ export default function SetDetailScreen() {
         async (payload) => {
           const row = payload.new as any;
           if (row.status !== 'accepted') return;
-          const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', row.user_id).single();
+          const { data: prof } = await supabase.from('profiles').select('display_name, last_name, username').eq('id', row.user_id).single();
           setCollaborators((prev) =>
             prev.some((c) => c.id === row.id)
               ? prev
-              : [...prev, { id: row.id, user_id: row.user_id, role: row.role, display_name: (prof as any)?.display_name ?? null, username: (prof as any)?.username ?? null }]
+              : [...prev, { id: row.id, user_id: row.user_id, role: row.role, display_name: (prof as any)?.display_name ?? null, last_name: (prof as any)?.last_name ?? null, username: (prof as any)?.username ?? null }]
           );
         }
       )
@@ -665,11 +735,11 @@ export default function SetDetailScreen() {
           const row = payload.new as any;
           const old = payload.old as any;
           if (row.status === 'accepted' && old.status !== 'accepted') {
-            const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', row.user_id).single();
+            const { data: prof } = await supabase.from('profiles').select('display_name, last_name, username').eq('id', row.user_id).single();
             setCollaborators((prev) =>
               prev.some((c) => c.id === row.id)
                 ? prev
-                : [...prev, { id: row.id, user_id: row.user_id, role: row.role, display_name: (prof as any)?.display_name ?? null, username: (prof as any)?.username ?? null }]
+                : [...prev, { id: row.id, user_id: row.user_id, role: row.role, display_name: (prof as any)?.display_name ?? null, last_name: (prof as any)?.last_name ?? null, username: (prof as any)?.username ?? null }]
             );
           } else if (row.status === 'accepted') {
             setCollaborators((prev) => prev.map((c) => (c.id === row.id ? { ...c, role: row.role } : c)));
@@ -697,7 +767,7 @@ export default function SetDetailScreen() {
     const [setRes, songsRes, collabRes, allCollabRes] = await Promise.all([
       supabase
         .from('sets')
-        .select('id, name, description, owner_user_id, link_sharing, spotify_playlist_id')
+        .select('id, name, description, owner_user_id, link_sharing, spotify_playlist_id, profiles(display_name, last_name, username)')
         .eq('id', id)
         .single(),
       supabase
@@ -714,7 +784,7 @@ export default function SetDetailScreen() {
         .maybeSingle(),
       supabase
         .from('set_collaborators')
-        .select('id, user_id, role, profiles(display_name, username)')
+        .select('id, user_id, role, profiles(display_name, last_name, username)')
         .eq('set_id', id)
         .eq('status', 'accepted'),
     ]);
@@ -728,12 +798,14 @@ export default function SetDetailScreen() {
     const isOwner = s.owner_user_id === user.id;
     const isEditor = collabRes.data?.role === 'editor';
     setCanEdit(isOwner || isEditor);
+    setIsCollaborator(!!collabRes.data);
 
     const collabs: Collaborator[] = ((allCollabRes.data ?? []) as any[]).map((c: any) => ({
       id: c.id,
       user_id: c.user_id,
       role: c.role,
       display_name: c.profiles?.display_name ?? null,
+      last_name: c.profiles?.last_name ?? null,
       username: c.profiles?.username ?? null,
     }));
     setCollaborators(collabs);
@@ -855,6 +927,49 @@ export default function SetDetailScreen() {
     );
   }
 
+  // Owner + accepted collaborators, mirroring web SetDetail's `participants`.
+  const participants: Participant[] = useMemo(() => {
+    if (!set) return [];
+    const owner: Participant[] = set.profiles
+      ? [{ user_id: set.owner_user_id, display_name: set.profiles.display_name, last_name: set.profiles.last_name, username: set.profiles.username }]
+      : [];
+    return [
+      ...owner,
+      ...collaborators
+        .filter((c) => c.user_id)
+        .map((c) => ({ user_id: c.user_id, display_name: c.display_name, last_name: c.last_name, username: c.username })),
+    ];
+  }, [set, collaborators]);
+
+  // Fetch each participant's repertoire confidence for the set's songs so rows can
+  // show Lead/Support pills. Keyed on the id lists so it re-runs when either changes.
+  const participantIdsKey = participants.map((p) => p.user_id).sort().join(',');
+  const songIdsKey = songs.map((s) => s.song_id).sort().join(',');
+  useEffect(() => {
+    const participantIds = participantIdsKey ? participantIdsKey.split(',') : [];
+    const songIds = songIdsKey ? songIdsKey.split(',') : [];
+    if (!participantIds.length || !songIds.length) { setSongKnowledge([]); return; }
+    let cancelled = false;
+    supabase
+      .from('user_songs')
+      .select('user_id, song_id, confidence')
+      .in('user_id', participantIds)
+      .in('song_id', songIds)
+      .in('confidence', ['lead', 'support', 'learn'])
+      .then(({ data }) => { if (!cancelled) setSongKnowledge((data ?? []) as any); });
+    return () => { cancelled = true; };
+  }, [participantIdsKey, songIdsKey]);
+
+  // Per-song lookup: songId → Map<userId, confidence>.
+  const songKnowledgeMap = useMemo(() => {
+    const m = new Map<string, Map<string, string>>();
+    for (const k of songKnowledge) {
+      if (!m.has(k.song_id)) m.set(k.song_id, new Map());
+      m.get(k.song_id)!.set(k.user_id, k.confidence);
+    }
+    return m;
+  }, [songKnowledge]);
+
   const displayedSongs = useMemo(() => {
     let result = songs;
     if (filterQuery.trim()) {
@@ -889,8 +1004,19 @@ export default function SetDetailScreen() {
   }
 
   const isOwner = set.owner_user_id === myUserId;
+  const isPublicViewer = !isOwner && !isCollaborator;
   const existingIds = new Set(songs.map((s) => s.song_id));
   const canDrag = canEdit && sortBy === 'custom' && !filterQuery.trim();
+
+  // Per-song leader/support inputs, mirroring web SetDetail's row wiring.
+  const leaderProps = (song: SetSong) => {
+    const knowledgeForSong = songKnowledgeMap.get(song.song_id) ?? new Map<string, string>();
+    const hasEligible = [...knowledgeForSong.values()].some((c) => c === 'lead');
+    const rowParticipants = participants.filter(
+      (p) => knowledgeForSong.has(p.user_id) || (song.leader_user_ids ?? []).includes(p.user_id)
+    );
+    return { participants: rowParticipants, participantKnowledge: knowledgeForSong, hasEligible, isPublicViewer };
+  };
 
   return (
     <>
@@ -999,7 +1125,7 @@ export default function SetDetailScreen() {
                   displayPosition={(getIndex() ?? 0) + 1}
                   drag={drag}
                   isActive={isActive}
-                  myUserId={myUserId}
+                  {...leaderProps(item)}
                   onRemove={() => handleRemoveSong(item.id)}
                   onKeyChange={(key) => handleKeyChange(item.id, key)}
                   onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
@@ -1023,7 +1149,7 @@ export default function SetDetailScreen() {
                 song={item}
                 canEdit={canEdit}
                 displayPosition={index + 1}
-                myUserId={myUserId}
+                {...leaderProps(item)}
                 onRemove={() => handleRemoveSong(item.id)}
                 onKeyChange={(key) => handleKeyChange(item.id, key)}
                 onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}

@@ -54,7 +54,7 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 |---|---|---|
 | Sets list (owned/collab/public) | ✅ | `(tabs)/sets.tsx`. |
 | Set detail: songs, reorder, key, leaders | ✅ | `set/[id].tsx`. |
-| Leaders hidden from non-collaborators | ❌ | Web hides Lead/Support pills (+ CSV + PDF) from public viewers (2026-07-21). Native `set/[id].tsx:339` still shows `leader_user_ids` to any viewer — mirror the `isPublicViewer` gate. |
+| Leader/support display + public-viewer gate | ✅ | Native now renders per-song Lead/Support pills (explicit leaders + participant repertoire confidence), hidden from public viewers via `isPublicViewer = !isOwner && !isCollaborator`, editor-toggleable — mirrors web `SetSongRow`. Replaced the old self-only leader star. (native has no CSV/PDF export, so those web gates don't apply.) Derivation still inline; see core-extraction backlog. |
 | Co-owner role | ❌ | Web adds a `co-owner` role: full owner powers except delete/assigning co-owners (2026-07-21, migration 148). Native needs: treat `co-owner` as editor (`set/[id].tsx:729` `role === 'editor'`); show visibility selector + collaborator management to co-owners; route visibility/rename writes through the web API (native currently writes `link_sharing` directly at `set/[id].tsx:835` — RLS is owner-only, so co-owners will be blocked). |
 | Mark-as-played | ✅ | PR #187 / #240; `reorderSongsForPlayed` in core. |
 | Realtime sync | ✅ | PR #240 (narrower than web by design). |
@@ -114,6 +114,9 @@ Each is **web-affecting** (core rebuilds web) → batch them.
       `SuggestionCard`, `AddSongModal`, `songs.tsx`, web `ConfidencePicker`.
 - [ ] Sort comparators (title asc/desc, popularity+title tiebreak).
 - [ ] Search field-set / normalization used by add-song rows.
+- [ ] Set leader/support participant derivation (who leads/supports a song from explicit
+      `leader_user_ids` + participant repertoire confidence, hidden from public viewers).
+      Currently inline in web `SetSongRow` and native `set/[id].tsx`; extract to core with tests.
 
 Already shared in core: `formatComposers`, `mergeSuggestionsById`, `reorderSongsForPlayed`,
 `formatJamTime`, `username` rules, `singingVoice`, `sortRepertoireSearchResults`.
