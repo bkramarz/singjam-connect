@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView, ActionSheetIOS, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { matchesSearch, mergeSuggestionsById, type UserSong } from '@singjam/core';
+import { matchesSearch, mergeSuggestionsById, songMatchesFilters, deriveFilterOptions, countActiveFilters, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
@@ -43,8 +43,6 @@ type ExtFilters = {
   yearMax: string;
 };
 
-type FilterDim = 'genres' | 'cultures' | 'languages' | 'themes' | 'vibe' | 'tonality' | 'meter' | 'year';
-
 // ── Constants (mirror web repertoire/page.tsx) ────────────────────────────────
 
 const CONFIDENCE_LEVELS: { key: Exclude<ConfidenceFilter, 'all'>; label: string }[] = [
@@ -64,27 +62,7 @@ function emptyExtFilters(): ExtFilters {
 }
 
 function countExtFilters(f: ExtFilters): number {
-  return f.genres.size + f.cultures.size + f.languages.size + f.themes.size + (f.vibe ? 1 : 0) + (f.tonality ? 1 : 0) + (f.meter ? 1 : 0) + (f.yearMin || f.yearMax ? 1 : 0);
-}
-
-// Applies every active extended filter, optionally skipping one dimension so the
-// filter option lists can cascade (each dimension derived from songs passing the
-// other active filters) — mirrors web's useSongFilters.
-function matchesExt(song: RichUserSong, f: ExtFilters, exclude?: FilterDim): boolean {
-  if (exclude !== 'genres' && f.genres.size > 0 && !song.genres.some(g => f.genres.has(g))) return false;
-  if (exclude !== 'cultures' && f.cultures.size > 0 && !song.cultures.some(c => f.cultures.has(c))) return false;
-  if (exclude !== 'languages' && f.languages.size > 0 && !song.languages.some(l => f.languages.has(l))) return false;
-  if (exclude !== 'themes' && f.themes.size > 0 && !song.themes.some(t => f.themes.has(t))) return false;
-  if (exclude !== 'vibe' && f.vibe && song.vibe !== f.vibe) return false;
-  if (exclude !== 'tonality' && f.tonality && !song.tonality?.split(/,\s*/).includes(f.tonality)) return false;
-  if (exclude !== 'meter' && f.meter && song.meter !== f.meter) return false;
-  if (exclude !== 'year') {
-    const yMin = f.yearMin ? parseInt(f.yearMin, 10) : null;
-    const yMax = f.yearMax ? parseInt(f.yearMax, 10) : null;
-    if (yMin != null && (song.year == null || song.year < yMin)) return false;
-    if (yMax != null && (song.year == null || song.year > yMax)) return false;
-  }
-  return true;
+  return countActiveFilters(f);
 }
 
 function toggleSet(set: Set<string>, value: string): Set<string> {
@@ -371,19 +349,7 @@ export default function RepertoireScreen() {
 
   // Derive each filter dimension's options from songs passing the OTHER active
   // filters, so choosing one facet narrows the rest (cascading, like web).
-  const options = useMemo<FilterOptions>(() => {
-    const uniq = (xs: string[]) => Array.from(new Set(xs)).sort();
-    const forDim = (dim: FilterDim) => songs.filter(s => matchesExt(s, extFilters, dim));
-    return {
-      genres: uniq(forDim('genres').flatMap(s => s.genres)),
-      cultures: uniq(forDim('cultures').flatMap(s => s.cultures)),
-      languages: uniq(forDim('languages').flatMap(s => s.languages)),
-      themes: uniq(forDim('themes').flatMap(s => s.themes)),
-      vibes: uniq(forDim('vibe').map(s => s.vibe).filter(Boolean) as string[]),
-      tonalities: uniq(forDim('tonality').flatMap(s => s.tonality ? s.tonality.split(/,\s*/) : [])),
-      meters: uniq(forDim('meter').map(s => s.meter).filter(Boolean) as string[]),
-    };
-  }, [songs, extFilters]);
+  const options = useMemo<FilterOptions>(() => deriveFilterOptions(songs, extFilters), [songs, extFilters]);
 
   const yearBounds = useMemo(() => {
     const years = songs.map(s => s.year).filter((y): y is number => y != null);
@@ -400,7 +366,7 @@ export default function RepertoireScreen() {
       result = result.filter(s => s.confidence === confidenceFilter);
     }
 
-    result = result.filter(s => matchesExt(s, extFilters));
+    result = result.filter(s => songMatchesFilters(s, extFilters));
 
     if (sortBy === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
     if (sortBy === 'popularity') return [...result].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));

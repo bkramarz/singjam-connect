@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { formatComposers } from '@singjam/core';
+import { formatComposers, songMatchesFilters, deriveFilterOptions, countActiveFilters as countExtendedFilters } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
@@ -99,17 +99,7 @@ function emptyFilters(): Filters {
 }
 
 function countActiveFilters(f: Filters): number {
-  return (
-    (f.hideMySongs ? 1 : 0) +
-    f.genres.size +
-    f.cultures.size +
-    f.languages.size +
-    f.themes.size +
-    (f.vibe ? 1 : 0) +
-    (f.tonality ? 1 : 0) +
-    (f.meter ? 1 : 0) +
-    (f.yearMin || f.yearMax ? 1 : 0)
-  );
+  return (f.hideMySongs ? 1 : 0) + countExtendedFilters(f);
 }
 
 function toggle(set: Set<string>, value: string): Set<string> {
@@ -298,20 +288,7 @@ function FilterModal({
 // list is derived from the songs that pass all the *other* active filters.
 function matchesFilters(song: SongMeta, f: Filters, myIds: Set<string>, exclude?: FilterDim): boolean {
   if (f.hideMySongs && myIds.has(song.song_id)) return false;
-  if (exclude !== 'genres' && f.genres.size > 0 && !song.genres.some(g => f.genres.has(g))) return false;
-  if (exclude !== 'cultures' && f.cultures.size > 0 && !song.cultures.some(c => f.cultures.has(c))) return false;
-  if (exclude !== 'languages' && f.languages.size > 0 && !song.languages.some(l => f.languages.has(l))) return false;
-  if (exclude !== 'themes' && f.themes.size > 0 && !song.themes.some(t => f.themes.has(t))) return false;
-  if (exclude !== 'vibe' && f.vibe && song.vibe !== f.vibe) return false;
-  if (exclude !== 'tonality' && f.tonality && !song.tonality?.split(/,\s*/).includes(f.tonality)) return false;
-  if (exclude !== 'meter' && f.meter && song.meter !== f.meter) return false;
-  if (exclude !== 'year') {
-    const yMin = f.yearMin ? parseInt(f.yearMin, 10) : null;
-    const yMax = f.yearMax ? parseInt(f.yearMax, 10) : null;
-    if (yMin != null && (song.year == null || song.year < yMin)) return false;
-    if (yMax != null && (song.year == null || song.year > yMax)) return false;
-  }
-  return true;
+  return songMatchesFilters(song, f, exclude);
 }
 
 function applySort(songs: SongMeta[], sortBy: SortBy): SongMeta[] {
@@ -444,17 +421,8 @@ export default function SongLibraryScreen() {
   // Derive each filter dimension's options from songs passing the OTHER active
   // filters, so choosing one facet narrows the rest (cascading, like web).
   const options = useMemo(() => {
-    const uniq = (xs: string[]) => Array.from(new Set(xs)).sort();
-    const forDim = (dim: FilterDim) => allSongs.filter(s => matchesFilters(s, filters, myIds, dim));
-    return {
-      genres: uniq(forDim('genres').flatMap(s => s.genres)),
-      cultures: uniq(forDim('cultures').flatMap(s => s.cultures)),
-      languages: uniq(forDim('languages').flatMap(s => s.languages)),
-      themes: uniq(forDim('themes').flatMap(s => s.themes)),
-      vibes: uniq(forDim('vibe').map(s => s.vibe).filter(Boolean) as string[]),
-      tonalities: uniq(forDim('tonality').flatMap(s => s.tonality ? s.tonality.split(/,\s*/) : [])),
-      meters: uniq(forDim('meter').map(s => s.meter).filter(Boolean) as string[]),
-    };
+    const pool = filters.hideMySongs ? allSongs.filter(s => !myIds.has(s.song_id)) : allSongs;
+    return deriveFilterOptions(pool, filters);
   }, [allSongs, filters, myIds]);
 
   const yearBounds = useMemo(() => {
