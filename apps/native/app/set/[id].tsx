@@ -13,6 +13,29 @@ import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
+// Set mutations go through the web API (service-role client + role checks), the
+// single source of set authorization — same as web. This is what lets co-owners
+// act: RLS on set_songs/sets is owner/editor-only and doesn't know the co-owner
+// role, but the API routes do. Auth travels as a bearer token.
+async function setApi(
+  path: string,
+  method: 'POST' | 'PATCH' | 'DELETE',
+  body?: unknown
+): Promise<{ ok: boolean; status: number; json: any }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${WEB_URL}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  let json: any = null;
+  try { json = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, json };
+}
+
 const MUSICAL_KEYS = ['A', 'Bb', 'B', 'C', 'C#', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab'];
 
 type SetSortOrder = 'custom' | 'title_asc' | 'title_desc';
@@ -102,30 +125,10 @@ function AddSongModal({
 
   async function addSong(song: SongSearchResult) {
     setPendingId(song.song_id);
-    const { data: existing } = await supabase
-      .from('set_songs')
-      .select('position')
-      .eq('set_id', setId)
-      .order('position', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextPosition = (existing?.position ?? 0) + 1;
-
-    const { data, error } = await supabase
-      .from('set_songs')
-      .insert({
-        set_id: setId,
-        song_id: song.song_id,
-        position: nextPosition,
-        leader_user_ids: [],
-      })
-      .select('id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, song_composers(people(name)))')
-      .single();
-
+    const { ok, json } = await setApi(`/api/sets/${setId}/songs`, 'POST', { songId: song.song_id });
     setPendingId(null);
-    if (error) { Alert.alert('Error', error.message); return; }
-    onAdded(data as any as SetSong);
+    if (!ok) { Alert.alert('Error', json?.error ?? 'Could not add song.'); return; }
+    onAdded(json.song as SetSong);
   }
 
   return (
@@ -431,34 +434,45 @@ function SongRow({
 
 type Collaborator = { id: string; user_id: string; role: string; display_name: string | null; last_name: string | null; username: string | null };
 
+const ROLE_LABELS: Record<string, string> = { editor: 'Editor', viewer: 'Viewer', 'co-owner': 'Co-owner' };
+
 function SetSettingsModal({
   visible,
   setId,
   isOwner,
+  canManage,
   linkSharing,
   collaborators,
   onClose,
   onSharingChange,
   onCollaboratorAdded,
   onCollaboratorRemoved,
+  onCollaboratorRoleChanged,
 }: {
   visible: boolean;
   setId: string;
   isOwner: boolean;
+  canManage: boolean;
   linkSharing: string;
   collaborators: Collaborator[];
   onClose: () => void;
   onSharingChange: (mode: 'private' | 'link' | 'public') => void;
   onCollaboratorAdded: (c: Collaborator) => void;
   onCollaboratorRemoved: (id: string) => void;
+  onCollaboratorRoleChanged: (id: string, role: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ id: string; display_name: string | null; last_name: string | null; username: string | null }[]>([]);
   const [searching, setSearching] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer' | 'co-owner'>('editor');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Co-owner may only be granted to a named user, and only by the owner.
+  const inviteRoleOptions: ('editor' | 'viewer' | 'co-owner')[] = isOwner ? ['editor', 'viewer', 'co-owner'] : ['editor', 'viewer'];
 
   useEffect(() => {
-    if (!visible) { setSearchQuery(''); setSearchResults([]); setAddedIds(new Set()); }
+    if (!visible) { setSearchQuery(''); setSearchResults([]); setAddedIds(new Set()); setInviteRole('editor'); }
   }, [visible]);
 
   useEffect(() => {
@@ -479,31 +493,27 @@ function SetSettingsModal({
   }
 
   async function handleAddCollaborator(user: { id: string; display_name: string | null; last_name: string | null; username: string | null }) {
-    const { data, error } = await supabase
-      .from('set_collaborators')
-      .insert({ set_id: setId, user_id: user.id, role: 'editor', status: 'accepted' })
-      .select('id, user_id, role')
-      .single();
-    if (error && !error.message.includes('duplicate')) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    setBusyId(user.id);
+    const { ok, json } = await setApi(`/api/sets/${setId}/invite`, 'POST', { inviteeUserId: user.id, role: inviteRole });
+    setBusyId(null);
+    if (!ok) { Alert.alert('Error', json?.error ?? 'Could not add collaborator.'); return; }
     setAddedIds(prev => new Set([...prev, user.id]));
-    if (data) {
+    const c = json?.collaborator;
+    if (c) {
       onCollaboratorAdded({
-        id: data.id,
-        user_id: data.user_id,
-        role: data.role,
-        display_name: user.display_name,
-        last_name: user.last_name,
-        username: user.username,
+        id: c.id,
+        user_id: c.user_id,
+        role: c.role,
+        display_name: c.profiles?.display_name ?? user.display_name,
+        last_name: c.profiles?.last_name ?? user.last_name,
+        username: c.profiles?.username ?? user.username,
       });
     }
     setSearchQuery('');
     setSearchResults([]);
   }
 
-  async function handleRemoveCollaborator(collab: Collaborator) {
+  function handleRemoveCollaborator(collab: Collaborator) {
     Alert.alert(
       'Remove collaborator',
       `Remove ${collab.display_name ?? collab.username ?? 'this person'}?`,
@@ -512,7 +522,10 @@ function SetSettingsModal({
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await supabase.from('set_collaborators').delete().eq('id', collab.id);
+            setBusyId(collab.id);
+            const { ok, json } = await setApi(`/api/sets/${setId}/invite/link`, 'DELETE', { inviteId: collab.id });
+            setBusyId(null);
+            if (!ok) { Alert.alert('Error', json?.error ?? 'Could not remove collaborator.'); return; }
             onCollaboratorRemoved(collab.id);
           },
         },
@@ -520,6 +533,33 @@ function SetSettingsModal({
       ]
     );
   }
+
+  function changeRole(collab: Collaborator) {
+    const options = inviteRoleOptions;
+    const labels = options.map(r => ROLE_LABELS[r]);
+    const apply = async (role: 'editor' | 'viewer' | 'co-owner') => {
+      if (role === collab.role) return;
+      setBusyId(collab.id);
+      const { ok, json } = await setApi(`/api/sets/${setId}/collaborators`, 'PATCH', { collaboratorId: collab.id, role });
+      setBusyId(null);
+      if (!ok) { Alert.alert('Error', json?.error ?? 'Could not change role.'); return; }
+      onCollaboratorRoleChanged(collab.id, role);
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, title: 'Change role' },
+        (i) => { if (i < labels.length) apply(options[i]); }
+      );
+    } else {
+      Alert.alert('Change role', undefined, [
+        ...options.map((r, i) => ({ text: labels[i], onPress: () => apply(r) })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]);
+    }
+  }
+
+  // Owner manages everyone; a co-owner manages only non-co-owner collaborators.
+  const canManageCollaborator = (c: Collaborator) => isOwner || (canManage && c.role !== 'co-owner');
 
   const SHARING_OPTIONS: { value: 'private' | 'link' | 'public'; label: string; desc: string }[] = [
     { value: 'private', label: 'Private', desc: 'Only you and collaborators' },
@@ -539,8 +579,8 @@ function SetSettingsModal({
         </View>
 
         <ScrollView keyboardShouldPersistTaps="handled">
-          {/* Sharing controls (owner only) */}
-          {isOwner && (
+          {/* Sharing controls (owner + co-owners) */}
+          {canManage && (
             <View className="px-4 pt-5 pb-2">
               <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Sharing</Text>
               {SHARING_OPTIONS.map(opt => (
@@ -572,9 +612,21 @@ function SetSettingsModal({
                     <Text className="text-slate-900 font-medium">{c.display_name ?? c.username ?? 'Unknown'}</Text>
                     {c.username ? <Text className="text-xs text-slate-400">@{c.username}</Text> : null}
                   </View>
-                  <Text className="text-xs text-slate-400 mr-3 capitalize">{c.role}</Text>
-                  {isOwner && (
-                    <TouchableOpacity onPress={() => handleRemoveCollaborator(c)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  {canManageCollaborator(c) ? (
+                    <TouchableOpacity
+                      onPress={() => changeRole(c)}
+                      disabled={busyId === c.id}
+                      className="flex-row items-center mr-3"
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text className="text-xs text-amber-600 font-medium mr-0.5">{ROLE_LABELS[c.role] ?? c.role}</Text>
+                      <Ionicons name="chevron-down" size={12} color="#d97706" />
+                    </TouchableOpacity>
+                  ) : (
+                    <Text className="text-xs text-slate-400 mr-3">{ROLE_LABELS[c.role] ?? c.role}</Text>
+                  )}
+                  {canManageCollaborator(c) && (
+                    <TouchableOpacity onPress={() => handleRemoveCollaborator(c)} disabled={busyId === c.id} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name="close-circle-outline" size={18} color="#94a3b8" />
                     </TouchableOpacity>
                   )}
@@ -582,8 +634,20 @@ function SetSettingsModal({
               ))
             )}
 
-            {isOwner && (
+            {canManage && (
               <View className="mt-4">
+                {/* Invite role */}
+                <View className="flex-row gap-2 mb-2">
+                  {inviteRoleOptions.map(r => (
+                    <TouchableOpacity
+                      key={r}
+                      onPress={() => setInviteRole(r)}
+                      className={`px-3 py-1 rounded-full border ${inviteRole === r ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+                    >
+                      <Text className={`text-xs font-medium ${inviteRole === r ? 'text-white' : 'text-slate-600'}`}>{ROLE_LABELS[r]}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2 mb-2">
                   <Ionicons name="search" size={14} color="#94a3b8" style={{ marginRight: 6 }} />
                   <TextInput
@@ -608,11 +672,11 @@ function SetSettingsModal({
                       </View>
                       <TouchableOpacity
                         onPress={() => handleAddCollaborator(user)}
-                        disabled={isAdded}
+                        disabled={isAdded || busyId === user.id}
                         className={`rounded-full px-3 py-1 ${isAdded ? 'bg-green-100' : 'bg-amber-500'}`}
                       >
                         <Text className={`text-xs font-semibold ${isAdded ? 'text-green-700' : 'text-white'}`}>
-                          {isAdded ? 'Added' : 'Add'}
+                          {isAdded ? 'Added' : busyId === user.id ? 'Adding…' : 'Add'}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -634,6 +698,7 @@ export default function SetDetailScreen() {
   const [songs, setSongs] = useState<SetSong[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState(false);
+  const [isCoOwner, setIsCoOwner] = useState(false);
   const [isCollaborator, setIsCollaborator] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -796,8 +861,10 @@ export default function SetDetailScreen() {
     setSongs((songsRes.data ?? []) as any as SetSong[]);
 
     const isOwner = s.owner_user_id === user.id;
-    const isEditor = collabRes.data?.role === 'editor';
-    setCanEdit(isOwner || isEditor);
+    const myRole = collabRes.data?.role ?? null;
+    const coOwner = myRole === 'co-owner';
+    setCanEdit(isOwner || myRole === 'editor' || coOwner);
+    setIsCoOwner(coOwner);
     setIsCollaborator(!!collabRes.data);
 
     const collabs: Collaborator[] = ((allCollabRes.data ?? []) as any[]).map((c: any) => ({
@@ -816,51 +883,47 @@ export default function SetDetailScreen() {
     setSongs((prev) => [...prev, song]);
   }
 
-  async function handleRemoveSong(setsSongId: string) {
-    const { error } = await supabase.from('set_songs').delete().eq('id', setsSongId);
-    if (error) { Alert.alert('Error', error.message); return; }
-    setSongs((prev) => {
-      const filtered = prev.filter((s) => s.id !== setsSongId);
-      return filtered.map((s, i) => ({ ...s, position: i + 1 }));
-    });
+  async function handleRemoveSong(songId: string) {
+    const previous = songs;
+    setSongs((prev) => prev.filter((s) => s.song_id !== songId).map((s, i) => ({ ...s, position: i + 1 })));
+    const { ok, json } = await setApi(`/api/sets/${id}/songs/${songId}`, 'DELETE');
+    if (!ok) { setSongs(previous); Alert.alert('Error', json?.error ?? 'Could not remove song.'); }
   }
 
-  async function handleKeyChange(setsSongId: string, key: string | null) {
-    const { error } = await supabase
-      .from('set_songs')
-      .update({ key_note: key })
-      .eq('id', setsSongId);
-    if (error) { Alert.alert('Error', error.message); return; }
-    setSongs((prev) => prev.map((s) => s.id === setsSongId ? { ...s, key_note: key } : s));
+  async function handleKeyChange(songId: string, key: string | null) {
+    const previous = songs;
+    setSongs((prev) => prev.map((s) => s.song_id === songId ? { ...s, key_note: key } : s));
+    const { ok, json } = await setApi(`/api/sets/${id}/songs/${songId}`, 'PATCH', { key_note: key });
+    if (!ok) { setSongs(previous); Alert.alert('Error', json?.error ?? 'Could not update key.'); }
   }
 
-  async function handleLeaderToggle(setsSongId: string, newLeaderIds: string[]) {
-    const { error } = await supabase
-      .from('set_songs')
-      .update({ leader_user_ids: newLeaderIds })
-      .eq('id', setsSongId);
-    if (error) { Alert.alert('Error', error.message); return; }
-    setSongs((prev) => prev.map((s) => s.id === setsSongId ? { ...s, leader_user_ids: newLeaderIds } : s));
+  async function handleLeaderToggle(songId: string, newLeaderIds: string[]) {
+    const previous = songs;
+    setSongs((prev) => prev.map((s) => s.song_id === songId ? { ...s, leader_user_ids: newLeaderIds } : s));
+    const { ok, json } = await setApi(`/api/sets/${id}/songs/${songId}`, 'PATCH', { leader_user_ids: newLeaderIds });
+    if (!ok) { setSongs(previous); Alert.alert('Error', json?.error ?? 'Could not update leaders.'); }
   }
 
   async function handleReorder(data: SetSong[]) {
+    const previous = songs;
     const reordered = data.map((s, i) => ({ ...s, position: i + 1 }));
     setSongs(reordered);
-    await Promise.all(
-      reordered.map(s => supabase.from('set_songs').update({ position: s.position }).eq('id', s.id))
-    );
+    const { ok } = await setApi(`/api/sets/${id}/songs/reorder`, 'PATCH', {
+      order: reordered.map((s) => ({ id: s.id, position: s.position })),
+    });
+    if (!ok) { setSongs(previous); Alert.alert('Error', 'Could not reorder the set.'); }
   }
 
-  async function handleTogglePlayed(setsSongId: string, played: boolean) {
+  async function handleTogglePlayed(song: SetSong, played: boolean) {
     const previous = songs;
-    const reordered = reorderSongsForPlayed(songs, setsSongId, played)
+    const reordered = reorderSongsForPlayed(songs, song.id, played)
       .map((s, i) => ({ ...s, position: i + 1 }));
     setSongs(reordered);
-    const results = await Promise.all([
-      supabase.from('set_songs').update({ played }).eq('id', setsSongId),
-      ...reordered.map(s => supabase.from('set_songs').update({ position: s.position }).eq('id', s.id)),
+    const [playedRes, reorderRes] = await Promise.all([
+      setApi(`/api/sets/${id}/songs/${song.song_id}`, 'PATCH', { played }),
+      setApi(`/api/sets/${id}/songs/reorder`, 'PATCH', { order: reordered.map((s) => ({ id: s.id, position: s.position })) }),
     ]);
-    if (results.some(r => r.error)) {
+    if (!playedRes.ok || !reorderRes.ok) {
       setSongs(previous);
       Alert.alert('Error', 'Could not update the set.');
     }
@@ -904,8 +967,13 @@ export default function SetDetailScreen() {
 
   async function handleSharingChange(mode: 'private' | 'link' | 'public') {
     if (!set) return;
-    await supabase.from('sets').update({ link_sharing: mode }).eq('id', set.id);
+    const previous = set.link_sharing;
     setSet(prev => prev ? { ...prev, link_sharing: mode } : prev);
+    const { ok, json } = await setApi(`/api/sets/${id}`, 'PATCH', { link_sharing: mode });
+    if (!ok) {
+      setSet(prev => prev ? { ...prev, link_sharing: previous } : prev);
+      Alert.alert('Error', json?.error ?? 'Could not update sharing.');
+    }
   }
 
   function confirmDeleteSet() {
@@ -917,8 +985,8 @@ export default function SetDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.from('sets').delete().eq('id', id);
-            if (error) { Alert.alert('Error', error.message); return; }
+            const { ok, json } = await setApi(`/api/sets/${id}`, 'DELETE');
+            if (!ok) { Alert.alert('Error', json?.error ?? 'Could not delete the set.'); return; }
             router.back();
           },
         },
@@ -1005,6 +1073,7 @@ export default function SetDetailScreen() {
 
   const isOwner = set.owner_user_id === myUserId;
   const isPublicViewer = !isOwner && !isCollaborator;
+  const canManage = isOwner || isCoOwner;
   const existingIds = new Set(songs.map((s) => s.song_id));
   const canDrag = canEdit && sortBy === 'custom' && !filterQuery.trim();
 
@@ -1052,12 +1121,14 @@ export default function SetDetailScreen() {
         visible={settingsVisible}
         setId={id}
         isOwner={isOwner}
+        canManage={canManage}
         linkSharing={set.link_sharing ?? 'private'}
         collaborators={collaborators}
         onClose={() => setSettingsVisible(false)}
         onSharingChange={handleSharingChange}
-        onCollaboratorAdded={(c) => setCollaborators(prev => [...prev, c])}
+        onCollaboratorAdded={(c) => setCollaborators(prev => prev.some(x => x.id === c.id) ? prev : [...prev, c])}
         onCollaboratorRemoved={(cid) => setCollaborators(prev => prev.filter(c => c.id !== cid))}
+        onCollaboratorRoleChanged={(cid, role) => setCollaborators(prev => prev.map(c => c.id === cid ? { ...c, role } : c))}
       />
 
       <ContentContainer style={{ backgroundColor: 'white' }}>
@@ -1126,10 +1197,10 @@ export default function SetDetailScreen() {
                   drag={drag}
                   isActive={isActive}
                   {...leaderProps(item)}
-                  onRemove={() => handleRemoveSong(item.id)}
-                  onKeyChange={(key) => handleKeyChange(item.id, key)}
-                  onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
-                  onTogglePlayed={() => handleTogglePlayed(item.id, !item.played)}
+                  onRemove={() => handleRemoveSong(item.song_id)}
+                  onKeyChange={(key) => handleKeyChange(item.song_id, key)}
+                  onLeaderToggle={(newIds) => handleLeaderToggle(item.song_id, newIds)}
+                  onTogglePlayed={() => handleTogglePlayed(item, !item.played)}
                 />
               </ScaleDecorator>
             )}
@@ -1150,10 +1221,10 @@ export default function SetDetailScreen() {
                 canEdit={canEdit}
                 displayPosition={index + 1}
                 {...leaderProps(item)}
-                onRemove={() => handleRemoveSong(item.id)}
-                onKeyChange={(key) => handleKeyChange(item.id, key)}
-                onLeaderToggle={(newIds) => handleLeaderToggle(item.id, newIds)}
-                onTogglePlayed={() => handleTogglePlayed(item.id, !item.played)}
+                onRemove={() => handleRemoveSong(item.song_id)}
+                onKeyChange={(key) => handleKeyChange(item.song_id, key)}
+                onLeaderToggle={(newIds) => handleLeaderToggle(item.song_id, newIds)}
+                onTogglePlayed={() => handleTogglePlayed(item, !item.played)}
               />
             )}
           />
