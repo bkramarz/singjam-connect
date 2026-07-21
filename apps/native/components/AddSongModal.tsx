@@ -12,8 +12,10 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { formatComposers } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import SubmitMissingSong from '@/components/SubmitMissingSong';
 
 type SearchResult = {
   song_id: string;
@@ -35,6 +37,7 @@ type Props = {
 };
 
 export default function AddSongModal({ visible, userId, existingIds, canLead, onClose, onAdded }: Props) {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -181,8 +184,14 @@ export default function AddSongModal({ visible, userId, existingIds, canLead, on
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              query.length > 0 ? (
-                <Text className="text-center text-slate-400 mt-12">No songs found</Text>
+              query.trim().length > 0 && !searching ? (
+                <View className="pt-8">
+                  <Text className="text-center text-slate-400">No songs found</Text>
+                  <SubmitMissingSong
+                    defaultTitle={query.trim()}
+                    onCreated={(songId) => { onClose(); router.push(`/song/${songId}` as any); }}
+                  />
+                </View>
               ) : null
             }
           />

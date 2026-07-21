@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin as admin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { generateSlug } from "@/lib/generateSlug";
 
 const LANG_CODE_MAP: Record<string, string> = {
@@ -30,7 +31,12 @@ async function findOrCreate(
 
 export async function POST(req: Request) {
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = (await supabase.auth.getUser()).data.user ?? null;
+  if (!user) {
+    // Native app authenticates with a bearer token instead of cookies
+    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (bearer) user = (await supabaseFromBearer(bearer).auth.getUser()).data.user ?? null;
+  }
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { title, artist, spotify_url: submittedSpotifyUrl } = await req.json();

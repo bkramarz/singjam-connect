@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { formatComposers } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
+import SubmitMissingSong from '@/components/SubmitMissingSong';
 
 type SongMeta = {
   song_id: string;
@@ -636,14 +637,20 @@ export default function SongLibraryScreen() {
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              <View className="items-center pt-16">
-                <Text className="text-slate-400">
+              <View className="pt-16">
+                <Text className="text-slate-400 text-center">
                   {query.trim() ? 'No songs match your search' : 'No songs match these filters'}
                 </Text>
                 {activeFilterCount > 0 && (
-                  <TouchableOpacity onPress={() => setFilters(emptyFilters())} className="mt-3">
+                  <TouchableOpacity onPress={() => setFilters(emptyFilters())} className="mt-3 items-center">
                     <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
                   </TouchableOpacity>
+                )}
+                {query.trim().length > 0 && activeFilterCount === 0 && (
+                  <SubmitMissingSong
+                    defaultTitle={query.trim()}
+                    onCreated={(songId) => router.push(`/song/${songId}` as any)}
+                  />
                 )}
               </View>
             }
