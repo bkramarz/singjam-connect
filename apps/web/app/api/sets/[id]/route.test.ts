@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockAdminFrom } = vi.hoisted(() => ({
+const { mockGetUser, mockAdminFrom, mockBearerGetUser, mockSupabaseFromBearer } = vi.hoisted(() => ({
   mockGetUser: vi.fn(),
   mockAdminFrom: vi.fn(),
+  mockBearerGetUser: vi.fn(),
+  mockSupabaseFromBearer: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -16,7 +18,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 vi.mock("@/lib/supabase/bearer", () => ({
-  supabaseFromBearer: vi.fn(),
+  supabaseFromBearer: mockSupabaseFromBearer,
 }));
 
 import { PATCH } from "./route";
@@ -52,7 +54,16 @@ const OWNER_ID = "owner-1";
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetUser.mockResolvedValue({ data: { user: { id: OWNER_ID } } });
+  mockSupabaseFromBearer.mockReturnValue({ auth: { getUser: mockBearerGetUser } });
 });
+
+function bearerReq(setId: string, body: object) {
+  return new Request(`http://localhost/api/sets/${setId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer native-token" },
+    body: JSON.stringify(body),
+  });
+}
 
 describe("PATCH /api/sets/[id]", () => {
   it("returns 401 when not authenticated", async () => {
@@ -109,5 +120,21 @@ describe("PATCH /api/sets/[id]", () => {
       params: Promise.resolve({ id: "set-1" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("authenticates a co-owner via bearer token when there is no cookie session", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } }); // no cookie session (native app)
+    mockBearerGetUser.mockResolvedValue({ data: { user: { id: "co-1" } } });
+    const updateSpy = updateChain({ error: null });
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: null })) // not owner
+      .mockReturnValueOnce(chain({ data: { id: "collab-1" } })) // is a co-owner
+      .mockReturnValueOnce(updateSpy);
+    const res = await PATCH(bearerReq("set-1", { link_sharing: "public" }), {
+      params: Promise.resolve({ id: "set-1" }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockSupabaseFromBearer).toHaveBeenCalledWith("native-token");
+    expect(updateSpy.update).toHaveBeenCalledWith(expect.objectContaining({ link_sharing: "public" }));
   });
 });

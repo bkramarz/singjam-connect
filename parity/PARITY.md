@@ -55,12 +55,12 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Sets list (owned/collab/public) | ✅ | `(tabs)/sets.tsx`. |
 | Set detail: songs, reorder, key, leaders | ✅ | `set/[id].tsx`. |
 | Leader/support display + public-viewer gate | ✅ | Native now renders per-song Lead/Support pills (explicit leaders + participant repertoire confidence), hidden from public viewers via `isPublicViewer = !isOwner && !isCollaborator`, editor-toggleable — mirrors web `SetSongRow`. Replaced the old self-only leader star. (native has no CSV/PDF export, so those web gates don't apply.) Derivation still inline; see core-extraction backlog. |
-| Co-owner role | ❌ | Web adds a `co-owner` role: full owner powers except delete/assigning co-owners (2026-07-21, migration 148). Native needs: treat `co-owner` as editor (`set/[id].tsx:729` `role === 'editor'`); show visibility selector + collaborator management to co-owners; route visibility/rename writes through the web API (native currently writes `link_sharing` directly at `set/[id].tsx:835` — RLS is owner-only, so co-owners will be blocked). |
-| Mark-as-played | ✅ | PR #187 / #240; `reorderSongsForPlayed` in core. |
+| Co-owner role | ✅ | Native recognizes `co-owner` (full owner powers except delete + assigning co-owners). All native set mutations now route through the web API via bearer (single-source authz), so co-owners aren't blocked by owner/editor-only RLS. Owner-only: delete + granting/changing co-owner. |
+| Mark-as-played | ✅ | PR #187 / #240; `reorderSongsForPlayed` in core. Now via `PATCH /songs/[songId]` + reorder. |
 | Realtime sync | ✅ | PR #240 (narrower than web by design). |
-| Add song to set — shows songs already in set | ✅ | `existingIds` → "Added". |
+| Add song to set — shows songs already in set | ✅ | `existingIds` → "Added". Add now via `POST /songs`. |
 | Spotify export | ✅ | Bearer route. |
-| Collaborators / sharing | ⚠️ | Set-settings modal; does not yet support the `co-owner` role (see above). |
+| Collaborators / sharing | ✅ | Set-settings modal: owner + co-owners manage sharing, add/remove collaborators, and change roles (co-owner assignment is owner-only), all through the web API. Editors still can't invite from native (web allows it — minor follow-up). |
 
 ### Add-to-set (from repertoire) — `AddToSetModal`
 | Feature | Status | Notes |
