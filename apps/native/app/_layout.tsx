@@ -99,6 +99,7 @@ function RootNavigator() {
       <Stack.Screen name="profile-edit" options={{ presentation: 'modal', title: 'Edit Profile', headerTintColor: '#d97706' }} />
       <Stack.Screen name="account" options={{ presentation: 'modal', title: 'Account', headerTintColor: '#d97706' }} />
       <Stack.Screen name="notifications" options={{ title: 'Notifications', headerTintColor: '#d97706' }} />
+      <Stack.Screen name="feedback" options={{ title: 'Report a bug', headerTintColor: '#d97706' }} />
       <Stack.Screen name="profile/[id]" options={{ title: '', headerTintColor: '#d97706' }} />
       <Stack.Screen name="jam/[id]" options={{ headerTintColor: '#d97706' }} />
       <Stack.Screen name="jam/new" options={{ presentation: 'modal', title: 'New Jam', headerTintColor: '#d97706' }} />

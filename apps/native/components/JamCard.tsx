@@ -22,8 +22,15 @@ export type JamItem = {
   invite_status: string | null;
 };
 
+// Mirrors web's FormattedDate/FormattedTime (apps/web/components/FormattedTime.tsx):
+// device locale (not hardcoded en-US), and the timezone abbreviation is shown
+// only when the jam has a stored timezone.
 function fmt(iso: string, timezone: string | null, options: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat('en-US', { ...options, timeZone: timezone ?? undefined }).format(new Date(iso));
+  const { timeZoneName, ...rest } = options;
+  return new Date(iso).toLocaleString(undefined, {
+    ...rest,
+    ...(timezone ? { timeZone: timezone, ...(timeZoneName ? { timeZoneName } : {}) } : {}),
+  });
 }
 
 function RsvpBadge({ status, waitlistPosition }: { status: string; waitlistPosition: number | null }) {

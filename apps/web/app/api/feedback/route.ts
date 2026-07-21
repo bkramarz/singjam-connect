@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseFromBearer } from "@/lib/supabase/bearer";
 
 export async function POST(req: Request) {
   const { description, steps, page } = await req.json();
@@ -8,12 +9,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Description is required" }, { status: 400 });
   }
 
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const cookieClient = await supabaseServer();
+  let user = (await cookieClient.auth.getUser()).data.user ?? null;
+  let db = cookieClient;
+  if (!user) {
+    // Native app authenticates with a bearer token instead of cookies
+    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (bearer) {
+      const bearerClient = supabaseFromBearer(bearer);
+      user = (await bearerClient.auth.getUser()).data.user ?? null;
+      if (user) db = bearerClient;
+    }
+  }
 
   let userInfo = "Not logged in";
   if (user) {
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from("profiles")
       .select("display_name, username")
       .eq("id", user.id)
