@@ -96,6 +96,11 @@ export default function ProfileScreen() {
       const response = await fetch(asset.uri);
       const blob = await response.blob();
 
+      if (blob.size > 5 * 1024 * 1024) {
+        Alert.alert('Avatar too large', 'Avatar must be under 5 MB.');
+        return;
+      }
+
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(path, blob, { contentType: asset.mimeType ?? 'image/jpeg', upsert: true });
@@ -280,6 +285,12 @@ export default function ProfileScreen() {
         className="mx-4 mt-2 items-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5"
       >
         <Text className="text-sm text-zinc-600">Account settings</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => router.push('/feedback' as any)}
+        className="mx-4 mt-2 items-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5"
+      >
+        <Text className="text-sm text-zinc-600">Report a bug</Text>
       </TouchableOpacity>
       </ScrollView>
       </ContentContainer>
