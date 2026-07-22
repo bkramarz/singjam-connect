@@ -5,6 +5,7 @@ import {
   RESERVED_USERNAMES,
   normalizeUsername,
   isValidUsername,
+  suggestUsername,
 } from "./username";
 
 describe("normalizeUsername", () => {
@@ -54,5 +55,21 @@ describe("isValidUsername", () => {
   it("rejects a value that normalizes below the minimum length", () => {
     // "a.b" strips to "ab" (2 chars)
     expect(isValidUsername("a.b")).toBe(false);
+  });
+});
+
+describe("suggestUsername", () => {
+  it("derives a normalized username from the email local part", () => {
+    expect(suggestUsername("JamFan@example.com")).toBe("jamfan");
+    expect(suggestUsername("jam.fan.99@example.com")).toBe("jamfan99");
+  });
+
+  it("truncates to the maximum length", () => {
+    expect(suggestUsername("a".repeat(30) + "@example.com")).toBe("a".repeat(USERNAME_MAX_LENGTH));
+  });
+
+  it("returns empty string when the local part can't form a valid username", () => {
+    expect(suggestUsername("a.b@example.com")).toBe(""); // normalizes to "ab" (too short)
+    expect(suggestUsername("admin@example.com")).toBe(""); // reserved
   });
 });

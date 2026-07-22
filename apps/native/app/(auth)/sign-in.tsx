@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
@@ -182,9 +182,22 @@ export default function SignInScreen() {
       className="flex-1 bg-white"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View className="flex-1 justify-center px-6">
-        <Text className="text-3xl font-bold text-slate-900 mb-8">
+      <View className="flex-1 px-6 pt-6">
+        <View className="items-center mb-8">
+          <Image
+            source={require('../../assets/icon.png')}
+            className="w-14 h-14 rounded-2xl"
+          />
+          <Text className="text-xl font-bold text-slate-900 mt-2">SingJam</Text>
+        </View>
+        <Text className="text-3xl font-bold text-slate-900 mb-2">
           {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+        </Text>
+        <Text className="text-slate-500 mb-8 leading-5">
+          <Text className="font-semibold text-slate-700">Discover new music</Text> and{' '}
+          <Text className="font-semibold text-slate-700">new friends</Text>. Totally{' '}
+          <Text className="font-semibold text-slate-700">free</Text> — we'll only email you about{' '}
+          <Text className="font-semibold text-slate-700">cool music stuff</Text> 😎 🎸🥁
         </Text>
 
         {googleWebClientId && (
