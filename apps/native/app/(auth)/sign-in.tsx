@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,32 @@ async function completeAuth() {
     },
     body: JSON.stringify({}),
   }).catch(() => {});
+}
+
+// Auth-screen top bar, mirroring the main app's BrandHeader (slate-900 bar,
+// amber music-note tile + wordmark) with a back chevron.
+function AuthHeader() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  return (
+    <View className="bg-slate-900" style={{ paddingTop: insets.top }}>
+      <View className="px-4 py-3 items-center justify-center">
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <View className="h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
+            <Ionicons name="musical-notes" size={16} color="white" />
+          </View>
+          <Text className="text-sm font-semibold text-white">SingJam</Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="absolute left-4 top-0 bottom-0 justify-center"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-back" size={26} color="#cbd5e1" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 export default function SignInScreen() {
@@ -124,8 +151,10 @@ export default function SignInScreen() {
 
   if (mode === 'reset') {
     return (
+      <View className="flex-1 bg-white">
+      <AuthHeader />
       <KeyboardAvoidingView
-        className="flex-1 bg-white"
+        className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View className="flex-1 justify-center px-6">
@@ -174,22 +203,18 @@ export default function SignInScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      </View>
     );
   }
 
   return (
+    <View className="flex-1 bg-white">
+    <AuthHeader />
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View className="flex-1 px-6 pt-6">
-        <View className="items-center mb-8">
-          <Image
-            source={require('../../assets/icon.png')}
-            className="w-14 h-14 rounded-2xl"
-          />
-          <Text className="text-xl font-bold text-slate-900 mt-2">SingJam</Text>
-        </View>
+      <View className="flex-1 justify-center px-6">
         <Text className="text-3xl font-bold text-slate-900 mb-2">
           {mode === 'signin' ? 'Welcome back' : 'Create your account'}
         </Text>
@@ -286,5 +311,6 @@ export default function SignInScreen() {
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+    </View>
   );
 }
