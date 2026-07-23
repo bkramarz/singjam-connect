@@ -81,14 +81,23 @@ function LocationModal({
   async function fetchSuggestions(q: string) {
     setSearching(true);
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(q)}&key=${PLACES_KEY}&types=(cities)&language=en`;
-      const res = await fetch(url);
+      const res = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_KEY },
+        body: JSON.stringify({
+          input: q,
+          includedPrimaryTypes: ['locality', 'sublocality'],
+          languageCode: 'en',
+        }),
+      });
       const json = await res.json();
       setSuggestions(
-        (json.predictions ?? []).map((p: any) => ({
-          description: p.description,
-          placeId: p.place_id,
-        }))
+        (json.suggestions ?? [])
+          .filter((s: any) => s.placePrediction)
+          .map((s: any) => ({
+            description: s.placePrediction.text.text,
+            placeId: s.placePrediction.placeId,
+          }))
       );
     } catch {
       setSuggestions([]);

@@ -105,11 +105,7 @@ export default function AuthPanel({
       });
       const { jamId } = await setupRes.json().catch(() => ({}));
 
-      fetch("/api/email/welcome", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      }).catch(() => {});
+      // The welcome email is sent server-side by /api/auth/complete.
 
       const dest = jamId ? `/jam/${jamId}` : next ?? "/repertoire";
       router.push(`/account?next=${encodeURIComponent(dest)}`);

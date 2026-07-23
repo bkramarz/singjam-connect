@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { syncContact } from "@/lib/activecampaign";
+import { sendWelcomeEmail } from "@/lib/resend";
 
 // Called after immediate-session signup (email confirmation disabled) to
 // create the profile and link any invite token, mirroring the callback route.
@@ -45,7 +46,10 @@ export async function POST(req: Request) {
     if (!username) username = `singer${Date.now()}`;
     await admin.from("profiles").upsert({ id: user.id, username });
 
-    if (user.email) syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
+    if (user.email) {
+      syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
+      sendWelcomeEmail(user.email, username).catch((err) => console.error("[Resend] welcome email failed for", user.email, err));
+    }
   }
 
   // Link invite and resolve jam ID
