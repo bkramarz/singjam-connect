@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockAdminGetUser, mockSyncContact, mockSendWelcomeEmail, tables, resetTables, chain } = vi.hoisted(() => {
+const { mockGetUser, mockAdminGetUser, mockSyncContact, mockEnqueueWelcomeEmail, tables, resetTables, chain } = vi.hoisted(() => {
   const tables: Record<string, any[]> = {};
 
   function chain(result: any) {
@@ -16,7 +16,7 @@ const { mockGetUser, mockAdminGetUser, mockSyncContact, mockSendWelcomeEmail, ta
     mockGetUser: vi.fn(),
     mockAdminGetUser: vi.fn(),
     mockSyncContact: vi.fn().mockResolvedValue(undefined),
-    mockSendWelcomeEmail: vi.fn().mockResolvedValue({ error: null }),
+    mockEnqueueWelcomeEmail: vi.fn().mockResolvedValue(undefined),
     tables,
     resetTables: () => {
       Object.keys(tables).forEach((k) => delete tables[k]);
@@ -46,7 +46,9 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 vi.mock("@/lib/activecampaign", () => ({ syncContact: mockSyncContact }));
 
-vi.mock("@/lib/resend", () => ({ sendWelcomeEmail: mockSendWelcomeEmail }));
+vi.mock("@/lib/resend", () => ({ resend: {} }));
+
+vi.mock("@/lib/emailOutbox", () => ({ enqueueWelcomeEmail: mockEnqueueWelcomeEmail }));
 
 import { POST } from "./route";
 
@@ -81,7 +83,11 @@ describe("POST /api/auth/complete", () => {
     const res = await POST(req({}));
     expect(res.status).toBe(200);
     expect(mockSyncContact).toHaveBeenCalledWith("singer@example.com");
-    expect(mockSendWelcomeEmail).toHaveBeenCalledWith("singer@example.com", expect.any(String));
+    expect(mockEnqueueWelcomeEmail).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { userId: "user-1", email: "singer@example.com", username: expect.any(String) },
+    );
   });
 
   it("does not regenerate a username, re-sync, or re-send the welcome email when the profile already has one", async () => {
@@ -89,7 +95,7 @@ describe("POST /api/auth/complete", () => {
     const res = await POST(req({}));
     expect(res.status).toBe(200);
     expect(mockSyncContact).not.toHaveBeenCalled();
-    expect(mockSendWelcomeEmail).not.toHaveBeenCalled();
+    expect(mockEnqueueWelcomeEmail).not.toHaveBeenCalled();
   });
 
   it("links an invite token and returns its jam ID regardless of profile state", async () => {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { sendWelcomeEmail } from "@/lib/resend";
+import { resend } from "@/lib/resend";
+import { enqueueWelcomeEmail } from "@/lib/emailOutbox";
 import { syncContact } from "@/lib/activecampaign";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -86,7 +87,7 @@ export async function GET(request: Request) {
 
         if (user.email) {
           syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
-          sendWelcomeEmail(user.email, username).catch(() => {});
+          await enqueueWelcomeEmail(supabaseAdmin(), resend, { userId: user.id, email: user.email, username });
         }
 
         // Link non-member invite to this new user, and resolve the jam so we
@@ -110,7 +111,7 @@ export async function GET(request: Request) {
         destination = `/account?next=${encodeURIComponent(postSetup)}`;
       } else {
         if (isFirstLogin && user.email) {
-          sendWelcomeEmail(user.email, profile.username ?? user.email).catch(() => {});
+          await enqueueWelcomeEmail(supabaseAdmin(), resend, { userId: user.id, email: user.email, username: profile?.username ?? undefined });
         }
 
         if (inviteToken) {

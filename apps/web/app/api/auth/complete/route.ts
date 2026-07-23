@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { syncContact } from "@/lib/activecampaign";
-import { sendWelcomeEmail } from "@/lib/resend";
+import { resend } from "@/lib/resend";
+import { enqueueWelcomeEmail } from "@/lib/emailOutbox";
 
 // Called after immediate-session signup (email confirmation disabled) to
 // create the profile and link any invite token, mirroring the callback route.
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
 
     if (user.email) {
       syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
-      sendWelcomeEmail(user.email, username).catch((err) => console.error("[Resend] welcome email failed for", user.email, err));
+      await enqueueWelcomeEmail(admin, resend, { userId: user.id, email: user.email, username });
     }
   }
 
