@@ -1,5 +1,6 @@
 export * from './utils/fetchProfileSongs';
 export * from './utils/fetchUserSongs';
+export * from './utils/deriveNeighborhood';
 export * from './utils/formatComposers';
 export * from './utils/formatJamTime';
 export * from './utils/generateSlug';

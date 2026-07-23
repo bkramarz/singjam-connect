@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { deriveNeighborhood } from "@singjam/core";
 
 type Suggestion = {
   placePrediction: {
@@ -17,18 +18,6 @@ export type LocationValue = {
   neighborhood: string;
   confirmed?: boolean;
 };
-
-function extractNeighborhood(secondaryText: string | undefined, mainText: string): string {
-  if (!secondaryText) return mainText;
-  // Secondary text is typically "Street, City, State, Country"
-  // We want just "City, State" — drop street-level parts and country
-  const parts = secondaryText.split(", ");
-  if (parts.length >= 3) {
-    // Drop the last part (country) and take the last 2 remaining (city, state)
-    return parts.slice(-3, -1).join(", ");
-  }
-  return parts.slice(0, 2).join(", ");
-}
 
 export default function LocationAutocomplete({
   value,
@@ -96,9 +85,7 @@ export default function LocationAutocomplete({
     const fullAddress = secondaryText
       ? `${mainText.text}, ${secondaryText.text}`
       : mainText.text;
-    const neighborhood = citiesOnly
-      ? (secondaryText ? `${mainText.text}, ${secondaryText.text.split(", ")[0]}` : mainText.text)
-      : extractNeighborhood(secondaryText?.text, mainText.text);
+    const neighborhood = deriveNeighborhood(mainText.text, secondaryText?.text, citiesOnly);
 
     setInputValue(fullAddress);
     onChange({ fullAddress, neighborhood, confirmed: true });
