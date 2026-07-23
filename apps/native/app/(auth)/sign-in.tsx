@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,32 @@ async function completeAuth() {
     },
     body: JSON.stringify({}),
   }).catch(() => {});
+}
+
+// Auth-screen top bar, mirroring the main app's BrandHeader (slate-900 bar,
+// amber music-note tile + wordmark) with a back chevron.
+function AuthHeader() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  return (
+    <View className="bg-slate-900" style={{ paddingTop: insets.top }}>
+      <View className="px-4 py-3 items-center justify-center">
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <View className="h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
+            <Ionicons name="musical-notes" size={16} color="white" />
+          </View>
+          <Text className="text-sm font-semibold text-white">SingJam</Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="absolute left-4 top-0 bottom-0 justify-center"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-back" size={26} color="#cbd5e1" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 export default function SignInScreen() {
@@ -71,6 +98,7 @@ export default function SignInScreen() {
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: 'singjam://' } });
     if (error) setError(error.message);
+    else if (mode === 'signup') completeAuth();
     setLoading(false);
   }
 
@@ -124,8 +152,10 @@ export default function SignInScreen() {
 
   if (mode === 'reset') {
     return (
+      <View className="flex-1 bg-white">
+      <AuthHeader />
       <KeyboardAvoidingView
-        className="flex-1 bg-white"
+        className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View className="flex-1 justify-center px-6">
@@ -174,17 +204,26 @@ export default function SignInScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      </View>
     );
   }
 
   return (
+    <View className="flex-1 bg-white">
+    <AuthHeader />
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-6">
-        <Text className="text-3xl font-bold text-slate-900 mb-8">
+        <Text className="text-3xl font-bold text-slate-900 mb-2">
           {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+        </Text>
+        <Text className="text-slate-500 mb-8 leading-5">
+          <Text className="font-semibold text-slate-700">Discover new music</Text> and{' '}
+          <Text className="font-semibold text-slate-700">new friends</Text>. Totally{' '}
+          <Text className="font-semibold text-slate-700">free</Text> — we'll only email you about{' '}
+          <Text className="font-semibold text-slate-700">cool music stuff</Text> 😎 🎸🥁
         </Text>
 
         {googleWebClientId && (
@@ -273,5 +312,6 @@ export default function SignInScreen() {
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+    </View>
   );
 }

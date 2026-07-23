@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import LocationAutocomplete from "./LocationAutocomplete";
-import { USERNAME_REGEX, RESERVED_USERNAMES, normalizeUsername } from "@singjam/core";
+import { USERNAME_REGEX, RESERVED_USERNAMES, normalizeUsername, suggestUsername } from "@singjam/core";
 
 const SEEDED_INSTRUMENTS = [
   "Guitar", "Electric Bass", "Upright Bass", "Piano/Keys", "Drums", "Percussion", "Violin/Fiddle", "Viola", "Cello",
@@ -148,12 +148,6 @@ function GenreSearch({
       )}
     </div>
   );
-}
-
-function suggestUsername(email: string): string {
-  const prefix = email.split("@")[0] ?? "";
-  const clean = normalizeUsername(prefix).slice(0, 20);
-  return USERNAME_REGEX.test(clean) && !RESERVED_USERNAMES.has(clean) ? clean : "";
 }
 
 export default function AccountPanel() {

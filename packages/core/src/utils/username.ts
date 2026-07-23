@@ -19,3 +19,10 @@ export function isValidUsername(raw: string): boolean {
   const normalized = normalizeUsername(raw);
   return USERNAME_REGEX.test(normalized) && !RESERVED_USERNAMES.has(normalized);
 }
+
+// Suggest a username from an email's local part, or "" if it can't produce a valid one.
+export function suggestUsername(email: string): string {
+  const prefix = email.split("@")[0] ?? "";
+  const clean = normalizeUsername(prefix).slice(0, USERNAME_MAX_LENGTH);
+  return isValidUsername(clean) ? clean : "";
+}

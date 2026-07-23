@@ -85,6 +85,20 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Match list + search | ✅ | `match_jammers` / `search_users` RPCs. |
 | Invite to jam | ✅ | |
 
+### Sign up / Account creation (`apps/native/app/(auth)` ↔ web `/auth` + `/account` setup)
+| Feature | Status | Notes |
+|---|---|---|
+| Welcome screen | ✅ | Native-only entry (logo, tagline, Get started / Sign in / Continue as Guest). Web opens straight to the form — intentional (app launch vs web page). |
+| Email/password + confirm, Google, Apple, forgot-password | ✅ | Aligned. |
+| Signup value-prop subcopy | ✅ | Added 2026-07-21 — native now shows web's "Discover new music…" copy in signin+signup. |
+| Google button mark | ⚠️ | Native uses a monochrome Ionicon `logo-google`; web uses the multicolour Google "G". Minor cosmetic. |
+| Post-signup profile setup | ✅ | Web `/account` (`AccountPanel`) ↔ native `/setup` (`ProfileForm`). |
+| Profile photo during setup | ✅ | Added 2026-07-21 — native `ProfileForm` now has optional avatar upload (camera/library, 5 MB cap), matching web's setup panel. |
+| Username auto-suggest from email | ✅ | Added 2026-07-21 — `suggestUsername` extracted to `packages/core/username`, used by both. |
+| Username uniqueness check | ✅ | Native switched `.eq`→`.ilike` (case-insensitive) 2026-07-21 to match web and prevent case-variant collisions. |
+| Email change / delete / sign out in setup | 🚫 | Web bundles these into the same panel; native keeps them in the profile tab / account modal — intentional split. |
+| Instruments / genres pickers | ✅ | Rebuilt inline 2026-07-21 to match web: "You play"/"Your genres" cards, featured chips + inline search, `genres_by_usage` featured ordering (falls back to full list). Existing-instrument level uses an iOS ActionSheet (web uses a `<select>`); add-step uses inline level buttons like web. Replaced the old full-screen modal pickers. |
+
 ### Profile / Account
 | Feature | Status | Notes |
 |---|---|---|

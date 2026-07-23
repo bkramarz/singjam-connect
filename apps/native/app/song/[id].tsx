@@ -310,12 +310,14 @@ export default function SongDetailScreen() {
   async function handleAddToRepertoire() {
     if (!song) return;
     if (!myUserId) { router.push('/(auth)/sign-in' as any); return; }
+    const songId = song.id;
+    const uid = myUserId;
     const options = ['Lead', 'Support', 'Learn', 'Cancel'];
     const values = ['lead', 'support', 'learn'];
 
     function upsert(confidence: string) {
       supabase.from('user_songs')
-        .upsert({ user_id: myUserId, song_id: song.id, confidence }, { onConflict: 'user_id,song_id' })
+        .upsert({ user_id: uid, song_id: songId, confidence }, { onConflict: 'user_id,song_id' })
         .then(({ error }) => {
           if (error) Alert.alert('Error', error.message);
           else setMyConfidence(confidence);
@@ -339,13 +341,16 @@ export default function SongDetailScreen() {
 
   async function handleChangeConfidence() {
     if (!myUserId || !song) return;
+    const songId = song.id;
+    const songTitle = song.title;
+    const uid = myUserId;
     const options = ['Lead', 'Support', 'Learn', 'Remove from repertoire', 'Cancel'];
     const values = ['lead', 'support', 'learn'];
 
     function update(confidence: string) {
       supabase.from('user_songs')
         .update({ confidence })
-        .eq('user_id', myUserId).eq('song_id', song.id)
+        .eq('user_id', uid).eq('song_id', songId)
         .then(({ error }) => {
           if (error) Alert.alert('Error', error.message);
           else setMyConfidence(confidence);
@@ -353,11 +358,11 @@ export default function SongDetailScreen() {
     }
 
     function remove() {
-      Alert.alert('Remove from repertoire', `Remove "${song.title}" from your repertoire?`, [
+      Alert.alert('Remove from repertoire', `Remove "${songTitle}" from your repertoire?`, [
         {
           text: 'Remove', style: 'destructive', onPress: () => {
             supabase.from('user_songs')
-              .delete().eq('user_id', myUserId!).eq('song_id', song.id)
+              .delete().eq('user_id', uid).eq('song_id', songId)
               .then(({ error }) => {
                 if (error) Alert.alert('Error', error.message);
                 else setMyConfidence(null);

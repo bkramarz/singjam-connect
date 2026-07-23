@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { resend, FROM_ADDRESS } from "@/lib/resend";
-import { welcomeEmailHtml } from "@/emails/welcome";
+import { sendWelcomeEmail } from "@/lib/resend";
 import { syncContact } from "@/lib/activecampaign";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -87,12 +86,7 @@ export async function GET(request: Request) {
 
         if (user.email) {
           syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
-          resend.emails.send({
-            from: FROM_ADDRESS,
-            to: user.email,
-            subject: "Welcome to SingJam",
-            html: welcomeEmailHtml({ username }),
-          }).catch(() => {});
+          sendWelcomeEmail(user.email, username).catch(() => {});
         }
 
         // Link non-member invite to this new user, and resolve the jam so we
@@ -116,12 +110,7 @@ export async function GET(request: Request) {
         destination = `/account?next=${encodeURIComponent(postSetup)}`;
       } else {
         if (isFirstLogin && user.email) {
-          resend.emails.send({
-            from: FROM_ADDRESS,
-            to: user.email,
-            subject: "Welcome to SingJam",
-            html: welcomeEmailHtml({ username: profile.username ?? user.email }),
-          }).catch(() => {});
+          sendWelcomeEmail(user.email, profile.username ?? user.email).catch(() => {});
         }
 
         if (inviteToken) {
