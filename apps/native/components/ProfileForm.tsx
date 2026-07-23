@@ -9,14 +9,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import {
   USERNAME_REGEX, USERNAME_MIN_LENGTH, RESERVED_USERNAMES, normalizeUsername, suggestUsername,
+  deriveNeighborhood,
 } from '@singjam/core';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
+// React Native's Blob cannot be built from an ArrayBuffer, so `fetch(uri).blob()`
+// throws on file:// URIs. Decode the picker's base64 into bytes and upload those.
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
-type PlaceSuggestion = { description: string; placeId: string };
+type PlaceSuggestion = { label: string; value: string; placeId: string };
 
 type Props = {
   title: string;
@@ -94,10 +104,16 @@ function LocationModal({
       setSuggestions(
         (json.suggestions ?? [])
           .filter((s: any) => s.placePrediction)
-          .map((s: any) => ({
-            description: s.placePrediction.text.text,
-            placeId: s.placePrediction.placeId,
-          }))
+          .map((s: any) => {
+            const sf = s.placePrediction.structuredFormat;
+            const mainText = sf?.mainText?.text ?? s.placePrediction.text.text;
+            const secondaryText = sf?.secondaryText?.text;
+            return {
+              label: secondaryText ? `${mainText}, ${secondaryText}` : mainText,
+              value: deriveNeighborhood(mainText, secondaryText, true),
+              placeId: s.placePrediction.placeId,
+            };
+          })
       );
     } catch {
       setSuggestions([]);
@@ -148,10 +164,10 @@ function LocationModal({
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
-                onPress={() => { onSelect(item.description); onClose(); }}
+                onPress={() => { onSelect(item.value); onClose(); }}
                 className="px-4 py-3 border-b border-slate-100"
               >
-                <Text className="text-slate-900">📍 {item.description}</Text>
+                <Text className="text-slate-900">📍 {item.label}</Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
@@ -169,8 +185,8 @@ function LocationModal({
 }
 
 // ── Inline instrument search (featured chips + search + results) ─────────────
-// Mirrors web AccountPanel's InstrumentSearch. Selecting hands the name up so
-// the parent can prompt for a level (matching web's two-step add).
+// Instrument selection stays inline; picking one hands the name up so the
+// parent can prompt for a level in a modal.
 
 function InstrumentSearch({
   added,
@@ -266,9 +282,9 @@ function GenreSearch({
               <TouchableOpacity
                 key={g}
                 onPress={() => onToggle(g)}
-                className={`rounded-xl border px-3 py-1.5 ${isSelected ? 'bg-amber-50 border-amber-200' : 'border-slate-200'}`}
+                className={`rounded-xl border px-3 py-1.5 ${isSelected ? 'bg-slate-900 border-slate-900' : 'border-slate-200'}`}
               >
-                <Text className={`text-sm ${isSelected ? 'text-amber-800' : 'text-slate-700'}`}>
+                <Text className={`text-sm ${isSelected ? 'text-white' : 'text-slate-700'}`}>
                   {isSelected ? `✓ ${g}` : `+ ${g}`}
                 </Text>
               </TouchableOpacity>
@@ -397,19 +413,23 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const ext = asset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-      const path = `${user.id}.${ext}`;
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
+      if (!asset.base64) {
+        Alert.alert('Upload failed', 'Could not read the selected photo.');
+        return;
+      }
 
-      if (blob.size > 5 * 1024 * 1024) {
+      if ((asset.fileSize ?? asset.base64.length * 0.75) > 5 * 1024 * 1024) {
         Alert.alert('Photo too large', 'Profile photo must be under 5 MB.');
         return;
       }
 
+      const ext = asset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const path = `${user.id}.${ext}`;
+      const bytes = base64ToBytes(asset.base64);
+
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(path, blob, { contentType: asset.mimeType ?? 'image/jpeg', upsert: true });
+        .upload(path, bytes, { contentType: asset.mimeType ?? 'image/jpeg', upsert: true });
       if (uploadError) { Alert.alert('Upload failed', uploadError.message); return; }
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
@@ -432,6 +452,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) await uploadAvatar(result.assets[0]);
   }
@@ -446,6 +467,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) await uploadAvatar(result.assets[0]);
   }
@@ -461,6 +483,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
   function toggleSinging(voice: string) {
     setSinging(prev => {
       const next = new Set(prev);
+      next.delete('none');
       if (next.has(voice)) next.delete(voice);
       else next.add(voice);
       return next;
@@ -477,22 +500,6 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       delete next[name];
       return next;
     });
-  }
-
-  function changeInstrumentLevel(name: string, level: InstrumentLevel) {
-    setInstruments(prev => ({ ...prev, [name]: level }));
-  }
-
-  // Web changes an added instrument's level via a <select>; on iOS we use an
-  // ActionSheet with the four levels.
-  function promptInstrumentLevel(name: string) {
-    Alert.alert(name, 'Set your skill level', [
-      ...INSTRUMENT_LEVELS.map(level => ({
-        text: level,
-        onPress: () => changeInstrumentLevel(name, level),
-      })),
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
   }
 
   function toggleFavoriteGenre(genre: string) {
@@ -582,6 +589,37 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
         onSelect={setNeighborhood}
       />
 
+      <Modal
+        visible={pendingInstrument !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPendingInstrument(null)}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/40 justify-end"
+          activeOpacity={1}
+          onPress={() => setPendingInstrument(null)}
+        >
+          <TouchableOpacity activeOpacity={1} className="bg-white rounded-t-2xl px-4 pt-4 pb-8">
+            <Text className="text-base font-semibold text-slate-900 text-center mb-4">
+              {pendingInstrument}
+            </Text>
+            {INSTRUMENT_LEVELS.map(level => (
+              <TouchableOpacity
+                key={level}
+                onPress={() => {
+                  if (pendingInstrument) addInstrument(pendingInstrument, level);
+                  setPendingInstrument(null);
+                }}
+                className="border border-slate-200 rounded-xl px-4 py-3.5 mb-2"
+              >
+                <Text className="font-medium text-slate-900 text-center">{level}</Text>
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-6 pt-16 pb-10">
@@ -666,7 +704,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
 
             {/* Location */}
             <View className="mb-4">
-              <Text className="text-sm font-medium text-slate-700 mb-1">Location</Text>
+              <Text className="text-sm font-medium text-slate-700 mb-1">City</Text>
               <TouchableOpacity
                 onPress={() => setLocationModalVisible(true)}
                 className="border border-slate-200 rounded-xl px-4 py-3 flex-row items-center"
@@ -697,7 +735,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                       key={voice}
                       onPress={() => toggleSinging(voice)}
                       className={`flex-1 rounded-xl py-3 items-center border ${i === 0 ? 'mr-2' : 'ml-2'} ${
-                        active ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'
+                        active ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'
                       }`}
                     >
                       <Text className={`font-medium text-sm ${active ? 'text-white' : 'text-slate-600'}`}>
@@ -708,12 +746,12 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                 })}
               </View>
               <TouchableOpacity
-                onPress={() => setSinging(new Set())}
+                onPress={() => setSinging(prev => (prev.has('none') ? new Set() : new Set(['none'])))}
                 className={`rounded-xl py-3 items-center border ${
-                  singing.size === 0 ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-200'
+                  singing.has('none') ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'
                 }`}
               >
-                <Text className={`font-medium text-sm ${singing.size === 0 ? 'text-slate-700' : 'text-slate-400'}`}>
+                <Text className={`font-medium text-sm ${singing.has('none') ? 'text-white' : 'text-slate-600'}`}>
                   I don't sing
                 </Text>
               </TouchableOpacity>
@@ -737,7 +775,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                       .map(([name, level]) => (
                         <View key={name} className="flex-row items-center rounded-full border border-slate-200 bg-slate-100 pl-3 pr-1 py-1">
                           <TouchableOpacity
-                            onPress={() => promptInstrumentLevel(name)}
+                            onPress={() => setPendingInstrument(name)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             className="flex-row items-center"
                           >
@@ -758,40 +796,16 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                 </View>
               )}
 
-              {/* Pending level pick (mirrors web's two-step add) */}
-              {pendingInstrument && (
-                <View className="flex-row flex-wrap items-center gap-2 mb-3">
-                  <Text className="text-sm text-slate-500">{pendingInstrument} —</Text>
-                  {INSTRUMENT_LEVELS.map(l => (
-                    <TouchableOpacity
-                      key={l}
-                      onPress={() => { addInstrument(pendingInstrument, l); setPendingInstrument(null); }}
-                      className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5"
-                    >
-                      <Text className="text-sm text-amber-700">{l}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity
-                    onPress={() => setPendingInstrument(null)}
-                    className="rounded-xl border border-slate-200 px-3 py-1.5"
-                  >
-                    <Text className="text-sm text-slate-500">✕</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
               {/* Add an instrument */}
-              {!pendingInstrument && (
-                <View className="rounded-xl border border-dashed border-slate-300 p-3">
-                  <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Add an instrument</Text>
-                  <InstrumentSearch added={instruments} onSelect={setPendingInstrument} />
-                </View>
-              )}
+              <View className="rounded-xl border border-dashed border-slate-300 p-3">
+                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Add an instrument</Text>
+                <InstrumentSearch added={instruments} onSelect={setPendingInstrument} />
+              </View>
             </View>
 
-            {/* Favourite genres */}
+            {/* Favorite genres */}
             <View className="mb-8">
-              <Text className="text-sm font-medium text-slate-700 mb-2">Favourite Genres</Text>
+              <Text className="text-sm font-medium text-slate-700 mb-2">Favorite genres</Text>
 
               {favoriteGenres.length > 0 && (
                 <View className="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3">
@@ -827,7 +841,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
             <TouchableOpacity
               onPress={handleSave}
               disabled={saving}
-              className="bg-amber-500 rounded-xl py-4 items-center"
+              className="bg-slate-900 rounded-xl py-4 items-center"
             >
               {saving ? (
                 <ActivityIndicator color="#fff" />
