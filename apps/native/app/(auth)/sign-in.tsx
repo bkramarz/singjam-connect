@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -64,6 +64,8 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -162,7 +164,12 @@ export default function SignInScreen() {
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View className="flex-1 justify-center px-6">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <Text className="text-3xl font-bold text-slate-900 mb-2">Reset your password</Text>
           <Text className="text-slate-500 mb-8">
             Enter your email and we'll send you a reset link.
@@ -188,6 +195,8 @@ export default function SignInScreen() {
                 value={email}
                 onChangeText={setEmail}
                 autoFocus
+                returnKeyType="go"
+                onSubmitEditing={handleSubmit}
               />
 
               {error && <Text className="text-red-600 text-sm mb-3">{error}</Text>}
@@ -209,7 +218,7 @@ export default function SignInScreen() {
           <TouchableOpacity onPress={() => switchMode('signin')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-center text-amber-600 text-sm">Back to sign in</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
       </View>
     );
@@ -222,7 +231,12 @@ export default function SignInScreen() {
       className="flex-1"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View className="flex-1 justify-center px-6">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <Text className="text-3xl font-bold text-slate-900 mb-2">
           {mode === 'signin' ? 'Sign in to SingJam' : 'Create your SingJam account'}
         </Text>
@@ -274,6 +288,9 @@ export default function SignInScreen() {
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
 
         <View className="flex-row items-center justify-between mb-1.5">
@@ -288,24 +305,31 @@ export default function SignInScreen() {
           )}
         </View>
         <TextInput
+          ref={passwordRef}
           className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
           placeholder="••••••••"
           placeholderTextColor="#94a3b8"
           secureTextEntry
           value={password}
           onChangeText={setPassword}
+          returnKeyType={mode === 'signup' ? 'next' : 'go'}
+          submitBehavior={mode === 'signup' ? 'submit' : 'blurAndSubmit'}
+          onSubmitEditing={() => (mode === 'signup' ? confirmRef.current?.focus() : handleSubmit())}
         />
 
         {mode === 'signup' && (
           <>
             <Text className="text-sm font-medium text-slate-700 mb-1.5">Confirm password</Text>
             <TextInput
+              ref={confirmRef}
               className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
               placeholder="••••••••"
               placeholderTextColor="#94a3b8"
               secureTextEntry
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
             />
           </>
         )}
@@ -338,7 +362,7 @@ export default function SignInScreen() {
             )}
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
     </View>
   );
