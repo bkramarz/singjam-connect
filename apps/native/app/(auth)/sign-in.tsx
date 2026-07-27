@@ -78,8 +78,12 @@ export default function SignInScreen() {
     if (mode === 'reset') {
       if (!email.trim()) { setError('Enter your email address.'); return; }
       setLoading(true);
+      // Points at the web reset flow rather than a singjam:// route: the recovery
+      // template builds the link from RedirectTo, and a custom-scheme link dead-ends
+      // when the app isn't installed or the mail client won't linkify it. Swapping
+      // this for a universal link later opens the app in place, same URL.
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'singjam://reset-password',
+        redirectTo: `${process.env.EXPO_PUBLIC_WEB_URL}/auth/confirm`,
       });
       setLoading(false);
       if (error) { setError(error.message); return; }
