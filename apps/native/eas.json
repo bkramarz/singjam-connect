@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628"
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628",
+        "EXPO_PUBLIC_WEB_URL": "https://singjam.org"
       }
     },
     "simulator": {
@@ -17,19 +18,22 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628"
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628",
+        "EXPO_PUBLIC_WEB_URL": "https://singjam.org"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628"
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628",
+        "EXPO_PUBLIC_WEB_URL": "https://singjam.org"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628"
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAyHhH0-caJojP-ca2p92gkHNHq_3rj628",
+        "EXPO_PUBLIC_WEB_URL": "https://singjam.org"
       }
     }
   },
