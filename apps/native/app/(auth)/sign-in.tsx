@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -159,23 +159,26 @@ export default function SignInScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View className="flex-1 justify-center px-6">
-          <Text className="text-3xl font-bold text-slate-900 mb-2">Reset password</Text>
+          <Text className="text-3xl font-bold text-slate-900 mb-2">Reset your password</Text>
           <Text className="text-slate-500 mb-8">
             Enter your email and we'll send you a reset link.
           </Text>
 
           {resetSent ? (
-            <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
-              <Text className="text-green-800 font-medium mb-1">Check your inbox</Text>
-              <Text className="text-green-700 text-sm">
-                A reset link has been sent to {email}. Follow it to set a new password.
+            <View className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mb-6">
+              <Text className="text-emerald-700 text-sm leading-5">
+                If an account exists for <Text className="font-semibold">{email.trim()}</Text>, a
+                password reset link is on its way. Check your spam folder if you don't see it within
+                a couple of minutes.
               </Text>
             </View>
           ) : (
             <>
+              <Text className="text-sm font-medium text-slate-700 mb-1.5">Email</Text>
               <TextInput
                 className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
-                placeholder="Email"
+                placeholder="you@example.com"
+                placeholderTextColor="#94a3b8"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
@@ -199,8 +202,8 @@ export default function SignInScreen() {
             </>
           )}
 
-          <TouchableOpacity onPress={() => switchMode('signin')}>
-            <Text className="text-center text-slate-500 text-sm">Back to sign in</Text>
+          <TouchableOpacity onPress={() => switchMode('signin')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text className="text-center text-amber-600 text-sm">Back to sign in</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -217,7 +220,7 @@ export default function SignInScreen() {
     >
       <View className="flex-1 justify-center px-6">
         <Text className="text-3xl font-bold text-slate-900 mb-2">
-          {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+          {mode === 'signin' ? 'Sign in to SingJam' : 'Create your SingJam account'}
         </Text>
         <Text className="text-slate-500 mb-8 leading-5">
           <Text className="font-semibold text-slate-700">Discover new music</Text> and{' '}
@@ -232,14 +235,17 @@ export default function SignInScreen() {
             onPress={handleGoogleSignIn}
             disabled={loading}
           >
-            <Ionicons name="logo-google" size={18} color="#4285F4" />
+            <Image
+              source={require('../../assets/google-g.png')}
+              style={{ width: 18, height: 18 }}
+            />
             <Text className="text-slate-700 font-medium">Continue with Google</Text>
           </TouchableOpacity>
         )}
 
         {Platform.OS === 'ios' && (
           <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
             cornerRadius={8}
             style={{ width: '100%', height: 44, marginBottom: 16 }}
@@ -255,38 +261,49 @@ export default function SignInScreen() {
           </View>
         )}
 
+        <Text className="text-sm font-medium text-slate-700 mb-1.5">Email</Text>
         <TextInput
-          className="border border-slate-200 rounded-lg px-4 py-3 mb-3 text-slate-900"
-          placeholder="Email"
+          className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
+          placeholder="you@example.com"
+          placeholderTextColor="#94a3b8"
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
         />
+
+        <View className="flex-row items-center justify-between mb-1.5">
+          <Text className="text-sm font-medium text-slate-700">Password</Text>
+          {mode === 'signin' && (
+            <TouchableOpacity
+              onPress={() => switchMode('reset')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text className="text-xs text-amber-600">Forgot password?</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TextInput
-          className={`border border-slate-200 rounded-lg px-4 py-3 text-slate-900 ${mode === 'signup' ? 'mb-3' : 'mb-1'}`}
-          placeholder="Password"
+          className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
+          placeholder="••••••••"
+          placeholderTextColor="#94a3b8"
           secureTextEntry
           value={password}
           onChangeText={setPassword}
         />
-        {mode === 'signin' && (
-          <TouchableOpacity
-            onPress={() => switchMode('reset')}
-            className="mb-4 self-end"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text className="text-sm text-amber-600">Forgot password?</Text>
-          </TouchableOpacity>
-        )}
+
         {mode === 'signup' && (
-          <TextInput
-            className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
-            placeholder="Confirm password"
-            secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
+          <>
+            <Text className="text-sm font-medium text-slate-700 mb-1.5">Confirm password</Text>
+            <TextInput
+              className="border border-slate-200 rounded-lg px-4 py-3 mb-4 text-slate-900"
+              placeholder="••••••••"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+          </>
         )}
 
         {error && <Text className="text-red-600 text-sm mb-3">{error}</Text>}
@@ -305,9 +322,16 @@ export default function SignInScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}>
+        <TouchableOpacity
+          onPress={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Text className="text-center text-slate-500 text-sm">
-            {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+            {mode === 'signin' ? (
+              <>No account? <Text className="text-amber-600">Create one</Text></>
+            ) : (
+              <>Already have an account? <Text className="text-amber-600">Sign in</Text></>
+            )}
           </Text>
         </TouchableOpacity>
       </View>
