@@ -5,16 +5,19 @@ const {
   mockSyncContact,
   mockSend,
   tables,
+  upserts,
   resetTables,
   chain,
 } = vi.hoisted(() => {
   const tables: Record<string, any[]> = {};
+  const upserts: { table: string; payload: any }[] = [];
 
-  function chain(result: any) {
+  function chain(table: string, result: any) {
     const obj: any = {};
-    ["select", "eq", "is", "order", "limit", "upsert", "update", "insert", "maybeSingle", "single"].forEach((m) => {
+    ["select", "eq", "is", "order", "limit", "update", "insert", "maybeSingle", "single"].forEach((m) => {
       obj[m] = vi.fn(() => obj);
     });
+    obj.upsert = vi.fn((payload: any) => { upserts.push({ table, payload }); return obj; });
     obj.then = (resolve: any) => resolve(result);
     return obj;
   }
@@ -24,8 +27,10 @@ const {
     mockSyncContact: vi.fn().mockResolvedValue(undefined),
     mockSend: vi.fn().mockResolvedValue({}),
     tables,
+    upserts,
     resetTables: () => {
       Object.keys(tables).forEach((k) => delete tables[k]);
+      upserts.length = 0;
     },
     chain,
   };
@@ -34,7 +39,7 @@ const {
 function fromMock(table: string) {
   const queue = tables[table] ?? [];
   const result = queue.length > 1 ? queue.shift() : queue[0];
-  return chain(result ?? { data: null, error: null });
+  return chain(table, result ?? { data: null, error: null });
 }
 
 vi.mock("next/headers", () => ({
@@ -63,6 +68,7 @@ vi.mock("@/lib/resend", () => ({
 
 vi.mock("@/emails/welcome", () => ({
   welcomeEmailHtml: vi.fn(() => "<html></html>"),
+  finishSetupEmailHtml: vi.fn(() => "<html></html>"),
 }));
 
 import { GET } from "./route";
@@ -97,32 +103,29 @@ describe("GET /auth/callback", () => {
   });
 
   it("redirects to /account with default next for a brand-new user (profile row exists but has no username)", async () => {
-    tables.profiles = [
-      { data: { username: null }, error: null }, // profile lookup — trigger-created row, no username yet
-      { data: null, error: null }, // username-uniqueness check
-      { error: null }, // upsert
-    ];
+    // Trigger-created row with no username yet — the new-user signal. Nothing
+    // writes a username here; setup owns it.
+    tables.profiles = [{ data: { username: null }, error: null }];
     const res = await GET(req({ code: "abc" }));
     expect(res.headers.get("location")).toBe("https://singjam.org/account?next=%2Frepertoire");
     expect(mockSyncContact).toHaveBeenCalledWith("singer@example.com");
   });
 
+  it("writes no username and sends no welcome email for a new user — setup does both", async () => {
+    tables.profiles = [{ data: { username: null }, error: null }];
+    await GET(req({ code: "abc" }));
+    expect(upserts.filter((u) => u.table === "profiles")).toHaveLength(0);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
   it("preserves an explicit next param through account setup for a new user", async () => {
-    tables.profiles = [
-      { data: { username: null }, error: null },
-      { data: null, error: null },
-      { error: null },
-    ];
+    tables.profiles = [{ data: { username: null }, error: null }];
     const res = await GET(req({ code: "abc", next: "/jams" }));
     expect(res.headers.get("location")).toBe("https://singjam.org/account?next=%2Fjams");
   });
 
   it("sends a new user straight to their invited jam after account setup", async () => {
-    tables.profiles = [
-      { data: { username: null }, error: null },
-      { data: null, error: null },
-      { error: null },
-    ];
+    tables.profiles = [{ data: { username: null }, error: null }];
     tables.jam_invites = [
       { error: null }, // invite link update
       { data: { jam_id: "jam-42" }, error: null }, // invite jam lookup

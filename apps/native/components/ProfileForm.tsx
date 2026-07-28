@@ -542,7 +542,9 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     setSaving(false);
     if (saveError) { setError(saveError.message); return; }
 
-    // Mirror web AccountPanel: sync the profile to ActiveCampaign via the web API.
+    // Mirror web AccountPanel: the web API syncs the profile to ActiveCampaign
+    // and sends the welcome email — this is the only trigger for it, so don't
+    // drop the call.
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       fetch(`${WEB_URL}/api/account/sync-ac`, {

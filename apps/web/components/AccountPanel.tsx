@@ -403,6 +403,8 @@ export default function AccountPanel() {
       originalUsername.current = username;
       setUsernameStatus("idle");
       window.dispatchEvent(new CustomEvent("profile-updated"));
+      // Syncs to ActiveCampaign and sends the welcome email — this is the only
+      // trigger for it, so don't drop the call.
       fetch("/api/account/sync-ac", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
