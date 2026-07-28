@@ -97,7 +97,7 @@ export default function RepertoireCard({
 
         <View className="flex-1 min-w-0">
           <TouchableOpacity onPress={onView}>
-            <Text numberOfLines={2}>
+            <Text numberOfLines={1}>
               <Text className="font-medium text-slate-900">{song.title}</Text>
               {composersLabel ? (
                 <Text className="text-slate-400"> ({composersLabel})</Text>

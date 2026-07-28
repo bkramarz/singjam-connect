@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal, ScrollView, ActionSheetIOS, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { matchesSearch, mergeSuggestionsById, songMatchesFilters, deriveFilterOptions, countActiveFilters, type UserSong } from '@singjam/core';
+import { mergeSuggestionsById, songMatchesFilters, deriveFilterOptions, countActiveFilters, sortRepertoireSearchResults, type UserSong } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
 import RepertoireCard from '@/components/RepertoireCard';
 import SuggestionCard, { type Suggestion } from '@/components/SuggestionCard';
-import AddSongModal from '@/components/AddSongModal';
+import SubmitMissingSong from '@/components/SubmitMissingSong';
 import AddToSetModal from '@/components/AddToSetModal';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
@@ -292,7 +292,9 @@ export default function RepertoireScreen() {
   const [sortBy, setSortBy] = useState<SortOrder>('title_asc');
   const [extFilters, setExtFilters] = useState<ExtFilters>(emptyExtFilters());
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
+  const [searchResults, setSearchResults] = useState<Suggestion[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
   const [addToSetSongs, setAddToSetSongs] = useState<{ id: string; title: string }[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -356,12 +358,30 @@ export default function RepertoireScreen() {
     return years.length ? { min: Math.min(...years), max: Math.max(...years) } : { min: null, max: null };
   }, [songs]);
 
+  // Typing searches the whole catalogue, matching web: results include songs you
+  // already own (rendered with their role controls) as well as ones you don't.
+  const searching = query.trim().length > 0;
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    setSubmitOpen(false);
+    const timer = setTimeout(async () => {
+      const { data } = await supabase.rpc('search_songs', { q, limit_n: 50 });
+      setSearchResults((data ?? []) as Suggestion[]);
+      setSearchLoading(false);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const filtered = useMemo(() => {
     let result: RichUserSong[] = songs;
 
-    if (query.trim()) {
-      result = result.filter(s => matchesSearch([s.title, s.display_artist ?? '', ...s.composers].join(' '), query));
-    }
     if (confidenceFilter !== 'all') {
       result = result.filter(s => s.confidence === confidenceFilter);
     }
@@ -371,9 +391,16 @@ export default function RepertoireScreen() {
     if (sortBy === 'title_desc') return [...result].sort((a, b) => b.title.localeCompare(a.title));
     if (sortBy === 'popularity') return [...result].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
     return result;
-  }, [songs, query, confidenceFilter, extFilters, sortBy]);
+  }, [songs, confidenceFilter, extFilters, sortBy]);
 
   const existingIds = useMemo(() => new Set(songs.map(s => s.song_id)), [songs]);
+  const songsById = useMemo(() => new Map(songs.map(s => [s.song_id, s])), [songs]);
+
+  // Songs already in the repertoire sort to the top, as on web.
+  const sortedSearchResults = useMemo(
+    () => sortRepertoireSearchResults(searchResults, existingIds),
+    [searchResults, existingIds]
+  );
   const extFilterCount = countExtFilters(extFilters);
   const allSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id));
 
@@ -390,7 +417,6 @@ export default function RepertoireScreen() {
     if (error) { Alert.alert('Error', error.message); load(); }
   }
 
-  function handleAdded() { setShowAdd(false); load(); }
 
   const loadMoreSuggestions = useCallback(async () => {
     if (!suggestionsHasMore || loadingMoreRef.current || !userId) return;
@@ -522,6 +548,38 @@ export default function RepertoireScreen() {
     [userId, songs, selectedIds, canLead, filtered.length]
   );
 
+  // Search results reuse the same two cards web does: owned songs keep their role
+  // controls, everything else gets the add-with-role control.
+  const renderSearchItem = useCallback(
+    ({ item, index }: { item: Suggestion; index: number }) => {
+      const owned = songsById.get(item.song_id);
+      if (owned) {
+        return (
+          <RepertoireCard
+            song={{ ...owned, productions: owned.productions ?? [] }}
+            selected={selectedIds.has(owned.song_id)}
+            canLead={canLead}
+            isLast={index === sortedSearchResults.length - 1}
+            onToggleSelect={() => toggleSelect(owned.song_id)}
+            onConfidenceChange={(confidence) => handleConfidenceChange(owned.song_id, confidence)}
+            onAddToSet={() => setAddToSetSongs([{ id: owned.song_id, title: owned.title }])}
+            onView={() => router.push(`/song/${owned.song_id}` as any)}
+            onRemove={() => handleRemove(owned.song_id)}
+          />
+        );
+      }
+      return (
+        <SuggestionCard
+          song={item}
+          canLead={canLead}
+          onAdd={(confidence) => addFromSuggestion(item, confidence)}
+          onView={() => router.push(`/song/${item.song_id}` as any)}
+        />
+      );
+    },
+    [songsById, selectedIds, canLead, sortedSearchResults.length, userId, songs]
+  );
+
   const roleLabel = confidenceFilter === 'all'
     ? 'Any role'
     : CONFIDENCE_LEVELS.find(l => l.key === confidenceFilter)?.label ?? 'Any role';
@@ -548,17 +606,28 @@ export default function RepertoireScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity
-          onPress={() => showOptionsSheet('Role', ['Any role', ...CONFIDENCE_LEVELS.map(l => l.label)], (index) =>
-            setConfidenceFilter(index === 0 ? 'all' : CONFIDENCE_LEVELS[index - 1].key)
-          )}
-          className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
-        >
-          <Text className="text-sm text-slate-700">{roleLabel}</Text>
-          <Ionicons name="chevron-down" size={14} color="#71717a" />
-        </TouchableOpacity>
+        {!searching && (
+          <TouchableOpacity
+            onPress={() => showOptionsSheet('Role', ['Any role', ...CONFIDENCE_LEVELS.map(l => l.label)], (index) =>
+              setConfidenceFilter(index === 0 ? 'all' : CONFIDENCE_LEVELS[index - 1].key)
+            )}
+            className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
+          >
+            <Text className="text-sm text-slate-700">{roleLabel}</Text>
+            <Ionicons name="chevron-down" size={14} color="#71717a" />
+          </TouchableOpacity>
+        )}
       </View>
 
+      {/* Search mode replaces the toolbar with a result count, as on web */}
+      {searching ? (
+        <Text className="mx-4 mt-4 px-1 text-sm text-slate-500">
+          {searchLoading
+            ? 'Searching…'
+            : `${sortedSearchResults.length} result${sortedSearchResults.length === 1 ? '' : 's'}`}
+        </Text>
+      ) : (
+      <>
       {/* Count / sort / filters toolbar */}
       <View className="mx-4 mt-4 flex-row items-center justify-between">
         <Text className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
@@ -620,13 +689,38 @@ export default function RepertoireScreen() {
           <Text className="text-xs text-zinc-400">Select all</Text>
         </View>
       )}
+      </>
+      )}
     </View>
   );
 
   // "Songs you might know" — mirrors web's SuggestionsPanel, shown below the
   // list (and below the empty-state card) but hidden while searching.
-  const showSuggestions = !query.trim() && suggestions.length > 0;
-  const listFooter = showSuggestions ? (
+  const showSuggestions = !searching && suggestions.length > 0;
+  const listFooter = searching ? (
+    searchLoading ? null : (
+      <View className="mx-4 mt-4">
+        {/* Collapsed behind a button like web's SubmitSongForm — the expanded
+            form is a lot of vertical space for a rare action. */}
+        {submitOpen ? (
+          <SubmitMissingSong
+            defaultTitle={query.trim()}
+            onCreated={(songId) => router.push(`/song/${songId}` as any)}
+          />
+        ) : (
+          <View className="items-center rounded-2xl border border-dashed border-zinc-300 px-4 py-5">
+            <Text className="text-sm text-zinc-500">Can't find your song?</Text>
+            <TouchableOpacity
+              onPress={() => setSubmitOpen(true)}
+              className="mt-3 rounded-xl bg-zinc-800 px-4 py-2.5"
+            >
+              <Text className="text-sm font-semibold text-white">Add a missing song</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    )
+  ) : showSuggestions ? (
     <View>
       <Text className="mx-4 px-1 mt-6 mb-2 text-sm font-medium text-zinc-500">
         Songs you might know
@@ -666,21 +760,13 @@ export default function RepertoireScreen() {
 
       <ContentContainer>
       {/* Header */}
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-3 bg-white border-b border-slate-100">
-        <View>
-          <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
-          {!loading && (
-            <Text className="text-slate-400 text-sm mt-0.5">
-              {songs.length} {songs.length === 1 ? 'song' : 'songs'}
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity
-          onPress={() => setShowAdd(true)}
-          className="bg-amber-500 rounded-full w-9 h-9 items-center justify-center"
-        >
-          <Text className="text-white text-xl leading-none font-light">+</Text>
-        </TouchableOpacity>
+      <View className="px-4 pt-4 pb-3 bg-white border-b border-slate-100">
+        <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
+        {!loading && (
+          <Text className="text-slate-400 text-sm mt-0.5">
+            {songs.length} {songs.length === 1 ? 'song' : 'songs'}
+          </Text>
+        )}
       </View>
 
       {loading ? (
@@ -690,53 +776,46 @@ export default function RepertoireScreen() {
         </View>
       ) : (
         <FlatList
-          data={filtered}
+          data={(searching ? sortedSearchResults : filtered) as any[]}
           keyExtractor={item => item.song_id}
-          renderItem={renderItem}
+          renderItem={(searching ? renderSearchItem : renderItem) as any}
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
           onEndReached={showSuggestions ? loadMoreSuggestions : undefined}
           onEndReachedThreshold={0.5}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#d97706" />}
           ListEmptyComponent={
-            <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
-              {query.trim() || confidenceFilter !== 'all' || extFilterCount > 0 ? (
-                <>
-                  <Text className="text-sm text-slate-500">No matches.</Text>
-                  {extFilterCount > 0 && (
-                    <TouchableOpacity onPress={() => setExtFilters(emptyExtFilters())} className="mt-3">
-                      <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Text className="text-base font-semibold text-zinc-900">Your repertoire is empty</Text>
-                  <Text className="mt-1 text-sm text-zinc-500 text-center">
-                    Add songs you know and SingJam will match you with musicians who share your repertoire.
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowAdd(true)} className="mt-4">
-                    <Text className="text-amber-600 font-medium">Add your first song</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
+            // While searching, the result count and the "add a missing song" panel
+            // already cover the no-results case, as they do on web.
+            searching ? null : (
+              <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
+                {confidenceFilter !== 'all' || extFilterCount > 0 ? (
+                  <>
+                    <Text className="text-sm text-slate-500">No songs match these filters.</Text>
+                    {extFilterCount > 0 && (
+                      <TouchableOpacity onPress={() => setExtFilters(emptyExtFilters())} className="mt-3">
+                        <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text className="text-base font-semibold text-zinc-900">Your repertoire is empty</Text>
+                    <Text className="mt-1 text-sm text-zinc-500 text-center">
+                      Add songs you know and SingJam will match you with musicians who share your repertoire.
+                    </Text>
+                    <Text className="mt-3 text-sm text-zinc-400 text-center">
+                      Search for a song above, or pick one from the suggestions below.
+                    </Text>
+                  </>
+                )}
+              </View>
+            )
           }
           contentContainerStyle={{ paddingBottom: 32 }}
         />
       )}
       </ContentContainer>
-
-      {userId && (
-        <AddSongModal
-          visible={showAdd}
-          userId={userId}
-          existingIds={existingIds}
-          canLead={canLead}
-          onClose={() => setShowAdd(false)}
-          onAdded={handleAdded}
-        />
-      )}
 
       {addToSetSongs && (
         <AddToSetModal
