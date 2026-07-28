@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, ActionSheetIOS, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Platform, ActivityIndicator } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { mergeSuggestionsById, songMatchesFilters, deriveFilterOptions, countActiveFilters, sortRepertoireSearchResults, type UserSong, type SongFilterState } from '@singjam/core';
@@ -7,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
 import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import RepertoireCard from '@/components/RepertoireCard';
 import SuggestionCard, { type Suggestion } from '@/components/SuggestionCard';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
@@ -51,20 +53,6 @@ function toggleSet(set: Set<string>, value: string): Set<string> {
   const next = new Set(set);
   next.has(value) ? next.delete(value) : next.add(value);
   return next;
-}
-
-function showOptionsSheet(title: string, labels: string[], onPick: (index: number) => void) {
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
-      { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, title },
-      (index) => { if (index < labels.length) onPick(index); }
-    );
-  } else {
-    Alert.alert(title, undefined, [
-      ...labels.map((label, i) => ({ text: label, onPress: () => onPick(i) })),
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
-  }
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -328,17 +316,21 @@ export default function RepertoireScreen() {
     setAddToSetSongs(selected);
   }
 
-  function handleBulkConfidence() {
+  function handleBulkConfidence(event: GestureResponderEvent) {
     const ids = Array.from(selectedIds);
-    const labels = CONFIDENCE_LEVELS.filter(l => l.key !== 'lead' || canLead).map(l => l.label);
-    const values = CONFIDENCE_LEVELS.filter(l => l.key !== 'lead' || canLead).map(l => l.key);
-    showOptionsSheet(`Change role for ${ids.length} ${ids.length === 1 ? 'song' : 'songs'}`, labels, async (index) => {
-      const confidence = values[index];
+    async function apply(confidence: string) {
       setSongs(prev => prev.map(s => selectedIds.has(s.song_id) ? { ...s, confidence } : s));
       setSelectedIds(new Set());
       for (const songId of ids) {
         await supabase.from('user_songs').update({ confidence }).eq('user_id', userId).eq('song_id', songId);
       }
+    }
+    showOptionsSheet({
+      title: `Change role for ${ids.length} ${ids.length === 1 ? 'song' : 'songs'}`,
+      anchor: anchorFrom(event),
+      options: CONFIDENCE_LEVELS
+        .filter(l => l.key !== 'lead' || canLead)
+        .map(l => ({ label: l.label, onPress: () => { apply(l.key); } })),
     });
   }
 
@@ -441,9 +433,14 @@ export default function RepertoireScreen() {
         </View>
         {!searching && (
           <TouchableOpacity
-            onPress={() => showOptionsSheet('Role', ['Any role', ...CONFIDENCE_LEVELS.map(l => l.label)], (index) =>
-              setConfidenceFilter(index === 0 ? 'all' : CONFIDENCE_LEVELS[index - 1].key)
-            )}
+            onPress={(e) => showOptionsSheet({
+              title: 'Role',
+              anchor: anchorFrom(e),
+              options: [
+                { label: 'Any role', onPress: () => setConfidenceFilter('all') },
+                ...CONFIDENCE_LEVELS.map(l => ({ label: l.label, onPress: () => setConfidenceFilter(l.key) })),
+              ],
+            })}
             className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
           >
             <Text className="text-sm text-slate-700">{roleLabel}</Text>
@@ -468,7 +465,11 @@ export default function RepertoireScreen() {
         </Text>
         <View className="flex-row items-center gap-2">
           <TouchableOpacity
-            onPress={() => showOptionsSheet('Sort', SORT_OPTIONS.map(o => o.label), (index) => setSortBy(SORT_OPTIONS[index].key))}
+            onPress={(e) => showOptionsSheet({
+              title: 'Sort',
+              anchor: anchorFrom(e),
+              options: SORT_OPTIONS.map(o => ({ label: o.label, onPress: () => setSortBy(o.key) })),
+            })}
             className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
           >
             <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>

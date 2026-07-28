@@ -1,12 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, SectionList, RefreshControl, TouchableOpacity,
-  Alert, ActionSheetIOS, Platform,
+  Alert,
 } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchAllRows } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import { readCache, writeCache } from '@/lib/cache';
 import { duplicateJam } from '@/lib/jams';
 import JamCard, { type JamItem } from '@/components/JamCard';
@@ -187,24 +189,17 @@ export default function JamsScreen() {
   // Host card ⋯ menu — mirrors web's JamListCard overflow menu (Edit / Copy /
   // Cancel). Cancel routes through the web DELETE endpoint so attendees are
   // notified + emailed (single source of truth).
-  function openJamMenu(jam: JamItem) {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Edit details', 'Copy event', 'Cancel jam', 'Close'], destructiveButtonIndex: 2, cancelButtonIndex: 3 },
-        (index) => {
-          if (index === 0) editJam(jam);
-          if (index === 1) copyJam(jam);
-          if (index === 2) confirmCancel(jam);
-        }
-      );
-    } else {
-      Alert.alert(jam.name ?? 'Jam', undefined, [
-        { text: 'Edit details', onPress: () => editJam(jam) },
-        { text: 'Copy event', onPress: () => copyJam(jam) },
-        { text: 'Cancel jam', style: 'destructive', onPress: () => confirmCancel(jam) },
-        { text: 'Close', style: 'cancel' },
-      ]);
-    }
+  function openJamMenu(jam: JamItem, event: GestureResponderEvent) {
+    showOptionsSheet({
+      title: jam.name ?? 'Jam',
+      cancelLabel: 'Close',
+      anchor: anchorFrom(event),
+      options: [
+        { label: 'Edit details', onPress: () => editJam(jam) },
+        { label: 'Copy event', onPress: () => copyJam(jam) },
+        { label: 'Cancel jam', destructive: true, onPress: () => confirmCancel(jam) },
+      ],
+    });
   }
 
   function editJam(jam: JamItem) {
@@ -267,7 +262,7 @@ export default function JamsScreen() {
               jam={item}
               myId={userId}
               onPress={() => router.push({ pathname: '/jam/[id]', params: { id: item.id } })}
-              onManage={() => openJamMenu(item)}
+              onManage={(e) => openJamMenu(item, e)}
             />
           )}
           renderSectionHeader={({ section }) => (

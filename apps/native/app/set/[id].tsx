@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Alert,
   ActivityIndicator, Modal, FlatList, TextInput,
-  KeyboardAvoidingView, Platform, ActionSheetIOS, Linking,
+  KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { supabase } from '@/lib/supabase';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import { formatComposers, reorderSongsForPlayed } from '@singjam/core';
 import ContentContainer from '@/components/ContentContainer';
 
@@ -534,9 +536,7 @@ function SetSettingsModal({
     );
   }
 
-  function changeRole(collab: Collaborator) {
-    const options = inviteRoleOptions;
-    const labels = options.map(r => ROLE_LABELS[r]);
+  function changeRole(collab: Collaborator, event: GestureResponderEvent) {
     const apply = async (role: 'editor' | 'viewer' | 'co-owner') => {
       if (role === collab.role) return;
       setBusyId(collab.id);
@@ -545,17 +545,11 @@ function SetSettingsModal({
       if (!ok) { Alert.alert('Error', json?.error ?? 'Could not change role.'); return; }
       onCollaboratorRoleChanged(collab.id, role);
     };
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, title: 'Change role' },
-        (i) => { if (i < labels.length) apply(options[i]); }
-      );
-    } else {
-      Alert.alert('Change role', undefined, [
-        ...options.map((r, i) => ({ text: labels[i], onPress: () => apply(r) })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ]);
-    }
+    showOptionsSheet({
+      title: 'Change role',
+      anchor: anchorFrom(event),
+      options: inviteRoleOptions.map(r => ({ label: ROLE_LABELS[r], onPress: () => apply(r) })),
+    });
   }
 
   // Owner manages everyone; a co-owner manages only non-co-owner collaborators.
@@ -614,7 +608,7 @@ function SetSettingsModal({
                   </View>
                   {canManageCollaborator(c) ? (
                     <TouchableOpacity
-                      onPress={() => changeRole(c)}
+                      onPress={(e) => changeRole(c, e)}
                       disabled={busyId === c.id}
                       className="flex-row items-center mr-3"
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

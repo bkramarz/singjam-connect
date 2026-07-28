@@ -1,4 +1,5 @@
 import { View, Text, Image, TouchableOpacity, Linking } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export type JamItem = {
@@ -60,7 +61,7 @@ export default function JamCard({ jam, myId, onPress, onManage }: {
   jam: JamItem;
   myId: string | null;
   onPress: () => void;
-  onManage?: () => void;
+  onManage?: (event: GestureResponderEvent) => void;
 }) {
   const isOfficial = jam.visibility === 'official';
   const isHosting = !!myId && jam.host_id === myId;

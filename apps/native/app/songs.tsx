@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  ActionSheetIOS, Alert, Platform, KeyboardAvoidingView,
+  Alert, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
 import SuggestionCard from '@/components/SuggestionCard';
 import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 
 // A superset of SuggestionCard's `Suggestion`, so catalog rows render in the
 // same card web uses while still carrying the fields the filters need.
@@ -143,20 +144,6 @@ async function fetchCatalog(): Promise<SongMeta[]> {
   const byId = new Map<string, any>();
   for (const row of [first, ...rest].flat()) byId.set(row.song_id, row);
   return Array.from(byId.values(), toSongMeta);
-}
-
-function showOptionsSheet(title: string, labels: string[], onPick: (index: number) => void) {
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
-      { options: [...labels, 'Cancel'], cancelButtonIndex: labels.length, title },
-      (index) => { if (index < labels.length) onPick(index); }
-    );
-  } else {
-    Alert.alert(title, undefined, [
-      ...labels.map((label, i) => ({ text: label, onPress: () => onPick(i) })),
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
-  }
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
@@ -318,7 +305,14 @@ export default function SongLibraryScreen() {
       {/* Sort / filters / hide-my-songs, then the catalog total — web's order */}
       <View className="mx-4 mt-3 flex-row items-center px-1" style={{ gap: 8 }}>
         <TouchableOpacity
-          onPress={() => showOptionsSheet('Sort', SORT_OPTIONS.map(o => o.label), (index) => setFilters(f => ({ ...f, sortBy: SORT_OPTIONS[index].key })))}
+          onPress={(e) => showOptionsSheet({
+            title: 'Sort',
+            anchor: anchorFrom(e),
+            options: SORT_OPTIONS.map(o => ({
+              label: o.label,
+              onPress: () => setFilters(f => ({ ...f, sortBy: o.key })),
+            })),
+          })}
           className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
         >
           <Ionicons name="chevron-down" size={11} color="#71717a" />
