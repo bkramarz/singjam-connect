@@ -1,6 +1,6 @@
 export * from './utils/fetchProfileSongs';
-export * from './utils/fetchUserSongs';
 export * from './utils/deriveNeighborhood';
+export * from './utils/fetchAllRows';
 export * from './utils/formatComposers';
 export * from './utils/formatJamTime';
 export * from './utils/generateSlug';
@@ -11,4 +11,5 @@ export * from './utils/setDisplayedSongs';
 export * from './utils/singingVoice';
 export * from './utils/songFilters';
 export * from './utils/sortRepertoireSearchResults';
+export * from './utils/userSong';
 export * from './utils/username';

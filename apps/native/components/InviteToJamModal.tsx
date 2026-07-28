@@ -45,8 +45,7 @@ export default function InviteToJamModal({ visible, inviteeUserId, inviteeName, 
       .select('id, name, starts_at')
       .eq('host_user_id', user.id)
       .gte('starts_at', now)
-      .order('starts_at')
-      .limit(10);
+      .order('starts_at');
 
     // Jams user is attending where guests can invite
     const { data: rsvps } = await supabase

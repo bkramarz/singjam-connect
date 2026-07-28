@@ -291,12 +291,15 @@ export default function JamDetailScreen() {
         `)
         .eq('id', id)
         .single(),
+      // Unbounded and ordered like web's JamAttendeeList: `attendees.length`
+      // drives the attending count and the at-capacity check, so a capped or
+      // unordered fetch would understate a full jam.
       supabase
         .from('jam_rsvps')
         .select('status, user_id, profiles!user_id ( display_name, username, avatar_url )')
         .eq('jam_id', id)
         .in('status', ['attending', 'waitlist'])
-        .limit(30),
+        .order('created_at', { ascending: true }),
       user
         ? supabase.from('jam_invites').select('status').eq('jam_id', id).eq('invited_user_id', user.id).maybeSingle()
         : Promise.resolve({ data: null }),

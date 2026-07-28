@@ -239,7 +239,6 @@ export default function SongDetailScreen() {
             .select('confidence, user_id, profiles!user_id(id, display_name, username)')
             .eq('song_id', songId)
             .in('confidence', ['lead', 'support', 'learn'])
-            .limit(50)
         : Promise.resolve({ data: null }),
     ]);
 
