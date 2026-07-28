@@ -294,6 +294,7 @@ export default function RepertoireScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<Suggestion[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
   const [addToSetSongs, setAddToSetSongs] = useState<{ id: string; title: string }[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -369,6 +370,7 @@ export default function RepertoireScreen() {
       return;
     }
     setSearchLoading(true);
+    setSubmitOpen(false);
     const timer = setTimeout(async () => {
       const { data } = await supabase.rpc('search_songs', { q, limit_n: 50 });
       setSearchResults((data ?? []) as Suggestion[]);
@@ -698,10 +700,24 @@ export default function RepertoireScreen() {
   const listFooter = searching ? (
     searchLoading ? null : (
       <View className="mx-4 mt-4">
-        <SubmitMissingSong
-          defaultTitle={query.trim()}
-          onCreated={(songId) => router.push(`/song/${songId}` as any)}
-        />
+        {/* Collapsed behind a button like web's SubmitSongForm — the expanded
+            form is a lot of vertical space for a rare action. */}
+        {submitOpen ? (
+          <SubmitMissingSong
+            defaultTitle={query.trim()}
+            onCreated={(songId) => router.push(`/song/${songId}` as any)}
+          />
+        ) : (
+          <View className="items-center rounded-2xl border border-dashed border-zinc-300 px-4 py-5">
+            <Text className="text-sm text-zinc-500">Can't find your song?</Text>
+            <TouchableOpacity
+              onPress={() => setSubmitOpen(true)}
+              className="mt-3 rounded-xl bg-zinc-800 px-4 py-2.5"
+            >
+              <Text className="text-sm font-semibold text-white">Add a missing song</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     )
   ) : showSuggestions ? (
