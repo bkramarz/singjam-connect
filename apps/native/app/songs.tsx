@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { formatComposers, songMatchesFilters, deriveFilterOptions, countActiveFilters as countExtendedFilters } from '@singjam/core';
+import { fetchAllRows, formatComposers, songMatchesFilters, deriveFilterOptions, countActiveFilters as countExtendedFilters } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
@@ -297,6 +297,21 @@ function applySort(songs: SongMeta[], sortBy: SortBy): SongMeta[] {
   return [...songs].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
 }
 
+// `id` breaks title ties so the page boundaries stay put while we walk the table.
+function fetchCatalog() {
+  return fetchAllRows<any>((from, to) =>
+    supabase.from('songs').select(`
+      song_id:id, title, display_artist, vibe, tonality, meter, year:year_written,
+      song_composers ( people ( name ) ),
+      song_productions ( productions ( name ) ),
+      song_genres ( genres ( name ) ),
+      song_cultures ( cultures ( name ) ),
+      song_languages ( languages ( name ) ),
+      song_themes ( themes ( name ) )
+    `).order('title').order('id').range(from, to)
+  );
+}
+
 function showOptionsSheet(title: string, labels: string[], onPick: (index: number) => void) {
   if (Platform.OS === 'ios') {
     ActionSheetIOS.showActionSheetWithOptions(
@@ -335,16 +350,8 @@ export default function SongLibraryScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id ?? null);
 
-      const [songsRes, popularityRes, myRes, profileRes] = await Promise.all([
-        supabase.from('songs').select(`
-          song_id:id, title, display_artist, vibe, tonality, meter, year:year_written,
-          song_composers ( people ( name ) ),
-          song_productions ( productions ( name ) ),
-          song_genres ( genres ( name ) ),
-          song_cultures ( cultures ( name ) ),
-          song_languages ( languages ( name ) ),
-          song_themes ( themes ( name ) )
-        `).order('title').limit(1000),
+      const [songRows, popularityRes, myRes, profileRes] = await Promise.all([
+        fetchCatalog(),
         supabase.rpc('song_popularity_counts'),
         user
           ? supabase.from('user_songs').select('song_id').eq('user_id', user.id)
@@ -362,7 +369,7 @@ export default function SongLibraryScreen() {
           .map(r => [r.song_id, Number(r.user_count)])
       );
 
-      const songs: SongMeta[] = ((songsRes.data ?? []) as any[]).map(s => ({
+      const songs: SongMeta[] = songRows.map(s => ({
         song_id: s.song_id,
         title: s.title ?? '',
         display_artist: s.display_artist ?? null,
@@ -383,7 +390,7 @@ export default function SongLibraryScreen() {
       setAllSongs(songs);
       setLoadingAll(false);
     }
-    init();
+    init().catch(() => setLoadingAll(false));
   }, []);
 
   // Search via RPC, then merge with metaMap for filter fields
