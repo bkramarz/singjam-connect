@@ -1021,7 +1021,14 @@ export default function RepertoirePage() {
 
           <div className="divide-y rounded-md border">
             {sortedFiltered.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No matches.</div>
+              <div className="p-4 text-center">
+                <p className="text-sm text-muted-foreground">No songs match these filters.</p>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="mt-3 text-sm font-medium text-amber-600 hover:underline">
+                    Clear filters
+                  </button>
+                )}
+              </div>
             ) : (
               <>
                 <div className="flex items-center gap-3 bg-zinc-50 px-4 py-2">
@@ -1072,11 +1079,11 @@ export default function RepertoirePage() {
                   </div>
                   </div>
 
-                  <div className="relative flex flex-wrap items-center gap-2 sm:shrink-0">
+                  <div className="relative flex flex-wrap items-center gap-1.5 sm:gap-2 sm:shrink-0">
                     <select
                       value={(it.confidence ?? "") as ConfidenceKey}
                       onChange={(e) => updateConfidence(it.song_id, e.target.value)}
-                      className={`rounded-xl border px-2 py-1.5 text-sm ${
+                      className={`rounded-xl border px-2 py-1.5 text-xs sm:text-sm ${
                         it.confidence === "lead"
                           ? "border-amber-400 bg-amber-100 text-amber-800 font-semibold"
                           : "border-zinc-200"
@@ -1108,7 +1115,7 @@ export default function RepertoirePage() {
                     <Link
                       href={`/songs/${it.slug ?? it.song_id}`}
                       onClick={() => saveScrollPosition()}
-                      className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                      className="rounded-xl border border-zinc-200 px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm text-zinc-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors"
                     >
                       View
                     </Link>
