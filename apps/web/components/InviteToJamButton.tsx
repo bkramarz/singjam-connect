@@ -43,8 +43,7 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
         .eq("host_user_id", user.id)
         .neq("visibility", "official")
         .gte("starts_at", now)
-        .order("starts_at", { ascending: true })
-        .limit(10),
+        .order("starts_at", { ascending: true }),
       supabase
         .from("jam_rsvps")
         .select("jam_id")

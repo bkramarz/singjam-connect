@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { fetchAllRows } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { duplicateJam } from '@/lib/jams';
@@ -92,18 +93,27 @@ export default function JamsScreen() {
     windowStart.setDate(windowStart.getDate() - 90);
 
     const [jamsResult, rsvpsResult, invitesResult] = await Promise.all([
-      supabase
-        .from('jams')
-        .select(`
-          id, name, visibility, starts_at, ends_at, timezone,
-          neighborhood, notes, image_url, tickets_url, capacity, host_user_id,
-          profiles!host_user_id ( display_name, username ),
-          jam_genres ( genres ( name ) ),
-          jam_themes ( themes ( name ) )
-        `)
-        .gte('starts_at', windowStart.toISOString())
-        .order('starts_at', { ascending: true })
-        .limit(200),
+      fetchAllRows<any>((from, to) =>
+        supabase
+          .from('jams')
+          .select(`
+            id, name, visibility, starts_at, ends_at, timezone,
+            neighborhood, notes, image_url, tickets_url, capacity, host_user_id,
+            profiles!host_user_id ( display_name, username ),
+            jam_genres ( genres ( name ) ),
+            jam_themes ( themes ( name ) )
+          `)
+          .gte('starts_at', windowStart.toISOString())
+          .order('starts_at', { ascending: true })
+          .order('id')
+          .range(from, to)
+      ).then(
+        (data) => ({ data }),
+        (err: any) => {
+          console.error(`[jams] could not load the jam list: ${err?.message ?? err}`);
+          return { data: null };
+        }
+      ),
       user
         ? supabase.from('jam_rsvps').select('jam_id, status, waitlist_position').eq('user_id', user.id)
         : Promise.resolve({ data: null }),

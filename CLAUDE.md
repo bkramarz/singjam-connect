@@ -45,6 +45,13 @@ The native app (`apps/native`) is the mobile companion to the web app (`apps/web
   grant select, insert, update, delete on public.your_table to service_role;
   ```
 
+## Querying Lists
+
+- Never cap a query that renders a **complete** list with a hardcoded `.limit(n)` — the row count grows and the tail silently disappears. Use `fetchAllRows` from `packages/core`, which pages until the table is exhausted and throws instead of truncating on error
+- `.limit(n)` is fine for genuinely bounded things: search results, top-N suggestions, `.limit(1)` existence checks, and batch drains
+- Any paged or offset-based query **must** sort on a unique tiebreaker (`.order('title').order('id')`, or `order by … , f.id asc` in SQL). Sorting on a non-unique column alone lets rows shift across page boundaries and get duplicated or skipped
+- Never derive a count or an at-capacity check from the length of a capped fetch — query the count directly or fetch unbounded
+
 ## Testing
 
 - All new features must include tests before merging

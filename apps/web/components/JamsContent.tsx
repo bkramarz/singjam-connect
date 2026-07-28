@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { fetchAllRows } from "@singjam/core";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -285,12 +286,21 @@ export default function JamsContent() {
       userId
         ? supabase.from("profiles").select("role").eq("id", userId).single()
         : Promise.resolve({ data: null }),
-      supabase
-        .from("jams")
-        .select("id, name, starts_at, ends_at, timezone, neighborhood, tickets_url, image_url, visibility, host_user_id, jam_genres(genres(name)), jam_themes(themes(name)), host:profiles!jams_host_user_id_fkey(display_name, last_name, username)")
-        .gte("starts_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
-        .order("starts_at", { ascending: true, nullsFirst: false })
-        .limit(100),
+      fetchAllRows<any>((from, to) =>
+        supabase
+          .from("jams")
+          .select("id, name, starts_at, ends_at, timezone, neighborhood, tickets_url, image_url, visibility, host_user_id, jam_genres(genres(name)), jam_themes(themes(name)), host:profiles!jams_host_user_id_fkey(display_name, last_name, username)")
+          .gte("starts_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+          .order("starts_at", { ascending: true, nullsFirst: false })
+          .order("id")
+          .range(from, to)
+      ).then(
+        (data) => ({ data }),
+        (err: any) => {
+          console.error(`[jams] could not load the jam list: ${err?.message ?? err}`);
+          return { data: null };
+        }
+      ),
       userId
         ? supabase.from("jam_rsvps").select("jam_id, status, waitlist_position").eq("user_id", userId)
         : Promise.resolve({ data: [] }),

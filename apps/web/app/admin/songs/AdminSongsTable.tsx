@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import DeleteSongButton from "./DeleteSongButton";
+import { fetchAllRows } from "@singjam/core";
 import { formatComposers } from "@/lib/formatComposers";
 import { matchesSearch } from "@/lib/normalizeSearch";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -69,6 +70,7 @@ export default function AdminSongsTable() {
   const router = useRouter();
   const equalWidth = 100 / COLUMNS.length;
   const [songs, setSongs] = useState<Song[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [widths, setWidths] = useState<number[]>(COLUMNS.map(() => equalWidth));
   const [wrap, setWrap] = useState(true);
   const [query, setQuery] = useState("");
@@ -77,34 +79,24 @@ export default function AdminSongsTable() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    const PAGE = 1000;
-    async function fetchAll() {
-      const all: Song[] = [];
-      let from = 0;
-      while (true) {
-        const { data } = await supabase
-          .from("songs")
-          .select(`
-            id, title, slug, display_artist,
-            first_line, hook, genius_url, chord_chart_url, youtube_url, tonality, meter, vibe, year_written,
-            song_composers(people(name)),
-            song_lyricists(people(name)),
-            song_recording_artists(year, youtube_url),
-            song_genres(genre_id),
-            song_languages(language_id),
-            song_cultures(cultures(name)),
-            user_songs(count)
-          `)
-          .order("title")
-          .range(from, from + PAGE - 1);
-        const page = (data ?? []) as unknown as Song[];
-        all.push(...page);
-        if (page.length < PAGE) break;
-        from += PAGE;
-      }
-      setSongs(all);
-    }
-    fetchAll();
+    fetchAllRows<Song>((from, to) =>
+      supabase
+        .from("songs")
+        .select(`
+          id, title, slug, display_artist,
+          first_line, hook, genius_url, chord_chart_url, youtube_url, tonality, meter, vibe, year_written,
+          song_composers(people(name)),
+          song_lyricists(people(name)),
+          song_recording_artists(year, youtube_url),
+          song_genres(genre_id),
+          song_languages(language_id),
+          song_cultures(cultures(name)),
+          user_songs(count)
+        `)
+        .order("title")
+        .order("id")
+        .range(from, to) as any
+    ).then(setSongs, (err: any) => setLoadError(err?.message ?? "Could not load songs"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -219,6 +211,14 @@ export default function AdminSongsTable() {
   }
 
   const cellClass = wrap ? "px-4 py-2.5 whitespace-normal" : "px-4 py-2.5 truncate";
+
+  if (loadError !== null) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm">
+        Could not load the song list — {loadError}. Reload to try again.
+      </div>
+    );
+  }
 
   if (songs === null) {
     return (

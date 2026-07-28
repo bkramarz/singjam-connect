@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { fetchAllRows } from "@singjam/core";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { matchesSearch } from "@/lib/normalizeSearch";
 import SearchInput from "@/components/SearchInput";
@@ -19,30 +20,21 @@ type EditState = { chord_chart_url: string; genius_url: string };
 export default function SongEditorTable() {
   const supabase = supabaseBrowser();
   const [songs, setSongs] = useState<Song[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Record<string, EditState>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    async function fetchAll() {
-      const PAGE = 1000;
-      const all: Song[] = [];
-      let from = 0;
-      while (true) {
-        const { data } = await supabase
-          .from("songs")
-          .select("id, title, slug, display_artist, chord_chart_url, genius_url")
-          .order("title")
-          .range(from, from + PAGE - 1);
-        const page = (data ?? []) as Song[];
-        all.push(...page);
-        if (page.length < PAGE) break;
-        from += PAGE;
-      }
-      setSongs(all);
-    }
-    fetchAll();
+    fetchAllRows<Song>((from, to) =>
+      supabase
+        .from("songs")
+        .select("id, title, slug, display_artist, chord_chart_url, genius_url")
+        .order("title")
+        .order("id")
+        .range(from, to)
+    ).then(setSongs, (err: any) => setLoadError(err?.message ?? "Could not load songs"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -107,6 +99,14 @@ export default function SongEditorTable() {
     });
     setSaved((prev) => ({ ...prev, [song.id]: true }));
     setTimeout(() => setSaved((prev) => ({ ...prev, [song.id]: false })), 2000);
+  }
+
+  if (loadError !== null) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800 shadow-sm">
+        Could not load the song list — {loadError}. Reload to try again.
+      </div>
+    );
   }
 
   if (songs === null) {
