@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { syncContact } from "@/lib/activecampaign";
-import { resend } from "@/lib/resend";
-import { enqueueWelcomeEmail } from "@/lib/emailOutbox";
 
 // Called after immediate-session signup (email confirmation disabled) to
 // create the profile and link any invite token, mirroring the callback route.
@@ -19,38 +17,19 @@ export async function POST(req: Request) {
   const { inviteToken } = await req.json().catch(() => ({}));
   const admin = supabaseAdmin();
 
-  // Finish setup if this profile doesn't have a username yet — the
-  // handle_new_user() DB trigger already inserted a bare profiles row (id
-  // only) on signup, so checking row existence here would never be true.
+  // A new signup has a bare profiles row (id only) from the handle_new_user()
+  // DB trigger, so "no username" — not "no row" — is the new-user signal.
+  // Username stays null until the user picks one in setup: writing a generated
+  // placeholder here raced the setup form, which could overwrite the name they
+  // chose. The welcome email is sent from the profile save for the same reason.
   const { data: existing } = await admin
     .from("profiles")
     .select("username")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!existing?.username) {
-    const emailLocal = (user.email ?? "")
-      .split("@")[0]
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "")
-      .slice(0, 15) || "singer";
-    let username = "";
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const candidate = `${emailLocal}${Math.floor(1000 + Math.random() * 9000)}`;
-      const { data: taken } = await admin
-        .from("profiles")
-        .select("id")
-        .eq("username", candidate)
-        .maybeSingle();
-      if (!taken) { username = candidate; break; }
-    }
-    if (!username) username = `singer${Date.now()}`;
-    await admin.from("profiles").upsert({ id: user.id, username });
-
-    if (user.email) {
-      syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
-      await enqueueWelcomeEmail(admin, resend, { userId: user.id, email: user.email, username });
-    }
+  if (!existing?.username && user.email) {
+    syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
   }
 
   // Link invite and resolve jam ID

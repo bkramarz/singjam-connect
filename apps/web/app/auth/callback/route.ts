@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       const user = sessionData.user;
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username")
+        .select("username, display_name")
         .eq("id", user.id)
         .single();
 
@@ -64,30 +64,12 @@ export async function GET(request: Request) {
 
       if (!profile?.username) {
         // New user — the handle_new_user() DB trigger already inserted a bare
-        // profiles row (id only) on signup, so this finishes setup: generate a
-        // unique username, sync/welcome, link any invite, and preserve the
-        // intended destination for after they save their profile.
-        const emailLocal = (user.email ?? "")
-          .split("@")[0]
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "")
-          .slice(0, 15) || "singer";
-        let username = "";
-        for (let attempt = 0; attempt < 10; attempt++) {
-          const candidate = `${emailLocal}${Math.floor(1000 + Math.random() * 9000)}`;
-          const { data: taken } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("username", candidate)
-            .maybeSingle();
-          if (!taken) { username = candidate; break; }
-        }
-        if (!username) username = `singer${Date.now()}`;
-        await supabaseAdmin().from("profiles").upsert({ id: user.id, username });
-
+        // profiles row (id only) on signup, so "no username" is the new-user
+        // signal. Username stays null until they pick one on /account, and the
+        // welcome email is sent from that save so it can greet them by the
+        // name they chose.
         if (user.email) {
           syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
-          await enqueueWelcomeEmail(supabaseAdmin(), resend, { userId: user.id, email: user.email, username });
         }
 
         // Link non-member invite to this new user, and resolve the jam so we
@@ -111,7 +93,11 @@ export async function GET(request: Request) {
         destination = `/account?next=${encodeURIComponent(postSetup)}`;
       } else {
         if (isFirstLogin && user.email) {
-          await enqueueWelcomeEmail(supabaseAdmin(), resend, { userId: user.id, email: user.email, username: profile?.username ?? undefined });
+          await enqueueWelcomeEmail(supabaseAdmin(), resend, {
+            userId: user.id,
+            email: user.email,
+            name: profile?.display_name ?? profile?.username ?? undefined,
+          });
         }
 
         if (inviteToken) {

@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockAdminGetUser, mockSyncContact, mockEnqueueWelcomeEmail, tables, resetTables, chain } = vi.hoisted(() => {
+const { mockGetUser, mockAdminGetUser, mockSyncContact, mockEnqueueWelcomeEmail, tables, upserts, resetTables, chain } = vi.hoisted(() => {
   const tables: Record<string, any[]> = {};
+  const upserts: { table: string; payload: any }[] = [];
 
-  function chain(result: any) {
+  function chain(table: string, result: any) {
     const obj: any = {};
-    ["select", "eq", "is", "maybeSingle", "upsert", "update", "insert"].forEach((m) => {
+    ["select", "eq", "is", "maybeSingle", "update", "insert"].forEach((m) => {
       obj[m] = vi.fn(() => obj);
     });
+    obj.upsert = vi.fn((payload: any) => { upserts.push({ table, payload }); return obj; });
     obj.then = (resolve: any) => resolve(result);
     return obj;
   }
@@ -18,8 +20,10 @@ const { mockGetUser, mockAdminGetUser, mockSyncContact, mockEnqueueWelcomeEmail,
     mockSyncContact: vi.fn().mockResolvedValue(undefined),
     mockEnqueueWelcomeEmail: vi.fn().mockResolvedValue(undefined),
     tables,
+    upserts,
     resetTables: () => {
       Object.keys(tables).forEach((k) => delete tables[k]);
+      upserts.length = 0;
     },
     chain,
   };
@@ -28,7 +32,7 @@ const { mockGetUser, mockAdminGetUser, mockSyncContact, mockEnqueueWelcomeEmail,
 function fromMock(table: string) {
   const queue = tables[table] ?? [];
   const result = queue.length > 1 ? queue.shift() : queue[0];
-  return chain(result ?? { data: null, error: null });
+  return chain(table, result ?? { data: null, error: null });
 }
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -74,28 +78,30 @@ describe("POST /api/auth/complete", () => {
     expect(res.status).toBe(401);
   });
 
-  it("generates a username and syncs to ActiveCampaign for a brand-new profile (trigger-created row, no username)", async () => {
-    tables.profiles = [
-      { data: { username: null }, error: null }, // existing profile check
-      { data: null, error: null }, // username-uniqueness check
-      { error: null }, // upsert
-    ];
+  it("syncs to ActiveCampaign for a brand-new profile (trigger-created row, no username)", async () => {
+    tables.profiles = [{ data: { username: null }, error: null }];
     const res = await POST(req({}));
     expect(res.status).toBe(200);
     expect(mockSyncContact).toHaveBeenCalledWith("singer@example.com");
-    expect(mockEnqueueWelcomeEmail).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      { userId: "user-1", email: "singer@example.com", username: expect.any(String) },
-    );
   });
 
-  it("does not regenerate a username, re-sync, or re-send the welcome email when the profile already has one", async () => {
+  it("never writes a username — setup owns it, so nothing here can clobber the user's choice", async () => {
+    tables.profiles = [{ data: { username: null }, error: null }];
+    await POST(req({}));
+    expect(upserts).toHaveLength(0);
+  });
+
+  it("does not send the welcome email — that happens on profile save, with the chosen name", async () => {
+    tables.profiles = [{ data: { username: null }, error: null }];
+    await POST(req({}));
+    expect(mockEnqueueWelcomeEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not re-sync when the profile already has a username", async () => {
     tables.profiles = [{ data: { username: "existing" }, error: null }];
     const res = await POST(req({}));
     expect(res.status).toBe(200);
     expect(mockSyncContact).not.toHaveBeenCalled();
-    expect(mockEnqueueWelcomeEmail).not.toHaveBeenCalled();
   });
 
   it("links an invite token and returns its jam ID regardless of profile state", async () => {

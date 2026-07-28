@@ -1,47 +1,40 @@
-export function WelcomeEmail({ username }: { username: string }) {
-  return (
-    <div style={{ fontFamily: "sans-serif", maxWidth: 480, margin: "0 auto", color: "#18181b" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Welcome to SingJam</h1>
-      <p style={{ fontSize: 15, lineHeight: 1.6, color: "#52525b" }}>
-        Hi {username}, you're in. Start by adding songs to your repertoire so we can find you musicians to jam with.
-      </p>
-      <a
-        href="https://singjam.org/search"
-        style={{
-          display: "inline-block",
-          marginTop: 24,
-          backgroundColor: "#f59e0b",
-          color: "#fff",
-          fontWeight: 600,
-          fontSize: 14,
-          padding: "10px 20px",
-          borderRadius: 8,
-          textDecoration: "none",
-        }}
-      >
-        Add songs to your repertoire
-      </a>
-      <p style={{ marginTop: 32, fontSize: 13, color: "#a1a1aa" }}>
-        SingJam · Music. Community. Love.
-      </p>
-    </div>
-  );
-}
+const SHELL_STYLE = "font-family:sans-serif;max-width:480px;margin:0 auto;color:#18181b;padding:32px 16px";
+const BUTTON_STYLE =
+  "display:inline-block;margin-top:24px;background-color:#f59e0b;color:#fff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;text-decoration:none";
+const FOOTER = `<p style="margin-top:32px;font-size:13px;color:#a1a1aa">SingJam · Music. Community. Love.</p>`;
 
-export function welcomeEmailHtml({ username }: { username?: string } = {}) {
-  const greeting = username ? `Hi ${username},` : "You're in.";
+function shell({ heading, body, cta }: { heading: string; body: string; cta: { href: string; label: string } }) {
   return `<!DOCTYPE html>
 <html>
-<body style="font-family:sans-serif;max-width:480px;margin:0 auto;color:#18181b;padding:32px 16px">
-  <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Welcome to SingJam</h1>
+<body style="${SHELL_STYLE}">
+  <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">${heading}</h1>
   <p style="font-size:15px;line-height:1.6;color:#52525b">
-    ${greeting} Start by adding songs to your repertoire so we can find you musicians to jam with.
+    ${body}
   </p>
-  <a href="https://singjam.org/search"
-     style="display:inline-block;margin-top:24px;background-color:#f59e0b;color:#fff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;text-decoration:none">
-    Add songs to your repertoire
-  </a>
-  <p style="margin-top:32px;font-size:13px;color:#a1a1aa">SingJam · Music. Community. Love.</p>
+  <a href="${cta.href}" style="${BUTTON_STYLE}">${cta.label}</a>
+  ${FOOTER}
 </body>
 </html>`;
+}
+
+// Sent once the user saves their profile, so `name` is the first name they
+// chose rather than a system-generated handle.
+export function welcomeEmailHtml({ name }: { name?: string } = {}) {
+  const greeting = name ? `Hi ${name},<br />` : "";
+  return shell({
+    heading: "Welcome to SingJam",
+    body: `${greeting}You're in. Start by adding songs to your repertoire so we can find you musicians to jam with.`,
+    cta: { href: "https://singjam.org/search", label: "Add songs to your repertoire" },
+  });
+}
+
+// Fallback for signups that never finished setup — they have no name to greet,
+// so nudge them back to the profile form instead of welcoming them in.
+export function finishSetupEmailHtml() {
+  return shell({
+    heading: "Finish setting up your SingJam profile",
+    body:
+      "You created a SingJam account but haven't set up your profile yet. It takes a minute — pick a username, tell us what you play, and we'll start matching you with musicians who share your repertoire.",
+    cta: { href: "https://singjam.org/account", label: "Finish your profile" },
+  });
 }
