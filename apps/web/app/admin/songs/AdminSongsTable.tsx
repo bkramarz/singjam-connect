@@ -96,7 +96,10 @@ export default function AdminSongsTable() {
         .order("title")
         .order("id")
         .range(from, to) as any
-    ).then(setSongs, (err: any) => setLoadError(err?.message ?? "Could not load songs"));
+    ).then(setSongs, (err: any) =>
+      // supabase-js stringifies network failures into the message ("TypeError: …")
+      setLoadError(String(err?.message ?? err).replace(/^\w*Error:\s*/, "") || "unknown error")
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
