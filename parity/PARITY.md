@@ -43,11 +43,14 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 |---|---|---|
 | Sort on toolbar | ✅ | Moved out of the filter modal 2026-07-20. |
 | Filters + Year + cascading | ✅ | Same as repertoire. |
-| Result rows (composers/artist/jammers) | ✅ | |
+| Result rows (composers/artist/jammers) | ✅ | Rebuilt 2026-07-28 to reuse `SuggestionCard` (native's web-`SongCard` mirror): bordered card, title + (songwriters) — production/artist (year), genre chips + jammer count. Replaced the old thin `border-b` rows. |
+| Search card + result count | ✅ | Added 2026-07-28 — web's bordered search panel with the "N song(s)" line; scrolls with the list. Previous list-blanking spinner replaced by a "Searching…" label so results stay visible during refetch. |
+| "Hide my songs" | ✅ | Moved 2026-07-28 from a switch inside the filter sheet to a toolbar checkbox next to Sort/Filters, as on web. Shown only when signed in with a non-empty repertoire, and (like web) it no longer counts toward the Filters badge. |
+| Already-in-repertoire state | ✅ | Added 2026-07-28: "✓ In your repertoire" pill + role control (ActionSheet vs web `<select>`), replacing the old static "Added" text — the role can now be changed from this screen, as on web. |
 | Add-song lead gating | ✅ | |
-| Submit a missing song (empty state) | ✅ | |
-| Inline YouTube/Spotify players on rows | ⚠️ | Web embeds; native rows don't (song detail has them). Intentionally skipped — heavy on mobile. |
-| Pagination | ⚠️ | Native loads up to 1000 client-side; web paginates. Fine at current catalog size; revisit for the offline-catalog track. |
+| Submit a missing song | ✅ | 2026-07-28: collapsed "Can't find your song?" panel now sits at the foot of the search results (web keeps its form there), not only in the empty state. |
+| Inline YouTube/Spotify players on rows | ⚠️ | Web embeds inline; native opens the apps instead (intentional — a WebView per row would hurt scrolling). Present on **search** rows only: the ids are derived from media URLs inside `search_songs`/`browse_songs`, so the raw-table catalog fetch used for browse mode can't supply them. Goes away if browse moves onto `browse_songs`. |
+| Pagination | ⚠️ | Native loads the whole catalog client-side; web paginates via `browse_songs`. Fine at current catalog size; revisit for the offline-catalog track (which would also fix the media-links gap above). |
 
 ### Sets
 | Feature | Status | Notes |

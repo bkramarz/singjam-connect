@@ -19,11 +19,20 @@ export type Suggestion = {
   spotify_track_id: string | null;
 };
 
+const CONFIDENCE_LABELS: Record<string, string> = {
+  lead: 'Lead',
+  support: 'Support',
+  learn: 'Learn',
+};
+
 type Props = {
   song: Suggestion;
   canLead: boolean;
   onAdd: (confidence: string) => void;
   onView: () => void;
+  // Set when the song is already in the user's repertoire: the Add button is
+  // replaced by web's "✓ In your repertoire" pill plus a role control.
+  confidence?: string | null;
 };
 
 // Mirrors web's SongCard: title + (songwriters) — production/artist (year),
@@ -31,24 +40,25 @@ type Props = {
 // YouTube and Spotify players inline; here they open the apps instead, since a
 // WebView per row would hurt list scrolling and Spotify only plays full tracks
 // in its own app. Spacing is tighter than web's so more songs fit a phone.
-export default function SuggestionCard({ song, canLead, onAdd, onView }: Props) {
+export default function SuggestionCard({ song, canLead, onAdd, onView, confidence }: Props) {
   function handleAddTap() {
     const leadLabel = canLead ? 'Lead' : 'Lead (singers only)';
     const options = [leadLabel, 'Support', 'Learn', 'Cancel'];
     const values = ['lead', 'support', 'learn'];
+    const title = confidence ? song.title : `Add "${song.title}" as…`;
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
           cancelButtonIndex: 3,
-          title: `Add "${song.title}" as…`,
+          title,
           disabledButtonIndices: canLead ? [] : [0],
         },
         (index) => { if (index < 3) onAdd(values[index]); }
       );
     } else {
-      Alert.alert('Add as…', song.title, [
+      Alert.alert(confidence ? 'Role' : 'Add as…', song.title, [
         ...(canLead ? [{ text: 'Lead', onPress: () => onAdd('lead') }] : []),
         { text: 'Support', onPress: () => onAdd('support') },
         { text: 'Learn', onPress: () => onAdd('learn') },
@@ -65,6 +75,7 @@ export default function SuggestionCard({ song, canLead, onAdd, onView }: Props) 
     ? formatComposers(song.composers, song.cultures)
     : null;
   const genres = [...song.genres].sort();
+  const isLead = confidence === 'lead';
 
   return (
     <View className="mx-4 mb-2 rounded-2xl border border-zinc-200 bg-white p-4">
@@ -124,9 +135,28 @@ export default function SuggestionCard({ song, canLead, onAdd, onView }: Props) 
       )}
 
       <View className="mt-3 flex-row flex-wrap items-center" style={{ gap: 6 }}>
-        <TouchableOpacity onPress={handleAddTap} className="rounded-xl bg-indigo-500 px-3 py-1.5">
-          <Text className="text-sm font-medium text-white">+ Add to repertoire</Text>
-        </TouchableOpacity>
+        {confidence ? (
+          <>
+            <View className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1.5">
+              <Text className="text-sm text-amber-700">✓ In your repertoire</Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleAddTap}
+              className={`flex-row items-center rounded-xl border px-2.5 py-1.5 ${
+                isLead ? 'border-amber-400 bg-amber-100' : 'border-zinc-200 bg-white'
+              }`}
+            >
+              <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-slate-700'}`}>
+                {CONFIDENCE_LABELS[confidence] ?? 'Learn'}
+              </Text>
+              <Ionicons name="chevron-down" size={12} color={isLead ? '#92400e' : '#71717a'} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity onPress={handleAddTap} className="rounded-xl bg-indigo-500 px-3 py-1.5">
+            <Text className="text-sm font-medium text-white">+ Add to repertoire</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={onView} className="rounded-xl border border-zinc-200 px-3 py-1.5">
           <Text className="text-sm text-zinc-600">View</Text>
         </TouchableOpacity>

@@ -1,20 +1,25 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  ActivityIndicator, ActionSheetIOS, Alert, Platform,
+  ActionSheetIOS, Alert, Platform,
   KeyboardAvoidingView, Modal, ScrollView,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchAllRows, formatComposers, songMatchesFilters, deriveFilterOptions, countActiveFilters as countExtendedFilters } from '@singjam/core';
+import { fetchAllRows, songMatchesFilters, deriveFilterOptions, countActiveFilters } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
+import SuggestionCard from '@/components/SuggestionCard';
 
+// A superset of SuggestionCard's `Suggestion`, so catalog rows render in the
+// same card web uses while still carrying the fields the filters need.
 type SongMeta = {
   song_id: string;
   title: string;
   display_artist: string | null;
+  first_line: string | null;
+  slug: string | null;
   composers: string[];
   productions: string[];
   popularity: number;
@@ -26,6 +31,8 @@ type SongMeta = {
   tonality: string | null;
   meter: string | null;
   year: number | null;
+  youtube_id: string | null;
+  spotify_track_id: string | null;
 };
 
 type SortBy = 'popularity' | 'title_asc' | 'title_desc';
@@ -36,11 +43,15 @@ const SORT_OPTIONS: { key: SortBy; label: string }[] = [
   { key: 'title_desc', label: 'Z → A' },
 ];
 
-function SkeletonRow() {
+function SkeletonCard() {
   return (
-    <View className="px-4 py-3 border-b border-slate-100">
+    <View className="mx-4 mb-2 rounded-2xl border border-zinc-200 bg-white p-4">
       <View className="h-4 bg-slate-200 rounded w-2/3 mb-2" />
-      <View className="h-3 bg-slate-100 rounded w-1/3" />
+      <View className="h-3 bg-slate-100 rounded w-1/2 mb-3" />
+      <View className="flex-row" style={{ gap: 6 }}>
+        <View className="h-8 w-36 bg-slate-100 rounded-xl" />
+        <View className="h-8 w-16 bg-slate-100 rounded-xl" />
+      </View>
     </View>
   );
 }
@@ -68,7 +79,6 @@ function SectionHeader({ title }: { title: string }) {
 
 type Filters = {
   sortBy: SortBy;
-  hideMySongs: boolean;
   genres: Set<string>;
   cultures: Set<string>;
   languages: Set<string>;
@@ -80,12 +90,9 @@ type Filters = {
   yearMax: string;
 };
 
-type FilterDim = 'genres' | 'cultures' | 'languages' | 'themes' | 'vibe' | 'tonality' | 'meter' | 'year';
-
 function emptyFilters(): Filters {
   return {
     sortBy: 'popularity',
-    hideMySongs: false,
     genres: new Set(),
     cultures: new Set(),
     languages: new Set(),
@@ -96,10 +103,6 @@ function emptyFilters(): Filters {
     yearMin: '',
     yearMax: '',
   };
-}
-
-function countActiveFilters(f: Filters): number {
-  return (f.hideMySongs ? 1 : 0) + countExtendedFilters(f);
 }
 
 function toggle(set: Set<string>, value: string): Set<string> {
@@ -151,17 +154,6 @@ function FilterModal({
         </View>
 
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
-
-          {/* Hide my songs */}
-          <TouchableOpacity
-            onPress={() => set({ hideMySongs: !filters.hideMySongs })}
-            className="flex-row items-center justify-between py-3 border-b border-slate-100 mb-2"
-          >
-            <Text className="text-slate-900 font-medium">Hide my songs</Text>
-            <View className={`w-11 h-6 rounded-full ${filters.hideMySongs ? 'bg-amber-500' : 'bg-slate-200'} items-center justify-center`}>
-              <View className={`w-5 h-5 rounded-full bg-white shadow-sm absolute ${filters.hideMySongs ? 'right-0.5' : 'left-0.5'}`} />
-            </View>
-          </TouchableOpacity>
 
           {/* Genre */}
           {options.genres.length > 0 && (
@@ -283,14 +275,6 @@ function FilterModal({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Applies every active filter, optionally skipping one dimension. Passing an
-// `exclude` dimension is how the filter options cascade: each dimension's option
-// list is derived from the songs that pass all the *other* active filters.
-function matchesFilters(song: SongMeta, f: Filters, myIds: Set<string>, exclude?: FilterDim): boolean {
-  if (f.hideMySongs && myIds.has(song.song_id)) return false;
-  return songMatchesFilters(song, f, exclude);
-}
-
 function applySort(songs: SongMeta[], sortBy: SortBy): SongMeta[] {
   if (sortBy === 'title_asc') return [...songs].sort((a, b) => a.title.localeCompare(b.title));
   if (sortBy === 'title_desc') return [...songs].sort((a, b) => b.title.localeCompare(a.title));
@@ -333,17 +317,17 @@ export default function SongLibraryScreen() {
   const [query, setQuery] = useState('');
   const [allSongs, setAllSongs] = useState<SongMeta[]>([]);
   const [searchResults, setSearchResults] = useState<SongMeta[]>([]);
-  const [myIds, setMyIds] = useState<Set<string>>(new Set());
+  const [myConfidence, setMyConfidence] = useState<Map<string, string>>(new Map());
   const [loadingAll, setLoadingAll] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
   const canLead = !!singingVoice && singingVoice !== 'none';
   const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const [hideMySongs, setHideMySongs] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const metaMap = useRef<Map<string, SongMeta>>(new Map());
 
   useEffect(() => {
     async function init() {
@@ -354,14 +338,14 @@ export default function SongLibraryScreen() {
         fetchCatalog(),
         supabase.rpc('song_popularity_counts'),
         user
-          ? supabase.from('user_songs').select('song_id').eq('user_id', user.id)
+          ? supabase.from('user_songs').select('song_id, confidence').eq('user_id', user.id)
           : Promise.resolve({ data: null }),
         user
           ? supabase.from('profiles').select('singing_voice').eq('id', user.id).single()
           : Promise.resolve({ data: null }),
       ]);
 
-      setMyIds(new Set((myRes.data ?? []).map((r: any) => r.song_id)));
+      setMyConfidence(new Map(((myRes.data ?? []) as any[]).map(r => [r.song_id, r.confidence ?? 'learn'])));
       setSingingVoice((profileRes.data as any)?.singing_voice ?? null);
 
       const countMap = new Map<string, number>(
@@ -373,6 +357,13 @@ export default function SongLibraryScreen() {
         song_id: s.song_id,
         title: s.title ?? '',
         display_artist: s.display_artist ?? null,
+        // The card renders neither of these, and the media ids are derived from
+        // media URLs inside the search_songs / browse_songs RPCs, so a raw catalog
+        // select can't supply them — only search results carry media links.
+        first_line: null,
+        slug: null,
+        youtube_id: null,
+        spotify_track_id: null,
         composers: (s.song_composers ?? []).map((x: any) => x.people?.name).filter(Boolean),
         productions: (s.song_productions ?? []).map((x: any) => x.productions?.name).filter(Boolean),
         popularity: countMap.get(s.song_id) ?? 0,
@@ -386,51 +377,53 @@ export default function SongLibraryScreen() {
         year: s.year ?? null,
       }));
 
-      metaMap.current = new Map(songs.map(s => [s.song_id, s]));
       setAllSongs(songs);
       setLoadingAll(false);
     }
     init().catch(() => setLoadingAll(false));
   }, []);
 
-  // Search via RPC, then merge with metaMap for filter fields
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const q = query.trim();
-    if (!q) { setSearchResults([]); return; }
-    setSearching(true);
+    if (!q) { setSearchResults([]); setSearchLoading(false); return; }
+    setSearchLoading(true);
+    setSubmitOpen(false);
     timer.current = setTimeout(async () => {
+      // search_songs returns every field SongMeta needs, including the media ids
+      // the raw catalog can't derive — so results come straight from the RPC.
       const { data } = await supabase.rpc('search_songs', { q, limit_n: 100 });
-      const rows: SongMeta[] = ((data ?? []) as any[]).map(r => {
-        const meta = metaMap.current.get(r.song_id);
-        return meta ?? {
-          song_id: r.song_id,
-          title: r.title,
-          display_artist: r.display_artist ?? null,
-          composers: r.composers ?? [],
-          productions: r.productions ?? [],
-          popularity: r.popularity ?? 0,
-          genres: r.genres ?? [],
-          cultures: r.cultures ?? [],
-          languages: r.languages ?? [],
-          themes: r.themes ?? [],
-          vibe: r.vibe ?? null,
-          tonality: r.tonality ?? null,
-          meter: r.meter ?? null,
-          year: r.year ?? null,
-        };
-      });
+      const rows: SongMeta[] = ((data ?? []) as any[]).map(r => ({
+        song_id: r.song_id,
+        title: r.title ?? '',
+        display_artist: r.display_artist ?? null,
+        first_line: r.first_line ?? null,
+        slug: r.slug ?? null,
+        youtube_id: r.youtube_id ?? null,
+        spotify_track_id: r.spotify_track_id ?? null,
+        composers: r.composers ?? [],
+        productions: r.productions ?? [],
+        popularity: Number(r.popularity ?? 0),
+        genres: r.genres ?? [],
+        cultures: r.cultures ?? [],
+        languages: r.languages ?? [],
+        themes: r.themes ?? [],
+        vibe: r.vibe ?? null,
+        tonality: r.tonality ?? null,
+        meter: r.meter ?? null,
+        year: r.year ?? null,
+      }));
       setSearchResults(rows);
-      setSearching(false);
+      setSearchLoading(false);
     }, 250);
   }, [query]);
 
   // Derive each filter dimension's options from songs passing the OTHER active
   // filters, so choosing one facet narrows the rest (cascading, like web).
   const options = useMemo(() => {
-    const pool = filters.hideMySongs ? allSongs.filter(s => !myIds.has(s.song_id)) : allSongs;
+    const pool = hideMySongs ? allSongs.filter(s => !myConfidence.has(s.song_id)) : allSongs;
     return deriveFilterOptions(pool, filters);
-  }, [allSongs, filters, myIds]);
+  }, [allSongs, filters, hideMySongs, myConfidence]);
 
   const yearBounds = useMemo(() => {
     const years = allSongs.map(s => s.year).filter((y): y is number => y != null);
@@ -439,94 +432,134 @@ export default function SongLibraryScreen() {
 
   const displayedSongs = useMemo(() => {
     const base = query.trim() ? searchResults : allSongs;
-    const filtered = base.filter(s => matchesFilters(s, filters, myIds));
+    const filtered = base.filter(s =>
+      (!hideMySongs || !myConfidence.has(s.song_id)) && songMatchesFilters(s, filters)
+    );
     return applySort(filtered, filters.sortBy);
-  }, [query, allSongs, searchResults, filters, myIds]);
+  }, [query, allSongs, searchResults, filters, hideMySongs, myConfidence]);
 
+  // Adding and changing the role are the same upsert, exactly as on web.
   async function addSong(song: SongMeta, confidence: string) {
     if (!userId) { router.push('/(auth)/sign-in' as any); return; }
-    setPendingId(song.song_id);
+    const previous = myConfidence;
+    setMyConfidence(prev => new Map(prev).set(song.song_id, confidence));
     const { error } = await supabase.from('user_songs').upsert(
       { user_id: userId, song_id: song.song_id, confidence, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,song_id' }
     );
-    setPendingId(null);
-    if (error) { Alert.alert('Error', error.message); return; }
-    setMyIds(prev => new Set([...prev, song.song_id]));
-  }
-
-  function handleAdd(song: SongMeta) {
-    const values = ['lead', 'support', 'learn'];
-    // "Lead" is gated on the user being a singer, same rule as the repertoire cards.
-    if (Platform.OS === 'ios') {
-      const leadLabel = canLead ? 'Lead' : 'Lead (singers only)';
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: [leadLabel, 'Support', 'Learn', 'Cancel'],
-          cancelButtonIndex: 3,
-          title: `Add "${song.title}" as…`,
-          disabledButtonIndices: canLead ? [] : [0],
-        },
-        index => { if (index < 3) addSong(song, values[index]); }
-      );
-    } else {
-      Alert.alert('Add as…', song.title, [
-        ...(canLead ? [{ text: 'Lead', onPress: () => addSong(song, 'lead') }] : []),
-        { text: 'Support', onPress: () => addSong(song, 'support') },
-        { text: 'Learn', onPress: () => addSong(song, 'learn') },
-        { text: 'Cancel', style: 'cancel' as const },
-      ]);
+    if (error) {
+      Alert.alert('Error', error.message);
+      setMyConfidence(previous);
     }
   }
 
-  const renderItem = useCallback(({ item }: { item: SongMeta }) => {
-    const added = myIds.has(item.song_id);
-    const pending = pendingId === item.song_id;
-    const composersLabel = item.composers.length > 0
-      ? formatComposers(item.composers, item.cultures)
-      : null;
-    return (
-      <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
-        <TouchableOpacity
-          className="flex-1 mr-3"
-          onPress={() => router.push(`/song/${item.song_id}` as any)}
-          activeOpacity={0.6}
-        >
-          <Text numberOfLines={2}>
-            <Text className="text-slate-900 font-medium">{item.title}</Text>
-            {composersLabel ? <Text className="text-slate-400"> ({composersLabel})</Text> : null}
-          </Text>
-          <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>
-            {item.productions.length > 0 ? (
-              <>from <Text className="italic">{item.productions.join(', ')}</Text></>
-            ) : (
-              item.display_artist ?? '—'
-            )}
-          </Text>
-          {item.popularity > 0 && (
-            <Text className="text-xs text-zinc-400 mt-0.5">
-              {item.popularity} {item.popularity === 1 ? 'jammer' : 'jammers'}
-            </Text>
-          )}
-        </TouchableOpacity>
-        {added ? (
-          <Text className="text-slate-400 text-sm">Added</Text>
-        ) : pending ? (
-          <ActivityIndicator size="small" color="#d97706" />
-        ) : (
-          <TouchableOpacity
-            onPress={() => handleAdd(item)}
-            className="bg-amber-500 rounded-full px-3 py-1"
-          >
-            <Text className="text-white text-sm font-medium">Add</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }, [myIds, pendingId, canLead]);
+  const renderItem = useCallback(({ item }: { item: SongMeta }) => (
+    <SuggestionCard
+      song={item}
+      canLead={canLead}
+      confidence={myConfidence.get(item.song_id) ?? null}
+      onAdd={(confidence) => addSong(item, confidence)}
+      onView={() => router.push(`/song/${item.song_id}` as any)}
+    />
+  ), [myConfidence, canLead, userId]);
 
   const activeFilterCount = countActiveFilters(filters);
   const sortLabel = SORT_OPTIONS.find(o => o.key === filters.sortBy)?.label ?? 'Popular';
+  const searching = query.trim().length > 0;
+
+  const listHeader = (
+    <View>
+      {/* Search card — mirrors web's bordered search panel */}
+      <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+        <View className="flex-row items-center rounded-xl border border-zinc-200 px-3 py-2">
+          <Ionicons name="search" size={16} color="#94a3b8" />
+          <TextInput
+            className="flex-1 text-slate-900 ml-2"
+            placeholder="Search by title, first line, recording artist, or composer"
+            placeholderTextColor="#94a3b8"
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close" size={16} color="#94a3b8" />
+            </TouchableOpacity>
+          )}
+        </View>
+        {searching && (
+          <Text className="text-xs text-zinc-500 mt-2">
+            {searchLoading ? 'Searching…' : `${displayedSongs.length} song(s)`}
+          </Text>
+        )}
+      </View>
+
+      {/* Sort / filters / hide-my-songs, then the catalog total — web's order */}
+      <View className="mx-4 mt-3 flex-row items-center px-1" style={{ gap: 8 }}>
+        <TouchableOpacity
+          onPress={() => showOptionsSheet('Sort', SORT_OPTIONS.map(o => o.label), (index) => setFilters(f => ({ ...f, sortBy: SORT_OPTIONS[index].key })))}
+          className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
+        >
+          <Ionicons name="chevron-down" size={11} color="#71717a" />
+          <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setFilterModalVisible(true)}
+          className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${
+            activeFilterCount > 0 ? 'border-amber-400 bg-amber-50' : 'border-zinc-200'
+          }`}
+        >
+          <Ionicons name="filter" size={12} color={activeFilterCount > 0 ? '#b45309' : '#71717a'} />
+          <Text className={`text-xs font-medium ${activeFilterCount > 0 ? 'text-amber-700' : 'text-zinc-500'}`}>
+            Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+          </Text>
+        </TouchableOpacity>
+        {userId && myConfidence.size > 0 && (
+          <TouchableOpacity
+            onPress={() => setHideMySongs(v => !v)}
+            className="h-7 flex-row items-center gap-1.5 rounded-lg border border-zinc-200 px-3"
+          >
+            <Ionicons
+              name={hideMySongs ? 'checkbox' : 'square-outline'}
+              size={13}
+              color={hideMySongs ? '#d97706' : '#d4d4d8'}
+            />
+            <Text className="text-xs font-medium text-zinc-500">Hide my songs</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {!searching && (
+        <Text className="mx-4 mt-2 mb-2 px-1 text-xs font-medium text-zinc-400 uppercase tracking-wide">
+          {displayedSongs.length} {displayedSongs.length === 1 ? 'song' : 'songs'}
+        </Text>
+      )}
+      {searching && <View className="h-3" />}
+    </View>
+  );
+
+  // Web keeps its submit-a-song form at the foot of the list; collapsed here
+  // because the expanded form is a lot of vertical space for a rare action.
+  const listFooter = searching && !searchLoading ? (
+    <View className="mx-4 mt-2">
+      {submitOpen ? (
+        <SubmitMissingSong
+          defaultTitle={query.trim()}
+          onCreated={(songId) => router.push(`/song/${songId}` as any)}
+        />
+      ) : (
+        <View className="items-center rounded-2xl border border-dashed border-zinc-300 px-4 py-5">
+          <Text className="text-sm text-zinc-500">Can't find your song?</Text>
+          <TouchableOpacity
+            onPress={() => setSubmitOpen(true)}
+            className="mt-3 rounded-xl bg-zinc-800 px-4 py-2.5"
+          >
+            <Text className="text-sm font-semibold text-white">Add a missing song</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  ) : null;
 
   return (
     <>
@@ -539,71 +572,12 @@ export default function SongLibraryScreen() {
         onChange={setFilters}
         onClose={() => setFilterModalVisible(false)}
       />
-      <ContentContainer style={{ backgroundColor: 'white' }}>
-      <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-
-        {/* Search row */}
-        <View className="px-4 py-3 border-b border-slate-100">
-          <View className="flex-1 flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-            <Text className="text-slate-400 mr-2">🔍</Text>
-            <TextInput
-              className="flex-1 text-slate-900"
-              placeholder="Search by title, artist, or composer…"
-              placeholderTextColor="#94a3b8"
-              value={query}
-              onChangeText={setQuery}
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery('')}>
-                <Text className="text-slate-400 ml-2">✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* Count / sort / filters toolbar */}
-        {!loadingAll && (
-          <View className="mx-4 my-3 flex-row items-center justify-between">
-            <Text className="text-xs font-medium text-zinc-400 uppercase tracking-wide px-1">
-              {query.trim()
-                ? searching ? 'Searching…' : `${displayedSongs.length} result${displayedSongs.length === 1 ? '' : 's'}`
-                : `${displayedSongs.length} songs`}
-            </Text>
-            <View className="flex-row items-center gap-2">
-              <TouchableOpacity
-                onPress={() => showOptionsSheet('Sort', SORT_OPTIONS.map(o => o.label), (index) => setFilters(f => ({ ...f, sortBy: SORT_OPTIONS[index].key })))}
-                className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
-              >
-                <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
-                <Ionicons name="chevron-down" size={11} color="#71717a" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setFilterModalVisible(true)}
-                className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${
-                  activeFilterCount > 0 ? 'border-amber-400 bg-amber-50' : 'border-zinc-200'
-                }`}
-              >
-                <Ionicons name="filter" size={12} color={activeFilterCount > 0 ? '#b45309' : '#71717a'} />
-                <Text className={`text-xs font-medium ${activeFilterCount > 0 ? 'text-amber-700' : 'text-zinc-500'}`}>
-                  Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
+      <ContentContainer style={{ backgroundColor: '#f8fafc' }}>
+      <KeyboardAvoidingView className="flex-1 bg-slate-50" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {loadingAll ? (
-          <FlatList
-            data={Array(10).fill(null)}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={() => <SkeletonRow />}
-            scrollEnabled={false}
-          />
-        ) : searching ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator color="#d97706" />
+          <View className="pt-4">
+            <View className="mx-4 h-20 rounded-2xl border border-zinc-200 bg-white mb-3" />
+            {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
           </View>
         ) : (
           <FlatList
@@ -611,23 +585,26 @@ export default function SongLibraryScreen() {
             keyExtractor={item => item.song_id}
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={listHeader}
+            ListFooterComponent={listFooter}
+            contentContainerStyle={{ paddingBottom: 32 }}
             ListEmptyComponent={
-              <View className="pt-16">
-                <Text className="text-slate-400 text-center">
-                  {query.trim() ? 'No songs match your search' : 'No songs match these filters'}
-                </Text>
-                {activeFilterCount > 0 && (
-                  <TouchableOpacity onPress={() => setFilters(emptyFilters())} className="mt-3 items-center">
-                    <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
-                  </TouchableOpacity>
-                )}
-                {query.trim().length > 0 && activeFilterCount === 0 && (
-                  <SubmitMissingSong
-                    defaultTitle={query.trim()}
-                    onCreated={(songId) => router.push(`/song/${songId}` as any)}
-                  />
-                )}
-              </View>
+              searchLoading ? null : (
+                <View className="mx-4 rounded-2xl border border-zinc-200 bg-white p-5">
+                  <Text className="text-sm text-zinc-600">
+                    {!searching
+                      ? 'No songs match the selected filters.'
+                      : searchResults.length > 0
+                        ? 'No results match the active filters.'
+                        : 'No songs found.'}
+                  </Text>
+                  {activeFilterCount > 0 && (
+                    <TouchableOpacity onPress={() => setFilters(emptyFilters())} className="mt-3">
+                      <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )
             }
           />
         )}
