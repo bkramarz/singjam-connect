@@ -150,78 +150,92 @@ function SetCard({ set, onPress, onMenu, onCopy, onOwnerPress, busy }: {
   const showChevron = !set.isOwner && !set.canCopy;
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      className="mx-4 mb-3 flex-row items-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
-    >
-      <View className="flex-1 min-w-0 p-4">
-        <View className="flex-row items-center mb-0.5" style={{ gap: 8 }}>
-          {set.isOwner ? (
-            <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Owner</Text>
-          ) : set.ownerName ? (
-            // Nested TouchableOpacity (not Text onPress) so the owner tap wins the
-            // touch responder over the card itself, as web's nested button does.
-            <View className="flex-row items-center flex-1 min-w-0">
-              <Text className="text-xs text-slate-400">by </Text>
-              <TouchableOpacity
-                onPress={onOwnerPress}
-                disabled={!onOwnerPress}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                className="flex-1 min-w-0"
-              >
-                <Text className="text-xs font-medium text-slate-500" numberOfLines={1}>
-                  {set.ownerName}
-                  {set.ownerUsername && set.ownerName !== set.ownerUsername
-                    ? <Text className="font-normal text-slate-400"> @{set.ownerUsername}</Text>
-                    : null}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text className="text-xs font-semibold uppercase tracking-wide text-sky-600">Collaborator</Text>
-          )}
-          {badge ? (
-            <View className={`rounded-full px-2 py-0.5 ${badge.bg}`}>
-              <Text className={`text-[10px] font-medium ${badge.text}`}>{badge.label}</Text>
-            </View>
+    <View className="mx-4 mb-3 relative">
+      <TouchableOpacity
+        onPress={onPress}
+        className="flex-row items-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+      >
+        <View className="flex-1 min-w-0 p-4">
+          <View className="flex-row items-center mb-0.5" style={{ gap: 8 }}>
+            {set.isOwner ? (
+              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Owner</Text>
+            ) : set.ownerName ? (
+              // Nested TouchableOpacity (not Text onPress) so the owner tap wins the
+              // touch responder over the card itself, as web's nested button does.
+              <View className="flex-row items-center flex-1 min-w-0">
+                <Text className="text-xs text-slate-400">by </Text>
+                <TouchableOpacity
+                  onPress={onOwnerPress}
+                  disabled={!onOwnerPress}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  className="flex-1 min-w-0"
+                >
+                  <Text className="text-xs font-medium text-slate-500" numberOfLines={1}>
+                    {set.ownerName}
+                    {set.ownerUsername && set.ownerName !== set.ownerUsername
+                      ? <Text className="font-normal text-slate-400"> @{set.ownerUsername}</Text>
+                      : null}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text className="text-xs font-semibold uppercase tracking-wide text-sky-600">Collaborator</Text>
+            )}
+            {badge ? (
+              <View className={`rounded-full px-2 py-0.5 ${badge.bg}`}>
+                <Text className={`text-[10px] font-medium ${badge.text}`}>{badge.label}</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text className="font-semibold text-slate-900" numberOfLines={1}>{set.name}</Text>
+          {set.description ? (
+            <Text className="text-sm text-slate-500 mt-0.5" numberOfLines={1}>{set.description}</Text>
           ) : null}
         </View>
-        <Text className="font-semibold text-slate-900" numberOfLines={1}>{set.name}</Text>
-        {set.description ? (
-          <Text className="text-sm text-slate-500 mt-0.5" numberOfLines={1}>{set.description}</Text>
-        ) : null}
-      </View>
 
+        {onCopy ? (
+          <View className="pr-3">
+            {busy ? (
+              <ActivityIndicator size="small" color="#94a3b8" />
+            ) : (
+              <TouchableOpacity
+                onPress={onCopy}
+                className="rounded-lg border border-slate-200 px-3 py-1.5"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text className="text-xs font-medium text-slate-600">Copy</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : showChevron ? (
+          <View className="pr-4">
+            <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+          </View>
+        ) : null}
+      </TouchableOpacity>
+
+      {/* Overlaid on the card's top-right corner rather than laid out in the row,
+          mirroring web SetCard — there the menu must sit outside the wrapping
+          <Link> so its dropdown can anchor to the card. */}
       {onMenu ? (
-        <View className="pr-4">
+        <View className="absolute top-2 right-2">
           {busy ? (
-            <ActivityIndicator size="small" color="#94a3b8" />
+            <View className="rounded-lg bg-white p-1">
+              <ActivityIndicator size="small" color="#94a3b8" />
+            </View>
           ) : (
-            <TouchableOpacity onPress={onMenu} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityLabel="More options">
+            <TouchableOpacity
+              onPress={onMenu}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              className="rounded-lg bg-white p-1"
+              accessibilityLabel="More options"
+            >
               <Ionicons name="ellipsis-horizontal" size={16} color="#94a3b8" />
             </TouchableOpacity>
           )}
         </View>
-      ) : onCopy ? (
-        <View className="pr-3">
-          {busy ? (
-            <ActivityIndicator size="small" color="#94a3b8" />
-          ) : (
-            <TouchableOpacity
-              onPress={onCopy}
-              className="rounded-lg border border-slate-200 px-3 py-1.5"
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Text className="text-xs font-medium text-slate-600">Copy</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : showChevron ? (
-        <View className="pr-4">
-          <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
-        </View>
       ) : null}
-    </TouchableOpacity>
+    </View>
   );
 }
 
