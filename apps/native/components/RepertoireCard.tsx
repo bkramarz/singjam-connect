@@ -1,6 +1,8 @@
-import { View, Text, TouchableOpacity, Alert, ActionSheetIOS, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatComposers } from '@singjam/core';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 
 const CONFIDENCE_LEVELS = [
   { key: 'lead', label: 'Lead' },
@@ -38,29 +40,16 @@ export default function RepertoireCard({
   song, selected, canLead, isLast,
   onToggleSelect, onConfidenceChange, onAddToSet, onView, onRemove,
 }: Props) {
-  function handleConfidenceTap() {
-    const leadLabel = canLead ? 'Lead' : 'Lead (singers only)';
-    const options = [leadLabel, 'Support', 'Learn', 'Cancel'];
-    const values = ['lead', 'support', 'learn'];
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: 3,
-          title: song.title,
-          disabledButtonIndices: canLead ? [] : [0],
-        },
-        (index) => { if (index < 3) onConfidenceChange(values[index]); }
-      );
-    } else {
-      Alert.alert('Role', song.title, [
-        ...(canLead ? [{ text: 'Lead', onPress: () => onConfidenceChange('lead') }] : []),
-        { text: 'Support', onPress: () => onConfidenceChange('support') },
-        { text: 'Learn', onPress: () => onConfidenceChange('learn') },
-        { text: 'Cancel', style: 'cancel' as const },
-      ]);
-    }
+  function handleConfidenceTap(event: GestureResponderEvent) {
+    showOptionsSheet({
+      title: song.title,
+      anchor: anchorFrom(event),
+      options: [
+        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => onConfidenceChange('lead') },
+        { label: 'Support', onPress: () => onConfidenceChange('support') },
+        { label: 'Learn', onPress: () => onConfidenceChange('learn') },
+      ],
+    });
   }
 
   function handleRemoveTap() {

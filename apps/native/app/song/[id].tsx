@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Linking, Alert, ActionSheetIOS, Platform, Image,
+  Linking, Alert, Image,
 } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { supabase } from '@/lib/supabase';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import AddToSetModal from '@/components/AddToSetModal';
 import ContentContainer from '@/components/ContentContainer';
 
@@ -306,13 +308,11 @@ export default function SongDetailScreen() {
     setLoading(false);
   }
 
-  async function handleAddToRepertoire() {
+  async function handleAddToRepertoire(event: GestureResponderEvent) {
     if (!song) return;
     if (!myUserId) { router.push('/(auth)/sign-in' as any); return; }
     const songId = song.id;
     const uid = myUserId;
-    const options = ['Lead', 'Support', 'Learn', 'Cancel'];
-    const values = ['lead', 'support', 'learn'];
 
     function upsert(confidence: string) {
       supabase.from('user_songs')
@@ -323,28 +323,22 @@ export default function SongDetailScreen() {
         });
     }
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 3, title: 'Add to repertoire' },
-        (i) => { if (i < 3) upsert(values[i]); }
-      );
-    } else {
-      Alert.alert('Add to repertoire', undefined, [
-        { text: 'Lead', onPress: () => upsert('lead') },
-        { text: 'Support', onPress: () => upsert('support') },
-        { text: 'Learn', onPress: () => upsert('learn') },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    showOptionsSheet({
+      title: 'Add to repertoire',
+      anchor: anchorFrom(event),
+      options: [
+        { label: 'Lead', onPress: () => upsert('lead') },
+        { label: 'Support', onPress: () => upsert('support') },
+        { label: 'Learn', onPress: () => upsert('learn') },
+      ],
+    });
   }
 
-  async function handleChangeConfidence() {
+  async function handleChangeConfidence(event: GestureResponderEvent) {
     if (!myUserId || !song) return;
     const songId = song.id;
     const songTitle = song.title;
     const uid = myUserId;
-    const options = ['Lead', 'Support', 'Learn', 'Remove from repertoire', 'Cancel'];
-    const values = ['lead', 'support', 'learn'];
 
     function update(confidence: string) {
       supabase.from('user_songs')
@@ -372,23 +366,16 @@ export default function SongDetailScreen() {
       ]);
     }
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 4, destructiveButtonIndex: 3, title: song.title },
-        (i) => {
-          if (i < 3) update(values[i]);
-          else if (i === 3) remove();
-        }
-      );
-    } else {
-      Alert.alert('Change role', song.title, [
-        { text: 'Lead', onPress: () => update('lead') },
-        { text: 'Support', onPress: () => update('support') },
-        { text: 'Learn', onPress: () => update('learn') },
-        { text: 'Remove', style: 'destructive', onPress: remove },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    showOptionsSheet({
+      title: song.title,
+      anchor: anchorFrom(event),
+      options: [
+        { label: 'Lead', onPress: () => update('lead') },
+        { label: 'Support', onPress: () => update('support') },
+        { label: 'Learn', onPress: () => update('learn') },
+        { label: 'Remove from repertoire', destructive: true, onPress: remove },
+      ],
+    });
   }
 
   if (loading) {

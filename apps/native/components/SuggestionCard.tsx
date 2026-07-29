@@ -1,6 +1,8 @@
-import { View, Text, TouchableOpacity, Alert, ActionSheetIOS, Platform, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Linking } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { formatComposers } from '@singjam/core';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 
 export type Suggestion = {
   song_id: string;
@@ -41,30 +43,16 @@ type Props = {
 // WebView per row would hurt list scrolling and Spotify only plays full tracks
 // in its own app. Spacing is tighter than web's so more songs fit a phone.
 export default function SuggestionCard({ song, canLead, onAdd, onView, confidence }: Props) {
-  function handleAddTap() {
-    const leadLabel = canLead ? 'Lead' : 'Lead (singers only)';
-    const options = [leadLabel, 'Support', 'Learn', 'Cancel'];
-    const values = ['lead', 'support', 'learn'];
-    const title = confidence ? song.title : `Add "${song.title}" as…`;
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: 3,
-          title,
-          disabledButtonIndices: canLead ? [] : [0],
-        },
-        (index) => { if (index < 3) onAdd(values[index]); }
-      );
-    } else {
-      Alert.alert(confidence ? 'Role' : 'Add as…', song.title, [
-        ...(canLead ? [{ text: 'Lead', onPress: () => onAdd('lead') }] : []),
-        { text: 'Support', onPress: () => onAdd('support') },
-        { text: 'Learn', onPress: () => onAdd('learn') },
-        { text: 'Cancel', style: 'cancel' as const },
-      ]);
-    }
+  function handleAddTap(event: GestureResponderEvent) {
+    showOptionsSheet({
+      title: confidence ? song.title : `Add "${song.title}" as…`,
+      anchor: anchorFrom(event),
+      options: [
+        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => onAdd('lead') },
+        { label: 'Support', onPress: () => onAdd('support') },
+        { label: 'Learn', onPress: () => onAdd('learn') },
+      ],
+    });
   }
 
   function open(url: string) {

@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, RefreshControl,
-  Alert, ActionSheetIOS, Platform, ActivityIndicator,
+  Alert, ActivityIndicator,
 } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import { useAuth } from '@/lib/auth-context';
 import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
@@ -44,7 +46,7 @@ function SkeletonCard() {
 function SetCard({ set, onPress, onMenu, onCopy, busy }: {
   set: SetItem;
   onPress: () => void;
-  onMenu?: () => void;
+  onMenu?: (event: GestureResponderEvent) => void;
   onCopy?: () => void;
   busy?: boolean;
 }) {
@@ -243,22 +245,15 @@ export default function SetsScreen() {
     ]);
   }
 
-  function openSetMenu(set: SetItem) {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Copy set', 'Delete set', 'Cancel'], destructiveButtonIndex: 1, cancelButtonIndex: 2 },
-        (index) => {
-          if (index === 0) copySet(set);
-          if (index === 1) confirmDelete(set);
-        }
-      );
-    } else {
-      Alert.alert(set.name, undefined, [
-        { text: 'Copy set', onPress: () => copySet(set) },
-        { text: 'Delete set', style: 'destructive', onPress: () => confirmDelete(set) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+  function openSetMenu(set: SetItem, event: GestureResponderEvent) {
+    showOptionsSheet({
+      title: set.name,
+      anchor: anchorFrom(event),
+      options: [
+        { label: 'Copy set', onPress: () => copySet(set) },
+        { label: 'Delete set', destructive: true, onPress: () => confirmDelete(set) },
+      ],
+    });
   }
 
   const { session, initialised } = useAuth();
@@ -294,7 +289,7 @@ export default function SetsScreen() {
             <SetCard
               set={item}
               onPress={() => router.push({ pathname: '/set/[id]' as any, params: { id: item.id } })}
-              onMenu={item.isOwner ? () => openSetMenu(item) : undefined}
+              onMenu={item.isOwner ? (e) => openSetMenu(item, e) : undefined}
               onCopy={!item.isOwner && item.link_sharing === 'public' ? () => copySet(item) : undefined}
               busy={busyId === item.id}
             />

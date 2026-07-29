@@ -4,9 +4,11 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
   Modal, FlatList, Image, Alert,
 } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import {
   USERNAME_REGEX, USERNAME_MIN_LENGTH, RESERVED_USERNAMES, normalizeUsername, suggestUsername,
   deriveNeighborhood,
@@ -185,15 +187,15 @@ function LocationModal({
 }
 
 // ── Inline instrument search (featured chips + search + results) ─────────────
-// Instrument selection stays inline; picking one hands the name up so the
-// parent can prompt for a level in a modal.
+// Instrument selection stays inline; picking one hands the name and the press
+// event up so the parent can prompt for a level in an anchored action sheet.
 
 function InstrumentSearch({
   added,
   onSelect,
 }: {
   added: Record<string, string>;
-  onSelect: (name: string) => void;
+  onSelect: (name: string, event: GestureResponderEvent) => void;
 }) {
   const [query, setQuery] = useState('');
   const available = ALL_INSTRUMENTS.filter(i => !added[i]);
@@ -208,7 +210,7 @@ function InstrumentSearch({
           {featured.map(i => (
             <TouchableOpacity
               key={i}
-              onPress={() => onSelect(i)}
+              onPress={(e) => onSelect(i, e)}
               className="border border-slate-200 rounded-xl px-3 py-1.5"
             >
               <Text className="text-sm text-slate-700">+ {i}</Text>
@@ -237,7 +239,7 @@ function InstrumentSearch({
           {filtered.length > 0 ? filtered.map(i => (
             <TouchableOpacity
               key={i}
-              onPress={() => { onSelect(i); setQuery(''); }}
+              onPress={(e) => { onSelect(i, e); setQuery(''); }}
               className="px-3 py-2.5 border-b border-slate-100"
             >
               <Text className="text-slate-900">{i}</Text>
@@ -345,7 +347,6 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
-  const [pendingInstrument, setPendingInstrument] = useState<string | null>(null);
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userId = useRef<string | null>(null);
 
@@ -490,6 +491,19 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
     });
   }
 
+  // Picking a level is the same interaction as picking a confidence level on a
+  // song, so it uses the same native sheet rather than a bespoke bottom sheet.
+  function pickInstrumentLevel(name: string, event: GestureResponderEvent) {
+    showOptionsSheet({
+      title: name,
+      anchor: anchorFrom(event),
+      options: INSTRUMENT_LEVELS.map(level => ({
+        label: level,
+        onPress: () => addInstrument(name, level),
+      })),
+    });
+  }
+
   function addInstrument(name: string, level: InstrumentLevel) {
     setInstruments(prev => ({ ...prev, [name]: level }));
   }
@@ -590,37 +604,6 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
         onClose={() => setLocationModalVisible(false)}
         onSelect={setNeighborhood}
       />
-
-      <Modal
-        visible={pendingInstrument !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setPendingInstrument(null)}
-      >
-        <TouchableOpacity
-          className="flex-1 bg-black/40 justify-end"
-          activeOpacity={1}
-          onPress={() => setPendingInstrument(null)}
-        >
-          <TouchableOpacity activeOpacity={1} className="bg-white rounded-t-2xl px-4 pt-4 pb-8">
-            <Text className="text-base font-semibold text-slate-900 text-center mb-4">
-              {pendingInstrument}
-            </Text>
-            {INSTRUMENT_LEVELS.map(level => (
-              <TouchableOpacity
-                key={level}
-                onPress={() => {
-                  if (pendingInstrument) addInstrument(pendingInstrument, level);
-                  setPendingInstrument(null);
-                }}
-                className="border border-slate-200 rounded-xl px-4 py-3.5 mb-2"
-              >
-                <Text className="font-medium text-slate-900 text-center">{level}</Text>
-              </TouchableOpacity>
-            ))}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
@@ -777,7 +760,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                       .map(([name, level]) => (
                         <View key={name} className="flex-row items-center rounded-full border border-slate-200 bg-slate-100 pl-3 pr-1 py-1">
                           <TouchableOpacity
-                            onPress={() => setPendingInstrument(name)}
+                            onPress={(e) => pickInstrumentLevel(name, e)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             className="flex-row items-center"
                           >
@@ -801,7 +784,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
               {/* Add an instrument */}
               <View className="rounded-xl border border-dashed border-slate-300 p-3">
                 <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Add an instrument</Text>
-                <InstrumentSearch added={instruments} onSelect={setPendingInstrument} />
+                <InstrumentSearch added={instruments} onSelect={pickInstrumentLevel} />
               </View>
             </View>
 
