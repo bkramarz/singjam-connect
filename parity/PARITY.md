@@ -43,11 +43,16 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 |---|---|---|
 | Sort on toolbar | ✅ | Moved out of the filter modal 2026-07-20. |
 | Filters + Year + cascading | ✅ | Same as repertoire. |
-| Result rows (composers/artist/jammers) | ✅ | |
+| Result rows (composers/artist/jammers) | ✅ | Rebuilt 2026-07-28 to reuse `SuggestionCard` (native's web-`SongCard` mirror): bordered card, title + (songwriters) — production/artist (year), genre chips + jammer count. Replaced the old thin `border-b` rows. |
+| Search card + result count | ✅ | Added 2026-07-28 — web's bordered search panel with the "N song(s)" line; scrolls with the list. Previous list-blanking spinner replaced by a "Searching…" label so results stay visible during refetch. |
+| "Hide my songs" | ✅ | Moved 2026-07-28 from a switch inside the filter sheet to a toolbar checkbox next to Sort/Filters, as on web. Shown only when signed in with a non-empty repertoire, and (like web) it no longer counts toward the Filters badge. |
+| Already-in-repertoire state | ✅ | Added 2026-07-28: "✓ In your repertoire" pill + role control (ActionSheet vs web `<select>`), replacing the old static "Added" text — the role can now be changed from this screen, as on web. |
 | Add-song lead gating | ✅ | |
-| Submit a missing song (empty state) | ✅ | |
-| Inline YouTube/Spotify players on rows | ⚠️ | Web embeds; native rows don't (song detail has them). Intentionally skipped — heavy on mobile. |
-| Pagination | ⚠️ | Native loads up to 1000 client-side; web paginates. Fine at current catalog size; revisit for the offline-catalog track. |
+| Submit a missing song | ✅ | 2026-07-28: collapsed "Can't find your song?" panel now sits at the foot of the search results (web keeps its form there), not only in the empty state. |
+| YouTube/Spotify links on rows | ✅ | 2026-07-28: browse rows have them too — native's catalog fetch moved off a raw `songs` select onto the **`browse_songs` RPC web `/search` uses**, which derives the ids from the media URLs in SQL. Web embeds players inline; native opens the apps (intentional — a WebView per row would hurt scrolling). |
+| Catalog data matches web | ✅ | Fixed 2026-07-28 by the same move. The old raw join read `song_composers` only, so it dropped lyricists (web: "My Favorite Things (O. Hammerstein II, R. Rodgers)", native: "(R. Rodgers)"), and used bare `year_written`, so recording-only years were missing. `browse_songs` unions composers+lyricists and takes `least(year_written, min(recording year))` — same rule as `my_repertoire`, which fixed this class of drift on Repertoire in #237. |
+| Pagination | ⚠️ | Native still loads the whole catalog client-side — now 6 parallel `browse_songs` pages, measured ~310-560ms vs the old raw select's 582ms — where web pages incrementally. Fine at current catalog size; revisit for the offline-catalog track. |
+| `song_popularity_counts` RPC | ✅ | No longer called: `browse_songs` returns `popularity`. `songs.tsx` was the **last caller anywhere in the repo**, so the RPC (migration 049) is now unreferenced and safe to drop in a future migration. |
 
 ### Sets
 | Feature | Status | Notes |
@@ -125,7 +130,7 @@ Each is **web-affecting** (core rebuilds web) → batch them.
 - [ ] Song filter matching + **cascading option derivation** (currently duplicated inline in
       `songs.tsx` and `(tabs)/index.tsx`, and separately in web `useSongFilters`). Highest value.
 - [ ] Lead-gating / confidence rules (`canLead = singing_voice && !== 'none'`) — duplicated in
-      `SuggestionCard`, `AddSongModal`, `songs.tsx`, web `ConfidencePicker`.
+      `SuggestionCard`, `RepertoireCard`, `songs.tsx`, web `ConfidencePicker`.
 - [ ] Sort comparators (title asc/desc, popularity+title tiebreak).
 - [ ] Search field-set / normalization used by add-song rows.
 - [ ] Set leader/support participant derivation (who leads/supports a song from explicit

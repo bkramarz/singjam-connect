@@ -1,5 +1,5 @@
-// The shape a repertoire row is rendered from, shared by native's repertoire
-// list and SongRow. The rows themselves come from the `my_repertoire()` RPC.
+// The shape a repertoire row is rendered from, used by native's repertoire list
+// and RepertoireCard. The rows themselves come from the `my_repertoire()` RPC.
 export type UserSong = {
   song_id: string;
   slug: string | null;
