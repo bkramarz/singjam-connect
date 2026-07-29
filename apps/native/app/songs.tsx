@@ -7,6 +7,7 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { songMatchesFilters, deriveFilterOptions, countActiveFilters, type SongFilterState } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
+import { readCache, writeCache } from '@/lib/cache';
 import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
 import SuggestionCard from '@/components/SuggestionCard';
@@ -101,6 +102,18 @@ function toSongMeta(r: any): SongMeta {
 
 const CATALOG_PAGE = 200; // browse_songs caps p_limit at 200 server-side
 
+const CATALOG_CACHE_KEY = '/songs';
+// Deliberately not user-scoped, unlike the other cache entries: the catalog is
+// public data, identical for everyone, so one 501 KB entry serves every account
+// on the device plus the signed-out guest view. Nothing personal is in it.
+const CATALOG_CACHE_UID = null;
+
+// Which songs you own, cached alongside it and user-scoped. Without this the
+// warm catalog renders before ownership is known, so songs already in your
+// repertoire briefly offer "+ Add to repertoire" — and tapping that upserts,
+// silently overwriting the role you had.
+const OWNED_CACHE_KEY = '/songs:owned';
+
 // The catalog comes from browse_songs — the same RPC web /search browses — so
 // popularity and the media ids have a single source instead of being re-derived
 // here. Not fetchAllRows: that walks pages sequentially, and at 200 rows a page
@@ -167,6 +180,27 @@ export default function SongLibraryScreen() {
 
   useEffect(() => {
     async function init() {
+      // Show the cached catalog straight away, then revalidate — same
+      // stale-while-revalidate pattern as Repertoire and Jams. Reaching this
+      // screen is a nav push, so without this every visit waits on the full
+      // catalog fetch again.
+      const { data: { session } } = await supabase.auth.getSession();
+      const cachedUid = session?.user.id ?? null;
+      const [cached, cachedOwned] = await Promise.all([
+        readCache<SongMeta[]>(CATALOG_CACHE_KEY, CATALOG_CACHE_UID),
+        readCache<[string, string][]>(OWNED_CACHE_KEY, cachedUid),
+      ]);
+      // Only render early once ownership is known too, otherwise owned songs
+      // would offer "+ Add to repertoire" and a fast tap would overwrite the
+      // role. A guest has no ownership to know, so it's already safe there;
+      // a signed-in user needs a cache entry matching their own id.
+      const ownershipKnown = cachedUid === null || cachedOwned !== null;
+      if (cached?.length && ownershipKnown) {
+        if (cachedOwned) setMyConfidence(new Map(cachedOwned));
+        setAllSongs(cached);
+        setLoadingAll(false);
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id ?? null);
 
@@ -180,10 +214,13 @@ export default function SongLibraryScreen() {
           : Promise.resolve({ data: null }),
       ]);
 
-      setMyConfidence(new Map(((myRes.data ?? []) as any[]).map(r => [r.song_id, r.confidence ?? 'learn'])));
+      const owned: [string, string][] = ((myRes.data ?? []) as any[]).map(r => [r.song_id, r.confidence ?? 'learn']);
+      setMyConfidence(new Map(owned));
       setSingingVoice((profileRes.data as any)?.singing_voice ?? null);
       setAllSongs(songs);
       setLoadingAll(false);
+      writeCache(CATALOG_CACHE_KEY, CATALOG_CACHE_UID, songs);
+      if (user) writeCache(OWNED_CACHE_KEY, user.id, owned);
     }
     init().catch(() => setLoadingAll(false));
   }, []);
