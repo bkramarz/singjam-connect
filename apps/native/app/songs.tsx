@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchAllRows, songMatchesFilters, deriveFilterOptions, countActiveFilters } from '@singjam/core';
+import { songMatchesFilters, deriveFilterOptions, countActiveFilters } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
@@ -281,19 +281,63 @@ function applySort(songs: SongMeta[], sortBy: SortBy): SongMeta[] {
   return [...songs].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
 }
 
-// `id` breaks title ties so the page boundaries stay put while we walk the table.
-function fetchCatalog() {
-  return fetchAllRows<any>((from, to) =>
-    supabase.from('songs').select(`
-      song_id:id, title, display_artist, vibe, tonality, meter, year:year_written,
-      song_composers ( people ( name ) ),
-      song_productions ( productions ( name ) ),
-      song_genres ( genres ( name ) ),
-      song_cultures ( cultures ( name ) ),
-      song_languages ( languages ( name ) ),
-      song_themes ( themes ( name ) )
-    `).order('title').order('id').range(from, to)
-  );
+// browse_songs and search_songs return the same column names, so one mapper
+// serves both. Notably they derive youtube_id / spotify_track_id from the media
+// URLs in SQL — a raw `songs` select cannot produce them.
+function toSongMeta(r: any): SongMeta {
+  return {
+    song_id: r.song_id,
+    title: r.title ?? '',
+    display_artist: r.display_artist ?? null,
+    first_line: r.first_line ?? null,
+    slug: r.slug ?? null,
+    youtube_id: r.youtube_id ?? null,
+    spotify_track_id: r.spotify_track_id ?? null,
+    composers: r.composers ?? [],
+    productions: r.productions ?? [],
+    popularity: Number(r.popularity ?? 0),
+    genres: r.genres ?? [],
+    cultures: r.cultures ?? [],
+    languages: r.languages ?? [],
+    themes: r.themes ?? [],
+    vibe: r.vibe ?? null,
+    tonality: r.tonality ?? null,
+    meter: r.meter ?? null,
+    year: r.year ?? null,
+  };
+}
+
+const CATALOG_PAGE = 200; // browse_songs caps p_limit at 200 server-side
+
+// The catalog comes from browse_songs — the same RPC web /search browses — so
+// popularity and the media ids have a single source instead of being re-derived
+// here. Not fetchAllRows: that walks pages sequentially, and at 200 rows a page
+// six serial round-trips of full-catalog work measured ~3x slower than the old
+// raw select. The first page reports total_count, so the rest are fanned out in
+// parallel (~310-560ms for 1056 rows). browse_songs orders by `title asc, id asc`,
+// so page boundaries are stable; errors throw rather than truncating the list,
+// and the dedupe by song_id absorbs a concurrent insert shifting the offsets.
+async function fetchCatalog(): Promise<SongMeta[]> {
+  async function page(offset: number): Promise<any[]> {
+    const { data, error } = await supabase.rpc('browse_songs', {
+      p_sort: 'title_asc',
+      p_offset: offset,
+      p_limit: CATALOG_PAGE,
+    });
+    if (error) throw error;
+    return (data ?? []) as any[];
+  }
+
+  const first = await page(0);
+  const total = Number(first[0]?.total_count ?? first.length);
+
+  const offsets: number[] = [];
+  for (let o = CATALOG_PAGE; o < total; o += CATALOG_PAGE) offsets.push(o);
+  const rest = await Promise.all(offsets.map(page));
+
+  const byId = new Map<string, any>();
+  for (const row of [first, ...rest].flat()) byId.set(row.song_id, row);
+  return Array.from(byId.values(), toSongMeta);
 }
 
 function showOptionsSheet(title: string, labels: string[], onPick: (index: number) => void) {
@@ -334,9 +378,8 @@ export default function SongLibraryScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id ?? null);
 
-      const [songRows, popularityRes, myRes, profileRes] = await Promise.all([
+      const [songs, myRes, profileRes] = await Promise.all([
         fetchCatalog(),
-        supabase.rpc('song_popularity_counts'),
         user
           ? supabase.from('user_songs').select('song_id, confidence').eq('user_id', user.id)
           : Promise.resolve({ data: null }),
@@ -347,36 +390,6 @@ export default function SongLibraryScreen() {
 
       setMyConfidence(new Map(((myRes.data ?? []) as any[]).map(r => [r.song_id, r.confidence ?? 'learn'])));
       setSingingVoice((profileRes.data as any)?.singing_voice ?? null);
-
-      const countMap = new Map<string, number>(
-        ((popularityRes.data ?? []) as { song_id: string; user_count: number }[])
-          .map(r => [r.song_id, Number(r.user_count)])
-      );
-
-      const songs: SongMeta[] = songRows.map(s => ({
-        song_id: s.song_id,
-        title: s.title ?? '',
-        display_artist: s.display_artist ?? null,
-        // The card renders neither of these, and the media ids are derived from
-        // media URLs inside the search_songs / browse_songs RPCs, so a raw catalog
-        // select can't supply them — only search results carry media links.
-        first_line: null,
-        slug: null,
-        youtube_id: null,
-        spotify_track_id: null,
-        composers: (s.song_composers ?? []).map((x: any) => x.people?.name).filter(Boolean),
-        productions: (s.song_productions ?? []).map((x: any) => x.productions?.name).filter(Boolean),
-        popularity: countMap.get(s.song_id) ?? 0,
-        genres: (s.song_genres ?? []).map((x: any) => x.genres?.name).filter(Boolean),
-        cultures: (s.song_cultures ?? []).map((x: any) => x.cultures?.name).filter(Boolean),
-        languages: (s.song_languages ?? []).map((x: any) => x.languages?.name).filter(Boolean),
-        themes: (s.song_themes ?? []).map((x: any) => x.themes?.name).filter(Boolean),
-        vibe: s.vibe ?? null,
-        tonality: s.tonality ?? null,
-        meter: s.meter ?? null,
-        year: s.year ?? null,
-      }));
-
       setAllSongs(songs);
       setLoadingAll(false);
     }
@@ -390,30 +403,8 @@ export default function SongLibraryScreen() {
     setSearchLoading(true);
     setSubmitOpen(false);
     timer.current = setTimeout(async () => {
-      // search_songs returns every field SongMeta needs, including the media ids
-      // the raw catalog can't derive — so results come straight from the RPC.
       const { data } = await supabase.rpc('search_songs', { q, limit_n: 100 });
-      const rows: SongMeta[] = ((data ?? []) as any[]).map(r => ({
-        song_id: r.song_id,
-        title: r.title ?? '',
-        display_artist: r.display_artist ?? null,
-        first_line: r.first_line ?? null,
-        slug: r.slug ?? null,
-        youtube_id: r.youtube_id ?? null,
-        spotify_track_id: r.spotify_track_id ?? null,
-        composers: r.composers ?? [],
-        productions: r.productions ?? [],
-        popularity: Number(r.popularity ?? 0),
-        genres: r.genres ?? [],
-        cultures: r.cultures ?? [],
-        languages: r.languages ?? [],
-        themes: r.themes ?? [],
-        vibe: r.vibe ?? null,
-        tonality: r.tonality ?? null,
-        meter: r.meter ?? null,
-        year: r.year ?? null,
-      }));
-      setSearchResults(rows);
+      setSearchResults(((data ?? []) as any[]).map(toSongMeta));
       setSearchLoading(false);
     }, 250);
   }, [query]);

@@ -49,8 +49,10 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Already-in-repertoire state | ✅ | Added 2026-07-28: "✓ In your repertoire" pill + role control (ActionSheet vs web `<select>`), replacing the old static "Added" text — the role can now be changed from this screen, as on web. |
 | Add-song lead gating | ✅ | |
 | Submit a missing song | ✅ | 2026-07-28: collapsed "Can't find your song?" panel now sits at the foot of the search results (web keeps its form there), not only in the empty state. |
-| Inline YouTube/Spotify players on rows | ⚠️ | Web embeds inline; native opens the apps instead (intentional — a WebView per row would hurt scrolling). Present on **search** rows only: the ids are derived from media URLs inside `search_songs`/`browse_songs`, so the raw-table catalog fetch used for browse mode can't supply them. Goes away if browse moves onto `browse_songs`. |
-| Pagination | ⚠️ | Native loads the whole catalog client-side; web paginates via `browse_songs`. Fine at current catalog size; revisit for the offline-catalog track (which would also fix the media-links gap above). |
+| YouTube/Spotify links on rows | ✅ | 2026-07-28: browse rows have them too — native's catalog fetch moved off a raw `songs` select onto the **`browse_songs` RPC web `/search` uses**, which derives the ids from the media URLs in SQL. Web embeds players inline; native opens the apps (intentional — a WebView per row would hurt scrolling). |
+| Catalog data matches web | ✅ | Fixed 2026-07-28 by the same move. The old raw join read `song_composers` only, so it dropped lyricists (web: "My Favorite Things (O. Hammerstein II, R. Rodgers)", native: "(R. Rodgers)"), and used bare `year_written`, so recording-only years were missing. `browse_songs` unions composers+lyricists and takes `least(year_written, min(recording year))` — same rule as `my_repertoire`, which fixed this class of drift on Repertoire in #237. |
+| Pagination | ⚠️ | Native still loads the whole catalog client-side — now 6 parallel `browse_songs` pages, measured ~310-560ms vs the old raw select's 582ms — where web pages incrementally. Fine at current catalog size; revisit for the offline-catalog track. |
+| `song_popularity_counts` RPC | ✅ | No longer called: `browse_songs` returns `popularity`. `songs.tsx` was the **last caller anywhere in the repo**, so the RPC (migration 049) is now unreferenced and safe to drop in a future migration. |
 
 ### Sets
 | Feature | Status | Notes |
