@@ -6,6 +6,8 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
+
 export default function NewSetScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
@@ -18,22 +20,32 @@ export default function NewSetScreen() {
     setSaving(true);
     setError(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setSaving(false); return; }
 
-    const { data, error: insertError } = await supabase
-      .from('sets')
-      .insert({
+    // Created through the web API rather than a direct insert so both apps share
+    // one creation path (and the jam-linked collaborator fan-out it performs).
+    const res = await fetch(`${WEB_URL}/api/sets`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         name: name.trim(),
         description: description.trim() || null,
-        owner_user_id: user.id,
-      })
-      .select('id')
-      .single();
+      }),
+    }).catch(() => null);
 
     setSaving(false);
-    if (insertError) { setError(insertError.message); return; }
-    router.replace({ pathname: '/set/[id]' as any, params: { id: data.id } });
+    if (!res?.ok) {
+      const json = await res?.json().catch(() => null);
+      setError(json?.error ?? 'Something went wrong creating this set.');
+      return;
+    }
+
+    const { id } = await res.json();
+    router.replace({ pathname: '/set/[id]' as any, params: { id } });
   }
 
   return (
