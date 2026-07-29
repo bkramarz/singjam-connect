@@ -127,8 +127,12 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 ## Core-extraction backlog (structural anti-drift)
 Move these rules into `packages/core` (with unit tests) so web + native share one implementation.
 Each is **web-affecting** (core rebuilds web) → batch them.
-- [ ] Song filter matching + **cascading option derivation** (currently duplicated inline in
-      `songs.tsx` and `(tabs)/index.tsx`, and separately in web `useSongFilters`). Highest value.
+- [x] Song filter matching + **cascading option derivation** — in core as `songMatchesFilters` /
+      `deriveFilterOptions` / `countActiveFilters`. The native *sheet* that renders them is now a
+      single `components/SongFilterSheet.tsx` shared by `songs.tsx` and `(tabs)/index.tsx`
+      (2026-07-28), mirroring web's shared `FilterPanel`; it had been hand-copied into both and
+      had drifted (sheet title, year placeholders, missing empty state). Web `useSongFilters`
+      still wraps core separately — fine, it's React state plumbing, not rules.
 - [ ] Lead-gating / confidence rules (`canLead = singing_voice && !== 'none'`) — duplicated in
       `SuggestionCard`, `RepertoireCard`, `songs.tsx`, web `ConfidencePicker`.
 - [ ] Sort comparators (title asc/desc, popularity+title tiebreak).
