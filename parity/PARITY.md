@@ -130,7 +130,7 @@ Each is **web-affecting** (core rebuilds web) → batch them.
 - [ ] Song filter matching + **cascading option derivation** (currently duplicated inline in
       `songs.tsx` and `(tabs)/index.tsx`, and separately in web `useSongFilters`). Highest value.
 - [ ] Lead-gating / confidence rules (`canLead = singing_voice && !== 'none'`) — duplicated in
-      `SuggestionCard`, `AddSongModal`, `songs.tsx`, web `ConfidencePicker`.
+      `SuggestionCard`, `RepertoireCard`, `songs.tsx`, web `ConfidencePicker`.
 - [ ] Sort comparators (title asc/desc, popularity+title tiebreak).
 - [ ] Search field-set / normalization used by add-song rows.
 - [ ] Set leader/support participant derivation (who leads/supports a song from explicit
