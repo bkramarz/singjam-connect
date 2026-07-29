@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  ActionSheetIOS, Alert, Platform,
-  KeyboardAvoidingView, Modal, ScrollView,
+  ActionSheetIOS, Alert, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { songMatchesFilters, deriveFilterOptions, countActiveFilters } from '@singjam/core';
+import { songMatchesFilters, deriveFilterOptions, countActiveFilters, type SongFilterState } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
 import SuggestionCard from '@/components/SuggestionCard';
+import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
 
 // A superset of SuggestionCard's `Suggestion`, so catalog rows render in the
 // same card web uses while still carrying the fields the filters need.
@@ -56,222 +56,14 @@ function SkeletonCard() {
   );
 }
 
-// ── Filter chip ───────────────────────────────────────────────────────────────
+// ── Filters ──────────────────────────────────────────────────────────────────
 
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      className={`px-3 py-1.5 rounded-full border mr-2 mb-2 ${selected ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
-    >
-      <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-slate-600'}`}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Text className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2 mt-4">{title}</Text>
-  );
-}
-
-// ── Filter modal ──────────────────────────────────────────────────────────────
-
-type Filters = {
-  sortBy: SortBy;
-  genres: Set<string>;
-  cultures: Set<string>;
-  languages: Set<string>;
-  themes: Set<string>;
-  vibe: string;
-  tonality: string;
-  meter: string;
-  yearMin: string;
-  yearMax: string;
-};
+type Filters = SongFilterState & { sortBy: SortBy };
 
 function emptyFilters(): Filters {
-  return {
-    sortBy: 'popularity',
-    genres: new Set(),
-    cultures: new Set(),
-    languages: new Set(),
-    themes: new Set(),
-    vibe: '',
-    tonality: '',
-    meter: '',
-    yearMin: '',
-    yearMax: '',
-  };
+  return { sortBy: 'popularity', ...emptyFilterDimensions() };
 }
 
-function toggle(set: Set<string>, value: string): Set<string> {
-  const next = new Set(set);
-  next.has(value) ? next.delete(value) : next.add(value);
-  return next;
-}
-
-function FilterModal({
-  visible,
-  filters,
-  options,
-  yearBounds,
-  onChange,
-  onClose,
-}: {
-  visible: boolean;
-  filters: Filters;
-  options: {
-    genres: string[]; cultures: string[]; languages: string[];
-    themes: string[]; vibes: string[]; tonalities: string[]; meters: string[];
-  };
-  yearBounds: { min: number | null; max: number | null };
-  onChange: (f: Filters) => void;
-  onClose: () => void;
-}) {
-  const activeCount = countActiveFilters(filters);
-
-  function set(patch: Partial<Filters>) {
-    onChange({ ...filters, ...patch });
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View className="flex-1 bg-white">
-        {/* Header */}
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text className="text-amber-600 font-medium">Done</Text>
-          </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Filters</Text>
-          <TouchableOpacity
-            onPress={() => onChange({ ...emptyFilters(), sortBy: filters.sortBy })}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            disabled={activeCount === 0}
-          >
-            <Text className={`font-medium ${activeCount > 0 ? 'text-red-500' : 'text-slate-300'}`}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
-
-          {/* Genre */}
-          {options.genres.length > 0 && (
-            <>
-              <SectionHeader title="Genre" />
-              <View className="flex-row flex-wrap">
-                {options.genres.map(g => (
-                  <Chip key={g} label={g} selected={filters.genres.has(g)} onPress={() => set({ genres: toggle(filters.genres, g) })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Culture */}
-          {options.cultures.length > 0 && (
-            <>
-              <SectionHeader title="Culture" />
-              <View className="flex-row flex-wrap">
-                {options.cultures.map(c => (
-                  <Chip key={c} label={c} selected={filters.cultures.has(c)} onPress={() => set({ cultures: toggle(filters.cultures, c) })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Language */}
-          {options.languages.length > 0 && (
-            <>
-              <SectionHeader title="Language" />
-              <View className="flex-row flex-wrap">
-                {options.languages.map(l => (
-                  <Chip key={l} label={l} selected={filters.languages.has(l)} onPress={() => set({ languages: toggle(filters.languages, l) })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Theme */}
-          {options.themes.length > 0 && (
-            <>
-              <SectionHeader title="Theme" />
-              <View className="flex-row flex-wrap">
-                {options.themes.map(t => (
-                  <Chip key={t} label={t} selected={filters.themes.has(t)} onPress={() => set({ themes: toggle(filters.themes, t) })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Vibe */}
-          {options.vibes.length > 0 && (
-            <>
-              <SectionHeader title="Vibe" />
-              <View className="flex-row flex-wrap">
-                {options.vibes.map(v => (
-                  <Chip key={v} label={v} selected={filters.vibe === v} onPress={() => set({ vibe: filters.vibe === v ? '' : v })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Tonality */}
-          {options.tonalities.length > 0 && (
-            <>
-              <SectionHeader title="Tonality" />
-              <View className="flex-row flex-wrap">
-                {options.tonalities.map(t => (
-                  <Chip key={t} label={t} selected={filters.tonality === t} onPress={() => set({ tonality: filters.tonality === t ? '' : t })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Meter */}
-          {options.meters.length > 0 && (
-            <>
-              <SectionHeader title="Meter" />
-              <View className="flex-row flex-wrap">
-                {options.meters.map(m => (
-                  <Chip key={m} label={m} selected={filters.meter === m} onPress={() => set({ meter: filters.meter === m ? '' : m })} />
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Year */}
-          {yearBounds.min != null && (
-            <>
-              <SectionHeader title="Year" />
-              <View className="flex-row items-center" style={{ gap: 8 }}>
-                <TextInput
-                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
-                  placeholder={yearBounds.min != null ? String(yearBounds.min) : 'From'}
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  value={filters.yearMin}
-                  onChangeText={t => set({ yearMin: t.replace(/[^0-9]/g, '') })}
-                />
-                <Text className="text-slate-400">–</Text>
-                <TextInput
-                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
-                  placeholder={yearBounds.max != null ? String(yearBounds.max) : 'To'}
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  value={filters.yearMax}
-                  onChangeText={t => set({ yearMax: t.replace(/[^0-9]/g, '') })}
-                />
-              </View>
-            </>
-          )}
-
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -555,7 +347,7 @@ export default function SongLibraryScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Song Library', headerTintColor: '#d97706' }} />
-      <FilterModal
+      <SongFilterSheet
         visible={filterModalVisible}
         filters={filters}
         options={options}
