@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { supabaseServer } from "@/lib/supabase/server";
+import { resolveApiClient } from "@/lib/supabase/apiUser";
 
-export async function GET() {
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+export async function GET(req: Request) {
+  const { db: supabase, user } = await resolveApiClient(req);
 
   if (!user) {
     const { data: publicSetsData } = await supabase
@@ -18,6 +17,7 @@ export async function GET() {
       id: s.id,
       name: s.name,
       description: s.description,
+      ownerUserId: s.owner_user_id,
       ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
       ownerUsername: s.profiles?.username ?? null,
     }));
@@ -33,7 +33,7 @@ export async function GET() {
       .order("created_at", { ascending: false }),
     supabase
       .from("set_collaborators")
-      .select("set_id, sets(id, name, description, created_at, owner_user_id, link_sharing)")
+      .select("set_id, sets(id, name, description, created_at, owner_user_id, link_sharing, profiles!owner_user_id(display_name, last_name, username))")
       .eq("user_id", user.id)
       .eq("status", "accepted"),
     supabase
@@ -46,18 +46,31 @@ export async function GET() {
   ]);
 
   const owned = (ownedRes.data ?? []) as any[];
+  const ownedIds = new Set(owned.map((s: any) => s.id));
   const collaborating = ((collabRes.data ?? []) as any[])
     .map((r) => r.sets)
     .filter(Boolean)
-    .filter((s: any) => s.owner_user_id !== user.id);
+    .filter((s: any) => s.owner_user_id !== user.id && !ownedIds.has(s.id))
+    .map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      created_at: s.created_at,
+      owner_user_id: s.owner_user_id,
+      link_sharing: s.link_sharing,
+      ownerUserId: s.owner_user_id,
+      ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
+      ownerUsername: s.profiles?.username ?? null,
+    }));
 
   const collabSetIds = new Set(collaborating.map((s: any) => s.id));
   const publicSets = ((publicRes.data ?? []) as any[])
-    .filter((s) => !collabSetIds.has(s.id))
+    .filter((s) => !collabSetIds.has(s.id) && !ownedIds.has(s.id))
     .map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description,
+      ownerUserId: s.owner_user_id,
       ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
       ownerUsername: s.profiles?.username ?? null,
     }));
@@ -66,8 +79,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { db: supabase, user } = await resolveApiClient(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { name, description, jamId } = await req.json();

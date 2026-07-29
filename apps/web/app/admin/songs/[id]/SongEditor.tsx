@@ -1020,6 +1020,9 @@ export default function SongEditor({
                 <TagPillsField label="Genres" value={genres} suggestions={allGenres.map((g) => g.name)} onChange={setGenres} />
                 <TagPillsField label="Languages" value={languages} suggestions={allLanguages.map((l) => l.name)} onChange={setLanguages} />
                 <TagPillsField label="Themes" value={themes} suggestions={allThemes.map((t) => t.name)} onChange={setThemes} />
+                {/* Cultures was missing here while the edit form has it, so AI-suggested
+                    cultures were saved on create without ever being shown for review. */}
+                <TagPillsField label="Cultures" value={cultures} suggestions={allCultures.map((c) => c.name)} onChange={setCultures} allowNew placeholder="Search cultures…" />
                 {pendingAltTitles.length > 0 && (
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Alternate titles</label>

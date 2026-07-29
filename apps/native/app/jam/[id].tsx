@@ -130,21 +130,21 @@ function InviteUsersModal({
         className="flex-1 bg-white"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Invite people</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Invite people</Text>
           <View style={{ width: 50 }} />
         </View>
 
-        <View className="px-4 py-3 border-b border-slate-100">
-          <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-            <Text className="text-slate-400 mr-2">🔍</Text>
+        <View className="px-4 py-3 border-b border-zinc-100">
+          <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2">
+            <Text className="text-zinc-400 mr-2">🔍</Text>
             <TextInput
-              className="flex-1 text-slate-900"
+              className="flex-1 text-zinc-900"
               placeholder="Search by name or @username…"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#a1a1aa"
               value={query}
               onChangeText={setQuery}
               autoCapitalize="none"
@@ -153,7 +153,7 @@ function InviteUsersModal({
             />
             {query.length > 0 ? (
               <TouchableOpacity onPress={() => setQuery('')}>
-                <Text className="text-slate-400 ml-2">✕</Text>
+                <Text className="text-zinc-400 ml-2">✕</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -172,11 +172,11 @@ function InviteUsersModal({
             ListEmptyComponent={
               query.trim().length >= 2 ? (
                 <View className="items-center pt-12">
-                  <Text className="text-slate-400 text-sm">No results for "{query}"</Text>
+                  <Text className="text-zinc-400 text-sm">No results for "{query}"</Text>
                 </View>
               ) : (
                 <View className="items-center pt-12">
-                  <Text className="text-slate-400 text-sm">Search for a jammer to invite</Text>
+                  <Text className="text-zinc-400 text-sm">Search for a jammer to invite</Text>
                 </View>
               )
             }
@@ -188,25 +188,25 @@ function InviteUsersModal({
               const initial = name[0]?.toUpperCase() ?? '?';
 
               return (
-                <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
+                <View className="flex-row items-center px-4 py-3 border-b border-zinc-100">
                   {item.avatar_url ? (
                     <Image
                       source={{ uri: item.avatar_url }}
                       className="w-9 h-9 rounded-full mr-3"
                     />
                   ) : (
-                    <View className="w-9 h-9 rounded-full bg-slate-200 items-center justify-center mr-3">
-                      <Text className="text-slate-600 font-semibold text-sm">{initial}</Text>
+                    <View className="w-9 h-9 rounded-full bg-zinc-200 items-center justify-center mr-3">
+                      <Text className="text-zinc-600 font-semibold text-sm">{initial}</Text>
                     </View>
                   )}
                   <View className="flex-1 mr-3">
-                    <Text className="text-slate-900 font-medium" numberOfLines={1}>{name}</Text>
+                    <Text className="text-zinc-900 font-medium" numberOfLines={1}>{name}</Text>
                     {item.username ? (
-                      <Text className="text-slate-400 text-sm mt-0.5">@{item.username}</Text>
+                      <Text className="text-zinc-400 text-sm mt-0.5">@{item.username}</Text>
                     ) : null}
                   </View>
                   {isAttending ? (
-                    <Text className="text-slate-400 text-xs">Attending</Text>
+                    <Text className="text-zinc-400 text-xs">Attending</Text>
                   ) : isPending ? (
                     <ActivityIndicator size="small" color="#d97706" />
                   ) : isSent ? (
@@ -237,11 +237,11 @@ function AttendeeAvatar({ attendee, isMe }: { attendee: Attendee; isMe: boolean 
       {attendee.avatar_url ? (
         <Image source={{ uri: attendee.avatar_url }} className="w-10 h-10 rounded-full mb-1" />
       ) : (
-        <View className={`w-10 h-10 rounded-full items-center justify-center mb-1 ${isMe ? 'bg-amber-500' : 'bg-slate-200'}`}>
-          <Text className={`font-semibold text-sm ${isMe ? 'text-white' : 'text-slate-600'}`}>{initial}</Text>
+        <View className={`w-10 h-10 rounded-full items-center justify-center mb-1 ${isMe ? 'bg-amber-500' : 'bg-zinc-200'}`}>
+          <Text className={`font-semibold text-sm ${isMe ? 'text-white' : 'text-zinc-600'}`}>{initial}</Text>
         </View>
       )}
-      <Text className="text-slate-500 text-xs text-center" numberOfLines={1}>
+      <Text className="text-zinc-500 text-xs text-center" numberOfLines={1}>
         {attendee.username ? `@${attendee.username}` : name}
       </Text>
     </View>
@@ -440,7 +440,7 @@ export default function JamDetailScreen() {
       <>
         <Stack.Screen options={{ title: 'Jam' }} />
         <View className="flex-1 bg-white items-center justify-center">
-          <Text className="text-slate-400">Jam not found</Text>
+          <Text className="text-zinc-400">Jam not found</Text>
         </View>
       </>
     );
@@ -477,7 +477,7 @@ export default function JamDetailScreen() {
           headerRight: isHosting ? () => (
             <View className="flex-row gap-4">
               <TouchableOpacity onPress={handleDuplicate} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="copy-outline" size={20} color="#64748b" />
+                <Ionicons name="copy-outline" size={20} color="#71717a" />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push({ pathname: '/jam/edit' as any, params: { id: jam.id } })}
@@ -502,7 +502,7 @@ export default function JamDetailScreen() {
           />
         ) : jam.starts_at ? (
           <View className="bg-amber-50 items-center justify-center py-10">
-            <Text className="text-amber-400 text-sm font-medium uppercase tracking-widest mb-1">
+            <Text className="text-amber-400 text-sm font-medium uppercase tracking-wide mb-1">
               {new Date(jam.starts_at).toLocaleString('en', { weekday: 'long' })}
             </Text>
             <Text className="text-amber-700 text-5xl font-bold">
@@ -516,20 +516,20 @@ export default function JamDetailScreen() {
 
         {/* Title + badges */}
         <View className="px-4 pt-5 pb-2">
-          <Text className="text-2xl font-bold text-slate-900 mb-1">{jam.name ?? 'Jam Session'}</Text>
+          <Text className="text-2xl font-bold text-zinc-900 mb-1">{jam.name ?? 'Jam Session'}</Text>
           <View className="flex-row flex-wrap gap-2">
             {jam.visibility === 'official' ? (
               <View className="bg-amber-100 rounded-full px-3 py-0.5">
                 <Text className="text-amber-700 text-xs font-semibold">Official SingJam Event</Text>
               </View>
             ) : jam.visibility === 'community' ? (
-              <View className="bg-slate-100 rounded-full px-3 py-0.5">
-                <Text className="text-slate-500 text-xs font-medium">Community</Text>
+              <View className="bg-zinc-100 rounded-full px-3 py-0.5">
+                <Text className="text-zinc-500 text-xs font-medium">Community</Text>
               </View>
             ) : null}
             {isPast ? (
-              <View className="bg-slate-100 rounded-full px-3 py-0.5">
-                <Text className="text-slate-500 text-xs font-medium">Past event</Text>
+              <View className="bg-zinc-100 rounded-full px-3 py-0.5">
+                <Text className="text-zinc-500 text-xs font-medium">Past event</Text>
               </View>
             ) : null}
           </View>
@@ -539,30 +539,30 @@ export default function JamDetailScreen() {
         <View className="px-4 py-4">
           {timeStr ? (
             <InfoRow icon="📅">
-              <Text className="text-slate-700">{timeStr}</Text>
+              <Text className="text-zinc-700">{timeStr}</Text>
             </InfoRow>
           ) : null}
 
           {jam.neighborhood || jam.full_address ? (
             <InfoRow icon="📍">
               {jam.neighborhood ? (
-                <Text className="text-slate-700 font-medium">{jam.neighborhood}</Text>
+                <Text className="text-zinc-700 font-medium">{jam.neighborhood}</Text>
               ) : null}
               {jam.full_address && hasFullAccess ? (
-                <Text className="text-slate-400 text-sm mt-0.5">{jam.full_address}</Text>
+                <Text className="text-zinc-400 text-sm mt-0.5">{jam.full_address}</Text>
               ) : jam.full_address && !hasFullAccess ? (
-                <Text className="text-slate-400 text-sm mt-0.5 italic">Full address shown after RSVP</Text>
+                <Text className="text-zinc-400 text-sm mt-0.5 italic">Full address shown after RSVP</Text>
               ) : null}
             </InfoRow>
           ) : null}
 
           {!isHosting && (jam.host_display_name || jam.host_username) ? (
             <InfoRow icon="🎤">
-              <Text className="text-slate-700">
+              <Text className="text-zinc-700">
                 Hosted by{' '}
                 <Text className="font-medium">{jam.host_display_name ?? `@${jam.host_username}`}</Text>
                 {jam.host_username ? (
-                  <Text className="text-slate-400"> @{jam.host_username}</Text>
+                  <Text className="text-zinc-400"> @{jam.host_username}</Text>
                 ) : null}
               </Text>
             </InfoRow>
@@ -572,8 +572,8 @@ export default function JamDetailScreen() {
             <InfoRow icon="🎵">
               <View className="flex-row flex-wrap gap-1">
                 {jam.genres.map(g => (
-                  <View key={g} className="bg-slate-100 rounded-full px-3 py-0.5">
-                    <Text className="text-slate-500 text-sm">{g}</Text>
+                  <View key={g} className="bg-zinc-100 rounded-full px-3 py-0.5">
+                    <Text className="text-zinc-500 text-sm">{g}</Text>
                   </View>
                 ))}
               </View>
@@ -582,14 +582,14 @@ export default function JamDetailScreen() {
 
           {jam.capacity !== null ? (
             <InfoRow icon="👥">
-              <Text className="text-slate-700">
+              <Text className="text-zinc-700">
                 {attendees.length}{jam.capacity ? ` of ${jam.capacity}` : ''} attending
                 {isFull ? ' · Full — join waitlist' : ''}
               </Text>
             </InfoRow>
           ) : attendees.length > 0 ? (
             <InfoRow icon="👥">
-              <Text className="text-slate-700">{attendees.length} attending</Text>
+              <Text className="text-zinc-700">{attendees.length} attending</Text>
             </InfoRow>
           ) : null}
         </View>
@@ -624,19 +624,19 @@ export default function JamDetailScreen() {
                 <TouchableOpacity
                   onPress={() => handleInviteResponse('declined')}
                   disabled={rsvpLoading}
-                  className="flex-1 border border-slate-200 rounded-xl py-3 items-center"
+                  className="flex-1 border border-zinc-200 rounded-xl py-3 items-center"
                 >
-                  <Text className="text-slate-600 font-semibold">Decline</Text>
+                  <Text className="text-zinc-600 font-semibold">Decline</Text>
                 </TouchableOpacity>
               </View>
             ) : myRsvpStatus === 'attending' || myInviteStatus === 'accepted' ? (
               <TouchableOpacity
                 onPress={handleCancelRsvp}
                 disabled={rsvpLoading}
-                className="border border-slate-200 rounded-xl py-3 items-center"
+                className="border border-zinc-200 rounded-xl py-3 items-center"
               >
-                {rsvpLoading ? <ActivityIndicator color="#94a3b8" /> : (
-                  <Text className="text-slate-600 font-semibold">✓ Going · Cancel RSVP</Text>
+                {rsvpLoading ? <ActivityIndicator color="#a1a1aa" /> : (
+                  <Text className="text-zinc-600 font-semibold">✓ Going · Cancel RSVP</Text>
                 )}
               </TouchableOpacity>
             ) : myRsvpStatus === 'waitlist' ? (
@@ -660,15 +660,15 @@ export default function JamDetailScreen() {
         {/* Notes */}
         {jam.notes ? (
           <View className="px-4 mb-6">
-            <Text className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-2">About</Text>
-            <Text className="text-slate-700 leading-relaxed">{jam.notes}</Text>
+            <Text className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-2">About</Text>
+            <Text className="text-zinc-700 leading-relaxed">{jam.notes}</Text>
           </View>
         ) : null}
 
         {/* Attendees */}
         {attendees.length > 0 ? (
           <View className="px-4 mb-6">
-            <Text className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-3">
+            <Text className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">
               Attending ({attendees.length})
             </Text>
             <View className="flex-row flex-wrap">
@@ -677,8 +677,8 @@ export default function JamDetailScreen() {
               ))}
               {attendees.length > 20 ? (
                 <View className="items-center mr-3 mb-3" style={{ width: 52 }}>
-                  <View className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center mb-1">
-                    <Text className="text-slate-400 text-xs font-medium">+{attendees.length - 20}</Text>
+                  <View className="w-10 h-10 rounded-full bg-zinc-100 items-center justify-center mb-1">
+                    <Text className="text-zinc-400 text-xs font-medium">+{attendees.length - 20}</Text>
                   </View>
                 </View>
               ) : null}
@@ -689,18 +689,18 @@ export default function JamDetailScreen() {
         {/* Associated sets */}
         {jamSets.length > 0 ? (
           <View className="px-4 mb-10">
-            <Text className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-3">
+            <Text className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">
               Sets
             </Text>
             {jamSets.map(s => (
               <TouchableOpacity
                 key={s.id}
                 onPress={() => router.push(`/set/${s.id}` as any)}
-                className="flex-row items-center py-3 border-b border-slate-100"
+                className="flex-row items-center py-3 border-b border-zinc-100"
               >
-                <Ionicons name="list-outline" size={16} color="#94a3b8" style={{ marginRight: 10 }} />
-                <Text className="flex-1 text-slate-900">{s.name}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                <Ionicons name="list-outline" size={16} color="#a1a1aa" style={{ marginRight: 10 }} />
+                <Text className="flex-1 text-zinc-900">{s.name}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#a1a1aa" />
               </TouchableOpacity>
             ))}
           </View>

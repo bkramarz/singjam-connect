@@ -469,14 +469,7 @@ export default function JamsContent() {
 
       {userId && (invitesEnabled || isAdmin) && (
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
-            <Link href="/jam/new" className="flex items-center justify-center rounded-lg p-1 text-zinc-400 hover:text-amber-500 hover:bg-amber-50 transition-colors" aria-label="Post a jam">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-            </Link>
-          </div>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Jams you're hosting</h2>
           <div className="grid grid-cols-1 gap-3">
             {hostingJams.map((jam) => <JamListCard key={jam.id} {...cardProps(jam, { isHosting: true })} onDeleted={fetchData} />)}
             <Link

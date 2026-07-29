@@ -40,10 +40,10 @@ const INSTRUMENT_ORDER = ['Professional', 'Advanced', 'Intermediate', 'Beginner'
 function singingBadgeStyle(voice: string) {
   return voice === 'lead'
     ? 'bg-amber-50 border-amber-200'
-    : 'bg-slate-100 border-slate-200';
+    : 'bg-zinc-100 border-zinc-200';
 }
 function singingTextStyle(voice: string) {
-  return voice === 'lead' ? 'text-amber-700' : 'text-slate-600';
+  return voice === 'lead' ? 'text-amber-700' : 'text-zinc-600';
 }
 
 function Avatar({ uri, name }: { uri: string | null; name: string }) {
@@ -57,29 +57,29 @@ function Avatar({ uri, name }: { uri: string | null; name: string }) {
     );
   }
   return (
-    <View className="w-10 h-10 rounded-full bg-slate-200 items-center justify-center">
-      <Text className="text-slate-600 font-semibold text-sm">{initial}</Text>
+    <View className="w-10 h-10 rounded-full bg-zinc-200 items-center justify-center">
+      <Text className="text-zinc-600 font-semibold text-sm">{initial}</Text>
     </View>
   );
 }
 
 function SkeletonCard() {
   return (
-    <View className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4">
+    <View className="mx-4 mb-3 rounded-2xl border border-zinc-100 bg-white p-4">
       <View className="flex-row items-center">
-        <View className="w-10 h-10 rounded-full bg-slate-200" />
+        <View className="w-10 h-10 rounded-full bg-zinc-200" />
         <View className="flex-1 ml-3 gap-1.5">
-          <View className="h-4 w-32 bg-slate-200 rounded" />
-          <View className="h-3 w-20 bg-slate-100 rounded" />
+          <View className="h-4 w-32 bg-zinc-200 rounded" />
+          <View className="h-3 w-20 bg-zinc-100 rounded" />
         </View>
         <View className="items-end gap-1">
-          <View className="h-4 w-6 bg-slate-200 rounded" />
-          <View className="h-3 w-16 bg-slate-100 rounded" />
+          <View className="h-4 w-6 bg-zinc-200 rounded" />
+          <View className="h-3 w-16 bg-zinc-100 rounded" />
         </View>
       </View>
       <View className="flex-row gap-1.5 mt-3">
-        <View className="h-5 w-20 bg-slate-100 rounded-full" />
-        <View className="h-5 w-16 bg-slate-100 rounded-full" />
+        <View className="h-5 w-20 bg-zinc-100 rounded-full" />
+        <View className="h-5 w-16 bg-zinc-100 rounded-full" />
       </View>
     </View>
   );
@@ -105,22 +105,22 @@ function MatchCard({ match, onPress, onInvite }: { match: Match; onPress: () => 
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4 active:bg-slate-50"
+      className="mx-4 mb-3 rounded-2xl border border-zinc-100 bg-white p-4 active:bg-zinc-50"
     >
       <View className="flex-row items-center">
         <Avatar uri={match.avatar_url} name={displayName} />
         <View className="flex-1 ml-3 min-w-0">
-          <Text className="font-semibold text-slate-900" numberOfLines={1}>{displayName}</Text>
+          <Text className="font-semibold text-zinc-900" numberOfLines={1}>{displayName}</Text>
           {match.username ? (
-            <Text className="text-xs text-slate-400" numberOfLines={1}>@{match.username}</Text>
+            <Text className="text-xs text-zinc-400" numberOfLines={1}>@{match.username}</Text>
           ) : null}
           {match.neighborhood ? (
-            <Text className="text-xs text-slate-500" numberOfLines={1}>{match.neighborhood}</Text>
+            <Text className="text-xs text-zinc-500" numberOfLines={1}>{match.neighborhood}</Text>
           ) : null}
         </View>
         <View className="items-end ml-3">
-          <Text className="text-sm font-semibold text-slate-900">{match.shared_count}</Text>
-          <Text className="text-xs text-slate-400">shared songs</Text>
+          <Text className="text-sm font-semibold text-zinc-900">{match.shared_count}</Text>
+          <Text className="text-xs text-zinc-400">shared songs</Text>
         </View>
       </View>
 
@@ -132,24 +132,24 @@ function MatchCard({ match, onPress, onInvite }: { match: Match; onPress: () => 
             </View>
           ))}
           {topInstruments.map((name) => (
-            <View key={name} className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5">
-              <Text className="text-xs text-slate-600">{name}</Text>
+            <View key={name} className="rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-0.5">
+              <Text className="text-xs text-zinc-600">{name}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
       {topShared.length > 0 ? (
-        <Text className="text-xs text-slate-500 mt-2" numberOfLines={2}>
-          <Text className="font-medium text-slate-700">Shared songs: </Text>
+        <Text className="text-xs text-zinc-500 mt-2" numberOfLines={2}>
+          <Text className="font-medium text-zinc-700">Shared songs: </Text>
           {topShared.join(', ')}
           {match.shared_count > 5 ? ` +${match.shared_count - 5} more` : ''}
         </Text>
       ) : null}
 
       {sharedGenres.length > 0 ? (
-        <Text className="text-xs text-slate-500 mt-1" numberOfLines={1}>
-          <Text className="font-medium text-slate-700">Shared genres: </Text>
+        <Text className="text-xs text-zinc-500 mt-1" numberOfLines={1}>
+          <Text className="font-medium text-zinc-700">Shared genres: </Text>
           {sharedGenres.join(', ')}
         </Text>
       ) : null}
@@ -157,15 +157,15 @@ function MatchCard({ match, onPress, onInvite }: { match: Match; onPress: () => 
       <View className="flex-row gap-2 mt-3">
         <TouchableOpacity
           onPress={onPress}
-          className="flex-1 border border-slate-200 rounded-xl py-2 items-center"
+          className="flex-1 border border-zinc-200 rounded-xl py-2 items-center"
         >
-          <Text className="text-slate-800 text-sm font-medium">View profile</Text>
+          <Text className="text-zinc-800 text-sm font-medium">View profile</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onInvite}
-          className="flex-1 border border-slate-200 rounded-xl py-2 items-center"
+          className="flex-1 border border-zinc-200 rounded-xl py-2 items-center"
         >
-          <Text className="text-slate-800 text-sm font-medium">Invite to jam</Text>
+          <Text className="text-zinc-800 text-sm font-medium">Invite to jam</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -179,14 +179,14 @@ function SearchResultCard({ user, onPress }: { user: SearchResult; onPress: () =
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="mx-4 mb-3 rounded-2xl border border-slate-100 bg-white p-4 active:bg-slate-50"
+      className="mx-4 mb-3 rounded-2xl border border-zinc-100 bg-white p-4 active:bg-zinc-50"
     >
       <View className="flex-row items-center">
         <Avatar uri={user.avatar_url} name={displayName} />
         <View className="flex-1 ml-3 min-w-0">
-          <Text className="font-semibold text-slate-900" numberOfLines={1}>{displayName}</Text>
+          <Text className="font-semibold text-zinc-900" numberOfLines={1}>{displayName}</Text>
           {user.username ? (
-            <Text className="text-xs text-slate-400">@{user.username}</Text>
+            <Text className="text-xs text-zinc-400">@{user.username}</Text>
           ) : null}
         </View>
       </View>
@@ -266,14 +266,14 @@ export default function FriendsScreen() {
 
       <BrandHeader />
       <ContentContainer>
-      <View className="px-4 pt-4 pb-3 bg-white border-b border-slate-100">
-        <Text className="text-2xl font-bold text-slate-900 mb-3">Find jammers</Text>
-        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-          <Text className="text-slate-400 mr-2">🔍</Text>
+      <View className="px-4 pt-4 pb-3 bg-white border-b border-zinc-100">
+        <Text className="text-2xl font-bold text-zinc-900 mb-3">Find jammers</Text>
+        <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2">
+          <Text className="text-zinc-400 mr-2">🔍</Text>
           <TextInput
-            className="flex-1 text-slate-900"
+            className="flex-1 text-zinc-900"
             placeholder="Search by name, username, or email"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor="#a1a1aa"
             value={query}
             onChangeText={handleSearchChange}
             autoCapitalize="none"
@@ -281,7 +281,7 @@ export default function FriendsScreen() {
           />
           {query.length > 0 ? (
             <TouchableOpacity onPress={() => { setQuery(''); setSearchResults([]); }}>
-              <Text className="text-slate-400 ml-2">✕</Text>
+              <Text className="text-zinc-400 ml-2">✕</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -313,8 +313,8 @@ export default function FriendsScreen() {
           contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
           ListEmptyComponent={
             <View className="items-center justify-center pt-16 px-8">
-              <Text className="text-slate-500 font-medium mb-1">No users found</Text>
-              <Text className="text-slate-400 text-sm text-center">
+              <Text className="text-zinc-500 font-medium mb-1">No users found</Text>
+              <Text className="text-zinc-400 text-sm text-center">
                 Try searching by first name or @username
               </Text>
             </View>
@@ -346,23 +346,23 @@ export default function FriendsScreen() {
           }
           ListHeaderComponent={
             matches.length > 0 ? (
-              <Text className="px-4 pb-2 text-sm text-slate-500">
+              <Text className="px-4 pb-2 text-sm text-zinc-500">
                 Matches are ranked by shared songs and genre overlap.
               </Text>
             ) : null
           }
           ListEmptyComponent={
             !hasRepertoire ? (
-              <View className="mx-4 rounded-2xl border border-slate-200 bg-white p-6 items-center">
-                <Text className="font-semibold text-slate-900 mb-1">Your repertoire is empty</Text>
-                <Text className="text-slate-400 text-sm text-center">
+              <View className="mx-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
+                <Text className="font-semibold text-zinc-900 mb-1">Your repertoire is empty</Text>
+                <Text className="text-zinc-400 text-sm text-center">
                   Add songs to your repertoire and SingJam will match you with musicians who know the same songs.
                 </Text>
               </View>
             ) : (
-              <View className="mx-4 rounded-2xl border border-slate-200 bg-white p-6 items-center">
-                <Text className="font-semibold text-slate-900 mb-1">No matches yet</Text>
-                <Text className="text-slate-400 text-sm text-center">
+              <View className="mx-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
+                <Text className="font-semibold text-zinc-900 mb-1">No matches yet</Text>
+                <Text className="text-zinc-400 text-sm text-center">
                   As more musicians join and add songs, you'll see matches here.
                 </Text>
               </View>

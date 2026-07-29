@@ -57,7 +57,14 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 ### Sets
 | Feature | Status | Notes |
 |---|---|---|
-| Sets list (owned/collab/public) | ✅ | `(tabs)/sets.tsx`. |
+| Sets list (owned/collab/public) | ✅ | Rebuilt 2026-07-29 onto **`GET /api/sets`** (bearer) — native had reimplemented the three queries client-side and already drifted (web selected `jam_id`, native didn't; the two dedupes differed). The owned/collaborating/public split + dedupe now live only in the route. `GET`/`POST /api/sets` gained bearer support via a new `resolveApiClient` helper, which returns the RLS-scoped client the user was resolved *from* — a cookie-only route handed a bearer request runs as `anon` and silently returns nothing. |
+| Sets list: signed-out view | ✅ | Fixed 2026-07-29. Native showed a hard `SignInPrompt` wall; web serves public sets + a "Sign up →" panel to guests. Native now renders the same, so guest browsing works on this tab like the others. |
+| Sets list: local cache | ✅ | Added 2026-07-29. Sets was the last list tab with no `lib/cache` stale-while-revalidate layer, so it flashed skeletons on every focus while Repertoire/Songs/Jams painted instantly. |
+| Sets list: empty-repertoire nudge | ✅ | Added 2026-07-29 — web's "Your repertoire is empty → Browse songs" card (→ native `/songs`). |
+| Sets list: Copy on collaborating sets | ✅ | Fixed 2026-07-29 — native only offered Copy on `public` sets; web offers it on collaborating ones too. |
+| Sets list: owner attribution | ✅ | 2026-07-29: `GET /api/sets` now joins the owner profile for **collaborating** sets too, so both apps show "by Ada Lovelace @ada" instead of web's bare "COLLABORATOR" chip. Owner name taps through to the profile (`/u/[username]` on web, `/profile/[id]` on native) — native uses a nested `TouchableOpacity`, not `Text onPress`, so the tap wins the responder over the card. |
+| Sets list: create affordance | ✅ | Rationalised 2026-07-29 to **one entry point per app**: a dashed "New set" card as the first row of "Your sets". Web had two (a near-invisible ghost `+` in the section header *and* the dashed card at the foot of the list); native had three (a filled amber `+` in the page header, the dashed card as `ListHeaderComponent` above every section heading, and a "Create a set" button in `ListEmptyComponent` — all three rendered at once on an empty account, because `sections` was seeded unconditionally with `Your Sets`). The card sits at the **top** because both apps order owned sets `created_at desc`, so that is where the set you just made appears; a footer button would have been spatially disconnected from its own result. It doubles as the empty state, so native's separate "No sets yet" block is gone. **Note:** the Jams tab solves this differently (ghost `+` in the section header, dashed card only when the hosting section is empty — mutually exclusive rather than deduplicated). Sets and Jams are now internally inconsistent; unify if it grates. |
+| New set screen | ✅ | 2026-07-29: native `set/new.tsx` was the last native set mutation doing a **direct `sets` insert**; it now calls `POST /api/sets` (bearer), which is also the only path that honours `jamId` and its attendee→collaborator fan-out. Both apps keep name + optional description on a dedicated screen. |
 | Set detail: songs, reorder, key, leaders | ✅ | `set/[id].tsx`. |
 | Leader/support display + public-viewer gate | ✅ | Native now renders per-song Lead/Support pills (explicit leaders + participant repertoire confidence), hidden from public viewers via `isPublicViewer = !isOwner && !isCollaborator`, editor-toggleable — mirrors web `SetSongRow`. Replaced the old self-only leader star. (native has no CSV/PDF export, so those web gates don't apply.) Derivation still inline; see core-extraction backlog. |
 | Co-owner role | ✅ | Native recognizes `co-owner` (full owner powers except delete + assigning co-owners). All native set mutations now route through the web API via bearer (single-source authz), so co-owners aren't blocked by owner/editor-only RLS. Owner-only: delete + granting/changing co-owner. |
@@ -145,6 +152,20 @@ Already shared in core: `formatComposers`, `mergeSuggestionsById`, `reorderSongs
 `formatJamTime`, `username` rules, `singingVoice`, `sortRepertoireSearchResults`.
 
 ## Known gaps / deferred (not yet scheduled)
+- **Set *detail* gaps found in the 2026-07-29 sets pass (list view was fixed, detail was not):**
+  - Jam → set list create/link/unlink is **missing entirely** on native. Web's `JamSetList`
+    offers "Create set list" (auto-named `{jam} – set list`, passes `jamId` so attendees become
+    accepted collaborators), "Link existing" and "Unlink"; native's jam detail only lists already
+    linked sets read-only. This is the highest-value create path and it is phone-inaccessible.
+  - `AddToSetModal` still inserts `set_songs` rows directly (computes `position` itself, one
+    insert per song) instead of `POST /api/sets/[id]/songs`, so it never sets
+    `added_by_user_id` and skips the confidence upsert — songs added to a set from native
+    have no attribution recorded.
+  - No rename / description editing on native at all; web's inline "Edit set name" saves both.
+  - Private + link-shared access flows absent on native (web has `SetRequestAccess` and
+    `SetJoinPrompt`), so a set invite link opened on a phone dead-ends at "Set not found".
+  - Native lacks: add-to-repertoire from a set row, YouTube playlist export, Ultimate Guitar
+    playlist URL, per-song media add. (CSV/PDF stay desktop-only by choice.)
 - Add-to-set "+ New set" inline create (native).
 - Google Places New API migration (L3).
 - Search pagination on native (superseded by the offline-catalog track — see `project_offline_catalog` memory).

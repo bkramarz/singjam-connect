@@ -112,8 +112,8 @@ export default function UserProfileScreen() {
       <>
         <Stack.Screen options={{ title: 'Profile' }} />
         <View className="flex-1 items-center justify-center bg-white px-8">
-          <Text className="text-slate-900 font-semibold text-base mb-1">Profile not found</Text>
-          <Text className="text-slate-400 text-sm text-center">
+          <Text className="text-zinc-900 font-semibold text-base mb-1">Profile not found</Text>
+          <Text className="text-zinc-400 text-sm text-center">
             This user may have deleted their account.
           </Text>
         </View>
@@ -135,14 +135,14 @@ export default function UserProfileScreen() {
       <ContentContainer style={{ backgroundColor: 'white' }}>
       <ScrollView className="flex-1 bg-white">
         {/* Header */}
-        <View className="items-center px-4 pt-8 pb-6 border-b border-slate-100">
+        <View className="items-center px-4 pt-8 pb-6 border-b border-zinc-100">
           <Avatar profile={profile} />
-          <Text className="text-xl font-bold text-slate-900 mt-3">{displayName}</Text>
+          <Text className="text-xl font-bold text-zinc-900 mt-3">{displayName}</Text>
           {profile.username ? (
-            <Text className="text-slate-400 mt-0.5">@{profile.username}</Text>
+            <Text className="text-zinc-400 mt-0.5">@{profile.username}</Text>
           ) : null}
           {profile.neighborhood ? (
-            <Text className="text-slate-400 text-sm mt-1">📍 {profile.neighborhood}</Text>
+            <Text className="text-zinc-400 text-sm mt-1">📍 {profile.neighborhood}</Text>
           ) : null}
 
           {/* Singing voice */}
@@ -160,9 +160,9 @@ export default function UserProfileScreen() {
           {isOwnProfile ? (
             <TouchableOpacity
               onPress={() => router.push('/profile-edit')}
-              className="mt-4 border border-slate-200 rounded-full px-4 py-1.5"
+              className="mt-4 border border-zinc-200 rounded-full px-4 py-1.5"
             >
-              <Text className="text-slate-600 text-sm font-medium">Edit profile</Text>
+              <Text className="text-zinc-600 text-sm font-medium">Edit profile</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -176,15 +176,15 @@ export default function UserProfileScreen() {
 
         {/* Instruments */}
         {instruments.length > 0 && (
-          <View className="px-4 pt-5 pb-4 border-b border-slate-100">
-            <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+          <View className="px-4 pt-5 pb-4 border-b border-zinc-100">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">
               Instruments
             </Text>
             <View className="flex-row flex-wrap gap-2">
               {instruments.map(([name, level]) => (
-                <View key={name} className="flex-row items-center bg-slate-50 border border-slate-200 rounded-full px-3 py-1">
-                  <Text className="text-slate-800 text-sm font-medium">{name}</Text>
-                  <Text className="text-slate-400 text-xs ml-1">· {level}</Text>
+                <View key={name} className="flex-row items-center bg-zinc-50 border border-zinc-200 rounded-full px-3 py-1">
+                  <Text className="text-zinc-800 text-sm font-medium">{name}</Text>
+                  <Text className="text-zinc-400 text-xs ml-1">· {level}</Text>
                 </View>
               ))}
             </View>
@@ -193,15 +193,15 @@ export default function UserProfileScreen() {
 
         {/* Shared songs */}
         {!isOwnProfile && sharedSongs.length > 0 && (
-          <View className="px-4 pt-5 pb-4 border-b border-slate-100">
-            <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+          <View className="px-4 pt-5 pb-4 border-b border-zinc-100">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">
               Songs you both know ({sharedSongs.length})
             </Text>
             {sharedSongs.map(song => (
-              <View key={song.song_id} className="py-2 border-b border-slate-50 last:border-0">
-                <Text className="text-slate-900 font-medium" numberOfLines={1}>{song.title}</Text>
+              <View key={song.song_id} className="py-2 border-b border-zinc-50 last:border-0">
+                <Text className="text-zinc-900 font-medium" numberOfLines={1}>{song.title}</Text>
                 {song.display_artist ? (
-                  <Text className="text-sm text-slate-400" numberOfLines={1}>{song.display_artist}</Text>
+                  <Text className="text-sm text-zinc-400" numberOfLines={1}>{song.display_artist}</Text>
                 ) : null}
               </View>
             ))}
@@ -211,19 +211,19 @@ export default function UserProfileScreen() {
         {/* Their other songs */}
         {additionalSongs.length > 0 && (
           <View className="px-4 pt-5 pb-8">
-            <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+            <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">
               {isOwnProfile ? 'Your repertoire' : 'Their repertoire'} ({additionalSongs.length})
             </Text>
             {additionalSongs.slice(0, 20).map(song => (
-              <View key={song.song_id} className="py-2 border-b border-slate-50 last:border-0">
-                <Text className="text-slate-900" numberOfLines={1}>{song.title}</Text>
+              <View key={song.song_id} className="py-2 border-b border-zinc-50 last:border-0">
+                <Text className="text-zinc-900" numberOfLines={1}>{song.title}</Text>
                 {song.display_artist ? (
-                  <Text className="text-sm text-slate-400" numberOfLines={1}>{song.display_artist}</Text>
+                  <Text className="text-sm text-zinc-400" numberOfLines={1}>{song.display_artist}</Text>
                 ) : null}
               </View>
             ))}
             {additionalSongs.length > 20 && (
-              <Text className="text-slate-400 text-sm mt-3">
+              <Text className="text-zinc-400 text-sm mt-3">
                 + {additionalSongs.length - 20} more songs
               </Text>
             )}
@@ -232,8 +232,8 @@ export default function UserProfileScreen() {
 
         {sharedSongs.length === 0 && additionalSongs.length === 0 && !isOwnProfile && (
           <View className="items-center py-12 px-8">
-            <Ionicons name="musical-notes-outline" size={36} color="#cbd5e1" />
-            <Text className="text-slate-400 text-sm text-center mt-3">
+            <Ionicons name="musical-notes-outline" size={36} color="#d4d4d8" />
+            <Text className="text-zinc-400 text-sm text-center mt-3">
               No repertoire to show yet.
             </Text>
           </View>

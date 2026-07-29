@@ -65,12 +65,12 @@ function buildSections(items: JamItem[], uid: string | null): Section[] {
 
 function SkeletonCard() {
   return (
-    <View className="mx-4 mb-3 flex-row overflow-hidden rounded-2xl border border-slate-100 bg-white">
-      <View className="w-20 bg-slate-100" />
+    <View className="mx-4 mb-3 flex-row overflow-hidden rounded-2xl border border-zinc-100 bg-white">
+      <View className="w-20 bg-zinc-100" />
       <View className="flex-1 justify-center gap-2 p-4">
-        <View className="h-4 w-3/4 rounded bg-slate-200" />
-        <View className="h-3 w-1/2 rounded bg-slate-100" />
-        <View className="h-3 w-2/3 rounded bg-slate-100" />
+        <View className="h-4 w-3/4 rounded bg-zinc-200" />
+        <View className="h-3 w-1/2 rounded bg-zinc-100" />
+        <View className="h-3 w-2/3 rounded bg-zinc-100" />
       </View>
     </View>
   );
@@ -78,7 +78,6 @@ function SkeletonCard() {
 
 export default function JamsScreen() {
   const [sections, setSections] = useState<Section[]>([]);
-  const [hasHostingJams, setHasHostingJams] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -159,7 +158,6 @@ export default function JamsScreen() {
     writeCache('/jams', uid, items);
 
     const built = buildSections(items, uid);
-    setHasHostingJams(built.some(s => s.hosting && s.data.length > 0));
     setSections(built);
     setLoading(false);
     setRefreshing(false);
@@ -175,7 +173,6 @@ export default function JamsScreen() {
       if (cached) {
         const built = buildSections(cached, uid);
         setUserId(uid);
-        setHasHostingJams(built.some(s => s.hosting && s.data.length > 0));
         setSections(built);
         setLoading(false);
       }
@@ -237,9 +234,9 @@ export default function JamsScreen() {
     <View className="flex-1 bg-slate-50">
       <BrandHeader />
       <ContentContainer>
-      <View className="border-b border-slate-100 bg-white px-4 pb-3 pt-4">
-        <Text className="text-2xl font-bold text-slate-900">Jams</Text>
-        <Text className="mt-0.5 text-sm text-slate-500">Browse open jams or post your own.</Text>
+      <View className="border-b border-zinc-100 bg-white px-4 pb-3 pt-4">
+        <Text className="text-2xl font-bold text-zinc-900">Jams</Text>
+        <Text className="mt-0.5 text-sm text-zinc-500">Browse open jams or post your own.</Text>
       </View>
 
       {loading ? (
@@ -248,8 +245,8 @@ export default function JamsScreen() {
         </View>
       ) : isEmpty ? (
         <View className="flex-1 items-center justify-center">
-          <Text className="mb-1 text-base font-semibold text-slate-900">No upcoming jams</Text>
-          <Text className="px-8 text-center text-sm text-slate-400">
+          <Text className="mb-1 text-base font-semibold text-zinc-900">No upcoming jams</Text>
+          <Text className="px-8 text-center text-sm text-zinc-400">
             Check back soon for SingJam events, or post a jam of your own.
           </Text>
         </View>
@@ -266,23 +263,14 @@ export default function JamsScreen() {
             />
           )}
           renderSectionHeader={({ section }) => (
-            <View className="flex-row items-center justify-between px-4 pb-2 pt-5">
-              <Text className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
+            <View className="px-4 pb-2 pt-5">
+              <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 {section.title}
               </Text>
-              {section.hosting && (
-                <TouchableOpacity
-                  onPress={() => router.push('/jam/new' as any)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel="Post a jam"
-                >
-                  <Ionicons name="add" size={18} color="#a1a1aa" />
-                </TouchableOpacity>
-              )}
             </View>
           )}
           renderSectionFooter={({ section }) =>
-            section.hosting && !hasHostingJams ? (
+            section.hosting ? (
               <TouchableOpacity
                 onPress={() => router.push('/jam/new' as any)}
                 className="mx-4 mb-3 items-center rounded-2xl border-2 border-dashed border-zinc-200 py-6"

@@ -54,8 +54,8 @@ export default function FeedbackScreen() {
         <Stack.Screen options={{ title: 'Report a bug', headerTintColor: '#d97706' }} />
         <ContentContainer style={{ backgroundColor: 'white' }}>
         <View className="flex-1 bg-white px-4 pt-8">
-          <Text className="text-xl font-semibold text-slate-900">Thanks for the report!</Text>
-          <Text className="mt-2 text-sm text-slate-500">
+          <Text className="text-xl font-semibold text-zinc-900">Thanks for the report!</Text>
+          <Text className="mt-2 text-sm text-zinc-500">
             We'll look into it and follow up if we need more details.
           </Text>
           <TouchableOpacity onPress={() => router.back()} className="mt-4">
@@ -74,16 +74,16 @@ export default function FeedbackScreen() {
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-4 pt-6 pb-10">
-            <Text className="text-sm text-slate-500 mb-5">Tell us what went wrong and we'll get it fixed.</Text>
+            <Text className="text-sm text-zinc-500 mb-5">Tell us what went wrong and we'll get it fixed.</Text>
 
             <View className="mb-4">
-              <Text className="text-sm font-medium text-slate-700 mb-1">
+              <Text className="text-sm font-medium text-zinc-700 mb-1">
                 What happened? <Text className="text-red-500">*</Text>
               </Text>
               <TextInput
-                className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                className="border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
                 placeholder="Describe the bug…"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#a1a1aa"
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -95,13 +95,13 @@ export default function FeedbackScreen() {
             </View>
 
             <View className="mb-6">
-              <Text className="text-sm font-medium text-slate-700 mb-1">
-                Steps to reproduce <Text className="font-normal text-slate-400">(optional)</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-1">
+                Steps to reproduce <Text className="font-normal text-zinc-400">(optional)</Text>
               </Text>
               <TextInput
-                className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                className="border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
                 placeholder="What were you doing when it happened?"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#a1a1aa"
                 value={steps}
                 onChangeText={setSteps}
                 multiline
@@ -116,12 +116,12 @@ export default function FeedbackScreen() {
             <TouchableOpacity
               onPress={submit}
               disabled={busy || !description.trim()}
-              className={`rounded-xl py-4 items-center ${description.trim() ? 'bg-amber-500' : 'bg-slate-200'}`}
+              className={`rounded-xl py-4 items-center ${description.trim() ? 'bg-amber-500' : 'bg-zinc-200'}`}
             >
               {busy ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className={`font-semibold text-base ${description.trim() ? 'text-white' : 'text-slate-400'}`}>
+                <Text className={`font-semibold text-base ${description.trim() ? 'text-white' : 'text-zinc-400'}`}>
                   Send report
                 </Text>
               )}

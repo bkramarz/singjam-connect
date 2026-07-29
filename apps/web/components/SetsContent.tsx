@@ -11,6 +11,8 @@ type SetItem = {
   description: string | null;
   owner_user_id: string;
   link_sharing?: "private" | "link" | "public";
+  ownerName?: string | null;
+  ownerUsername?: string | null;
 };
 
 type PublicSetItem = {
@@ -143,15 +145,19 @@ export default function SetsContent() {
 
       {isSignedIn && (
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Your sets</h2>
-            <Link href="/set/new" className="flex items-center justify-center rounded-lg p-1 text-zinc-400 hover:text-amber-500 hover:bg-amber-50 transition-colors" aria-label="New set">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Your sets</h2>
+          <div className="grid grid-cols-1 gap-3">
+            {/* Sets are ordered newest-first, so the create affordance sits at the
+                top — where the set you just made will appear. */}
+            <Link
+              href="/set/new"
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 px-4 py-4 text-sm font-medium text-zinc-400 hover:border-amber-300 hover:text-amber-500 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
+              New set
             </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-3">
             {data.owned.map((set) => (
               <SetCard
                 key={set.id}
@@ -174,15 +180,6 @@ export default function SetsContent() {
                 }}
               />
             ))}
-            <Link
-              href="/set/new"
-              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 px-4 py-4 text-sm font-medium text-zinc-400 hover:border-amber-300 hover:text-amber-500 transition-colors"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              New set
-            </Link>
           </div>
         </section>
       )}
@@ -192,7 +189,15 @@ export default function SetsContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Collaborating on</h2>
           <div className="grid grid-cols-1 gap-3">
             {data.collaborating.map((set) => (
-              <SetCard key={set.id} set={set} isOwner={false} linkSharing={set.link_sharing} canCopy />
+              <SetCard
+                key={set.id}
+                set={set}
+                isOwner={false}
+                linkSharing={set.link_sharing}
+                ownerName={set.ownerName}
+                ownerUsername={set.ownerUsername}
+                canCopy
+              />
             ))}
           </div>
         </section>

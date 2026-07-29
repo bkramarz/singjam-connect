@@ -87,13 +87,13 @@ export default function RepertoireCard({
         <View className="flex-1 min-w-0">
           <TouchableOpacity onPress={onView}>
             <Text numberOfLines={1}>
-              <Text className="font-medium text-slate-900">{song.title}</Text>
+              <Text className="font-medium text-zinc-900">{song.title}</Text>
               {composersLabel ? (
-                <Text className="text-slate-400"> ({composersLabel})</Text>
+                <Text className="text-zinc-400"> ({composersLabel})</Text>
               ) : null}
             </Text>
           </TouchableOpacity>
-          <Text className="text-sm text-slate-500 mt-0.5" numberOfLines={1}>
+          <Text className="text-sm text-zinc-500 mt-0.5" numberOfLines={1}>
             {song.productions.length > 0 ? (
               <>from <Text className="italic">{song.productions.join(', ')}</Text></>
             ) : (
@@ -115,7 +115,7 @@ export default function RepertoireCard({
             isLead ? 'border-amber-400 bg-amber-100' : 'border-zinc-200 bg-white'
           }`}
         >
-          <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-slate-700'}`}>
+          <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-zinc-700'}`}>
             {confidenceLabel}
           </Text>
           <Ionicons name="chevron-down" size={12} color={isLead ? '#92400e' : '#71717a'} style={{ marginLeft: 4 }} />
