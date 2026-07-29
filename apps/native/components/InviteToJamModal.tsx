@@ -92,11 +92,11 @@ export default function InviteToJamModal({ visible, inviteeUserId, inviteeName, 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Cancel</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900" numberOfLines={1}>
+          <Text className="flex-1 text-center font-semibold text-zinc-900" numberOfLines={1}>
             Invite {inviteeName}
           </Text>
           <View style={{ width: 54 }} />
@@ -108,8 +108,8 @@ export default function InviteToJamModal({ visible, inviteeUserId, inviteeName, 
           </View>
         ) : jams.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-slate-900 font-semibold mb-1">No upcoming jams</Text>
-            <Text className="text-slate-400 text-sm text-center">
+            <Text className="text-zinc-900 font-semibold mb-1">No upcoming jams</Text>
+            <Text className="text-zinc-400 text-sm text-center">
               You'll see your hosted jams here once you've created one.
             </Text>
           </View>
@@ -128,10 +128,10 @@ export default function InviteToJamModal({ visible, inviteeUserId, inviteeName, 
             renderItem={({ item }) => {
               const isSent = sent.has(item.id);
               return (
-                <View className="mx-4 mb-2 rounded-xl border border-slate-100 bg-white px-4 py-3 flex-row items-center">
+                <View className="mx-4 mb-2 rounded-xl border border-zinc-100 bg-white px-4 py-3 flex-row items-center">
                   <View className="flex-1 mr-3">
-                    <Text className="font-semibold text-slate-900" numberOfLines={1}>{item.name}</Text>
-                    <Text className="text-sm text-slate-400 mt-0.5">
+                    <Text className="font-semibold text-zinc-900" numberOfLines={1}>{item.name}</Text>
+                    <Text className="text-sm text-zinc-400 mt-0.5">
                       {formatJamTime(item.starts_at)}
                     </Text>
                   </View>

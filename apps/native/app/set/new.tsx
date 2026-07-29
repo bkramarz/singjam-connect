@@ -55,9 +55,9 @@ export default function NewSetScreen() {
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-4 pt-6 pb-10">
             <View className="mb-4">
-              <Text className="text-sm font-medium text-slate-700 mb-1">Set name</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-1">Set name</Text>
               <TextInput
-                className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                className="border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
                 placeholder="e.g. Friday night gig"
                 value={name}
                 onChangeText={setName}
@@ -67,11 +67,11 @@ export default function NewSetScreen() {
             </View>
 
             <View className="mb-6">
-              <Text className="text-sm font-medium text-slate-700 mb-1">
-                Description <Text className="font-normal text-slate-400">(optional)</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-1">
+                Description <Text className="font-normal text-zinc-400">(optional)</Text>
               </Text>
               <TextInput
-                className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                className="border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
                 placeholder="e.g. Acoustic set for the pub"
                 value={description}
                 onChangeText={setDescription}
@@ -87,12 +87,12 @@ export default function NewSetScreen() {
             <TouchableOpacity
               onPress={handleCreate}
               disabled={saving || !name.trim()}
-              className={`rounded-xl py-4 items-center ${name.trim() ? 'bg-amber-500' : 'bg-slate-200'}`}
+              className={`rounded-xl py-4 items-center ${name.trim() ? 'bg-amber-500' : 'bg-zinc-200'}`}
             >
               {saving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className={`font-semibold text-base ${name.trim() ? 'text-white' : 'text-slate-400'}`}>
+                <Text className={`font-semibold text-base ${name.trim() ? 'text-white' : 'text-zinc-400'}`}>
                   Create Set
                 </Text>
               )}

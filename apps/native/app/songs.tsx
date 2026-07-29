@@ -48,11 +48,11 @@ const SORT_OPTIONS: { key: SortBy; label: string }[] = [
 function SkeletonCard() {
   return (
     <View className="mx-4 mb-2 rounded-2xl border border-zinc-200 bg-white p-4">
-      <View className="h-4 bg-slate-200 rounded w-2/3 mb-2" />
-      <View className="h-3 bg-slate-100 rounded w-1/2 mb-3" />
+      <View className="h-4 bg-zinc-200 rounded w-2/3 mb-2" />
+      <View className="h-3 bg-zinc-100 rounded w-1/2 mb-3" />
       <View className="flex-row" style={{ gap: 6 }}>
-        <View className="h-8 w-36 bg-slate-100 rounded-xl" />
-        <View className="h-8 w-16 bg-slate-100 rounded-xl" />
+        <View className="h-8 w-36 bg-zinc-100 rounded-xl" />
+        <View className="h-8 w-16 bg-zinc-100 rounded-xl" />
       </View>
     </View>
   );
@@ -279,11 +279,11 @@ export default function SongLibraryScreen() {
       {/* Search card — mirrors web's bordered search panel */}
       <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
         <View className="flex-row items-center rounded-xl border border-zinc-200 px-3 py-2">
-          <Ionicons name="search" size={16} color="#94a3b8" />
+          <Ionicons name="search" size={16} color="#a1a1aa" />
           <TextInput
-            className="flex-1 text-slate-900 ml-2"
+            className="flex-1 text-zinc-900 ml-2"
             placeholder="Search by title, first line, recording artist, or composer"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor="#a1a1aa"
             value={query}
             onChangeText={setQuery}
             autoCapitalize="none"
@@ -291,7 +291,7 @@ export default function SongLibraryScreen() {
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={16} color="#94a3b8" />
+              <Ionicons name="close" size={16} color="#a1a1aa" />
             </TouchableOpacity>
           )}
         </View>
@@ -386,7 +386,7 @@ export default function SongLibraryScreen() {
         onChange={setFilters}
         onClose={() => setFilterModalVisible(false)}
       />
-      <ContentContainer style={{ backgroundColor: '#f8fafc' }}>
+      <ContentContainer style={{ backgroundColor: '#fafafa' }}>
       <KeyboardAvoidingView className="flex-1 bg-slate-50" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {loadingAll ? (
           <View className="pt-4">

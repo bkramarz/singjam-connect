@@ -70,7 +70,7 @@ export default function SuggestionCard({ song, canLead, onAdd, onView, confidenc
       <View className="flex-row items-start" style={{ gap: 8 }}>
         <TouchableOpacity onPress={onView} className="flex-1 min-w-0">
           <Text numberOfLines={3}>
-            <Text className="font-medium text-slate-900">{song.title}</Text>
+            <Text className="font-medium text-zinc-900">{song.title}</Text>
             {composersLabel ? (
               <Text className="text-zinc-400"> ({composersLabel})</Text>
             ) : null}
@@ -134,7 +134,7 @@ export default function SuggestionCard({ song, canLead, onAdd, onView, confidenc
                 isLead ? 'border-amber-400 bg-amber-100' : 'border-zinc-200 bg-white'
               }`}
             >
-              <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-slate-700'}`}>
+              <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-zinc-700'}`}>
                 {CONFIDENCE_LABELS[confidence] ?? 'Learn'}
               </Text>
               <Ionicons name="chevron-down" size={12} color={isLead ? '#92400e' : '#71717a'} style={{ marginLeft: 4 }} />

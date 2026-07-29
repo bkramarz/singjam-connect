@@ -144,19 +144,19 @@ export default function AccountScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-          <View className="mx-4 mt-6 rounded-xl border border-slate-100 overflow-hidden bg-white">
+          <View className="mx-4 mt-6 rounded-xl border border-zinc-100 overflow-hidden bg-white">
 
             {/* Change email row */}
             <TouchableOpacity
               onPress={() => openSection(open === 'email' ? 'none' : 'email')}
-              className="px-4 py-4 border-b border-slate-100 flex-row items-center justify-between"
+              className="px-4 py-4 border-b border-zinc-100 flex-row items-center justify-between"
             >
-              <Text className="text-slate-900 font-medium">Change email</Text>
-              <Text className="text-slate-400 text-sm">{open === 'email' ? '▲' : '▼'}</Text>
+              <Text className="text-zinc-900 font-medium">Change email</Text>
+              <Text className="text-zinc-400 text-sm">{open === 'email' ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
             {open === 'email' && (
-              <View className="px-4 py-4 border-b border-slate-100 bg-slate-50">
+              <View className="px-4 py-4 border-b border-zinc-100 bg-zinc-50">
                 {emailSent ? (
                   <View className="bg-green-50 border border-green-200 rounded-xl p-3">
                     <Text className="text-green-800 font-medium mb-1">Confirmation sent</Text>
@@ -167,7 +167,7 @@ export default function AccountScreen() {
                 ) : (
                   <>
                     <TextInput
-                      className="border border-slate-200 rounded-xl px-4 py-3 mb-3 text-slate-900 bg-white"
+                      className="border border-zinc-200 rounded-xl px-4 py-3 mb-3 text-zinc-900 bg-white"
                       placeholder="New email address"
                       autoCapitalize="none"
                       keyboardType="email-address"
@@ -199,12 +199,12 @@ export default function AccountScreen() {
               onPress={() => openSection(open === 'password' ? 'none' : 'password')}
               className="px-4 py-4 flex-row items-center justify-between"
             >
-              <Text className="text-slate-900 font-medium">Change password</Text>
-              <Text className="text-slate-400 text-sm">{open === 'password' ? '▲' : '▼'}</Text>
+              <Text className="text-zinc-900 font-medium">Change password</Text>
+              <Text className="text-zinc-400 text-sm">{open === 'password' ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
             {open === 'password' && (
-              <View className="px-4 py-4 bg-slate-50">
+              <View className="px-4 py-4 bg-zinc-50">
                 {passwordDone ? (
                   <View className="bg-green-50 border border-green-200 rounded-xl p-3">
                     <Text className="text-green-800 font-medium">Password updated</Text>
@@ -215,7 +215,7 @@ export default function AccountScreen() {
                 ) : (
                   <>
                     <TextInput
-                      className="border border-slate-200 rounded-xl px-4 py-3 mb-3 text-slate-900 bg-white"
+                      className="border border-zinc-200 rounded-xl px-4 py-3 mb-3 text-zinc-900 bg-white"
                       placeholder="Current password"
                       secureTextEntry
                       value={currentPassword}
@@ -223,14 +223,14 @@ export default function AccountScreen() {
                       autoFocus
                     />
                     <TextInput
-                      className="border border-slate-200 rounded-xl px-4 py-3 mb-3 text-slate-900 bg-white"
+                      className="border border-zinc-200 rounded-xl px-4 py-3 mb-3 text-zinc-900 bg-white"
                       placeholder="New password (min 8 characters)"
                       secureTextEntry
                       value={newPassword}
                       onChangeText={setNewPassword}
                     />
                     <TextInput
-                      className="border border-slate-200 rounded-xl px-4 py-3 mb-3 text-slate-900 bg-white"
+                      className="border border-zinc-200 rounded-xl px-4 py-3 mb-3 text-zinc-900 bg-white"
                       placeholder="Confirm new password"
                       secureTextEntry
                       value={confirmPassword}
@@ -263,7 +263,7 @@ export default function AccountScreen() {
               className="px-4 py-4 flex-row items-center justify-between"
             >
               <Text className="text-red-600 font-medium">Delete account</Text>
-              <Text className="text-slate-400 text-sm">{open === 'delete' ? '▲' : '▼'}</Text>
+              <Text className="text-zinc-400 text-sm">{open === 'delete' ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
             {open === 'delete' && (

@@ -61,7 +61,7 @@ type SectionKind = 'owned' | 'collaborating' | 'public';
 type Section = { title: string; kind: SectionKind; data: SetItem[] };
 
 const SHARING_BADGE: Record<string, { label: string; bg: string; text: string }> = {
-  private: { label: 'Private',   bg: 'bg-slate-100', text: 'text-slate-500' },
+  private: { label: 'Private',   bg: 'bg-zinc-100', text: 'text-zinc-500' },
   link:    { label: 'Open join', bg: 'bg-amber-100', text: 'text-amber-700' },
   public:  { label: 'Public',    bg: 'bg-sky-100',   text: 'text-sky-700' },
 };
@@ -115,9 +115,9 @@ function buildSections(data: SetsData): Section[] {
 
 function SkeletonCard() {
   return (
-    <View className="mx-4 mb-3 rounded-2xl border border-slate-200 bg-white p-4">
-      <View className="h-4 w-1/3 bg-slate-200 rounded mb-2" />
-      <View className="h-3 w-1/2 bg-slate-100 rounded" />
+    <View className="mx-4 mb-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <View className="h-4 w-1/3 bg-zinc-200 rounded mb-2" />
+      <View className="h-3 w-1/2 bg-zinc-100 rounded" />
     </View>
   );
 }
@@ -153,27 +153,27 @@ function SetCard({ set, onPress, onMenu, onCopy, onOwnerPress, busy }: {
     <View className="mx-4 mb-3 relative">
       <TouchableOpacity
         onPress={onPress}
-        className="flex-row items-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+        className="flex-row items-center rounded-2xl border border-zinc-200 bg-white active:bg-zinc-50"
       >
         <View className="flex-1 min-w-0 p-4">
           <View className="flex-row items-center mb-0.5" style={{ gap: 8 }}>
             {set.isOwner ? (
-              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Owner</Text>
+              <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Owner</Text>
             ) : set.ownerName ? (
               // Nested TouchableOpacity (not Text onPress) so the owner tap wins the
               // touch responder over the card itself, as web's nested button does.
               <View className="flex-row items-center flex-1 min-w-0">
-                <Text className="text-xs text-slate-400">by </Text>
+                <Text className="text-xs text-zinc-400">by </Text>
                 <TouchableOpacity
                   onPress={onOwnerPress}
                   disabled={!onOwnerPress}
                   hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                   className="flex-1 min-w-0"
                 >
-                  <Text className="text-xs font-medium text-slate-500" numberOfLines={1}>
+                  <Text className="text-xs font-medium text-zinc-500" numberOfLines={1}>
                     {set.ownerName}
                     {set.ownerUsername && set.ownerName !== set.ownerUsername
-                      ? <Text className="font-normal text-slate-400"> @{set.ownerUsername}</Text>
+                      ? <Text className="font-normal text-zinc-400"> @{set.ownerUsername}</Text>
                       : null}
                   </Text>
                 </TouchableOpacity>
@@ -187,29 +187,29 @@ function SetCard({ set, onPress, onMenu, onCopy, onOwnerPress, busy }: {
               </View>
             ) : null}
           </View>
-          <Text className="font-semibold text-slate-900" numberOfLines={1}>{set.name}</Text>
+          <Text className="font-semibold text-zinc-900" numberOfLines={1}>{set.name}</Text>
           {set.description ? (
-            <Text className="text-sm text-slate-500 mt-0.5" numberOfLines={1}>{set.description}</Text>
+            <Text className="text-sm text-zinc-500 mt-0.5" numberOfLines={1}>{set.description}</Text>
           ) : null}
         </View>
 
         {onCopy ? (
           <View className="pr-3">
             {busy ? (
-              <ActivityIndicator size="small" color="#94a3b8" />
+              <ActivityIndicator size="small" color="#a1a1aa" />
             ) : (
               <TouchableOpacity
                 onPress={onCopy}
-                className="rounded-lg border border-slate-200 px-3 py-1.5"
+                className="rounded-lg border border-zinc-200 px-3 py-1.5"
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
-                <Text className="text-xs font-medium text-slate-600">Copy</Text>
+                <Text className="text-xs font-medium text-zinc-600">Copy</Text>
               </TouchableOpacity>
             )}
           </View>
         ) : showChevron ? (
           <View className="pr-4">
-            <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+            <Ionicons name="chevron-forward" size={18} color="#d4d4d8" />
           </View>
         ) : null}
       </TouchableOpacity>
@@ -221,7 +221,7 @@ function SetCard({ set, onPress, onMenu, onCopy, onOwnerPress, busy }: {
         <View className="absolute top-2 right-2">
           {busy ? (
             <View className="rounded-lg bg-white p-1">
-              <ActivityIndicator size="small" color="#94a3b8" />
+              <ActivityIndicator size="small" color="#a1a1aa" />
             </View>
           ) : (
             <TouchableOpacity
@@ -230,7 +230,7 @@ function SetCard({ set, onPress, onMenu, onCopy, onOwnerPress, busy }: {
               className="rounded-lg bg-white p-1"
               accessibilityLabel="More options"
             >
-              <Ionicons name="ellipsis-horizontal" size={16} color="#94a3b8" />
+              <Ionicons name="ellipsis-horizontal" size={16} color="#a1a1aa" />
             </TouchableOpacity>
           )}
         </View>
@@ -362,9 +362,9 @@ export default function SetsScreen() {
     <View className="flex-1 bg-slate-50">
       <BrandHeader />
       <ContentContainer>
-      <View className="px-4 pt-4 pb-3 bg-white border-b border-slate-100">
-        <Text className="text-2xl font-bold text-slate-900">Sets</Text>
-        <Text className="text-sm text-slate-500 mt-0.5">Build song lists for your jams and gigs.</Text>
+      <View className="px-4 pt-4 pb-3 bg-white border-b border-zinc-100">
+        <Text className="text-2xl font-bold text-zinc-900">Sets</Text>
+        <Text className="text-sm text-zinc-500 mt-0.5">Build song lists for your jams and gigs.</Text>
       </View>
 
       {loading ? (
@@ -415,9 +415,9 @@ export default function SetsScreen() {
           contentContainerStyle={{ paddingBottom: 40 }}
           ListHeaderComponent={
             authenticated && !hasRepertoire ? (
-              <View className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white p-6 items-center">
-                <Text className="text-base font-semibold text-slate-900">Your repertoire is empty</Text>
-                <Text className="mt-1 text-sm text-slate-500 text-center">
+              <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
+                <Text className="text-base font-semibold text-zinc-900">Your repertoire is empty</Text>
+                <Text className="mt-1 text-sm text-zinc-500 text-center">
                   Add songs you know to build sets for your jams and performances.
                 </Text>
                 <TouchableOpacity
@@ -431,11 +431,11 @@ export default function SetsScreen() {
           }
           ListFooterComponent={
             !authenticated ? (
-              <View className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white p-8 items-center">
-                <Text className="text-base font-semibold text-slate-900 text-center">
+              <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-8 items-center">
+                <Text className="text-base font-semibold text-zinc-900 text-center">
                   Build sets for your jams and gigs
                 </Text>
-                <Text className="mt-2 text-sm text-slate-500 text-center">
+                <Text className="mt-2 text-sm text-zinc-500 text-center">
                   Sign up to build your own sets, track your repertoire, and find jam partners who know the same songs.
                 </Text>
                 <TouchableOpacity

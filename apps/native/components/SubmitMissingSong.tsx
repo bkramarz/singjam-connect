@@ -53,20 +53,20 @@ export default function SubmitMissingSong({
   }
 
   return (
-    <View className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-      <Text className="font-semibold text-slate-900">Add a missing song</Text>
-      <Text className="mt-0.5 text-xs text-slate-500">
+    <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+      <Text className="font-semibold text-zinc-900">Add a missing song</Text>
+      <Text className="mt-0.5 text-xs text-zinc-500">
         We'll look it up and add it to the library so you can add it to your repertoire.
       </Text>
 
       <View className="mt-3">
-        <Text className="text-sm font-medium text-slate-700 mb-1">
+        <Text className="text-sm font-medium text-zinc-700 mb-1">
           Song title <Text className="text-red-500">*</Text>
         </Text>
         <TextInput
-          className="border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+          className="border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900"
           placeholder="e.g. Proud Mary"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#a1a1aa"
           value={title}
           onChangeText={t => { setTitle(t); setError(null); }}
           editable={!busy}
@@ -75,13 +75,13 @@ export default function SubmitMissingSong({
       </View>
 
       <View className="mt-3">
-        <Text className="text-sm font-medium text-slate-700 mb-1">
-          Recording artist <Text className="font-normal text-slate-400">(optional)</Text>
+        <Text className="text-sm font-medium text-zinc-700 mb-1">
+          Recording artist <Text className="font-normal text-zinc-400">(optional)</Text>
         </Text>
         <TextInput
-          className="border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+          className="border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900"
           placeholder="e.g. Creedence Clearwater Revival"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#a1a1aa"
           value={artist}
           onChangeText={t => { setArtist(t); setError(null); }}
           editable={!busy}
@@ -94,16 +94,16 @@ export default function SubmitMissingSong({
       <TouchableOpacity
         onPress={submit}
         disabled={busy || !title.trim()}
-        className={`mt-3 rounded-xl py-3 items-center ${title.trim() ? 'bg-amber-500' : 'bg-slate-200'}`}
+        className={`mt-3 rounded-xl py-3 items-center ${title.trim() ? 'bg-amber-500' : 'bg-zinc-200'}`}
       >
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text className={`font-semibold ${title.trim() ? 'text-white' : 'text-slate-400'}`}>Add song</Text>
+          <Text className={`font-semibold ${title.trim() ? 'text-white' : 'text-zinc-400'}`}>Add song</Text>
         )}
       </TouchableOpacity>
       {busy ? (
-        <Text className="text-xs text-slate-400 text-center mt-2">Looking up song info — this can take a few seconds…</Text>
+        <Text className="text-xs text-zinc-400 text-center mt-2">Looking up song info — this can take a few seconds…</Text>
       ) : null}
     </View>
   );

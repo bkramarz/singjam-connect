@@ -73,27 +73,27 @@ function LocationModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Cancel</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Location</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Location</Text>
           <View style={{ width: 54 }} />
         </View>
-        <View className="px-4 py-3 border-b border-slate-100">
-          <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-            <Ionicons name="search" size={14} color="#94a3b8" style={{ marginRight: 6 }} />
+        <View className="px-4 py-3 border-b border-zinc-100">
+          <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2">
+            <Ionicons name="search" size={14} color="#a1a1aa" style={{ marginRight: 6 }} />
             <TextInput
-              className="flex-1 text-slate-900"
+              className="flex-1 text-zinc-900"
               placeholder="Search venue, address, or city…"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#a1a1aa"
               value={query}
               onChangeText={setQuery}
               autoFocus
             />
             {query.length > 0 && (
               <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
-                <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                <Ionicons name="close-circle" size={16} color="#a1a1aa" />
               </TouchableOpacity>
             )}
           </View>
@@ -110,15 +110,15 @@ function LocationModal({
             renderItem={({ item }) => (
               <TouchableOpacity
                 onPress={() => { onSelect(item.description, item.neighborhood); onClose(); }}
-                className="px-4 py-3 border-b border-slate-100"
+                className="px-4 py-3 border-b border-zinc-100"
               >
-                <Text className="text-slate-900" numberOfLines={2}>📍 {item.description}</Text>
+                <Text className="text-zinc-900" numberOfLines={2}>📍 {item.description}</Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
               query.length >= 2 ? (
                 <View className="items-center pt-12">
-                  <Text className="text-slate-400">No results</Text>
+                  <Text className="text-zinc-400">No results</Text>
                 </View>
               ) : null
             }
@@ -149,9 +149,9 @@ function MultiSelectModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-zinc-100">
           <View style={{ width: 48 }} />
-          <Text className="flex-1 text-center font-semibold text-slate-900">{title}</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">{title}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
@@ -164,9 +164,9 @@ function MultiSelectModal({
             return (
               <TouchableOpacity
                 onPress={() => onToggle(item.id)}
-                className={`px-4 py-3 border-b border-slate-100 flex-row items-center justify-between ${checked ? 'bg-amber-50' : ''}`}
+                className={`px-4 py-3 border-b border-zinc-100 flex-row items-center justify-between ${checked ? 'bg-amber-50' : ''}`}
               >
-                <Text className={`${checked ? 'text-amber-800 font-semibold' : 'text-slate-900'}`}>{item.name}</Text>
+                <Text className={`${checked ? 'text-amber-800 font-semibold' : 'text-zinc-900'}`}>{item.name}</Text>
                 {checked && <Ionicons name="checkmark" size={16} color="#d97706" />}
               </TouchableOpacity>
             );
@@ -409,7 +409,7 @@ export default function NewJamScreen() {
             <View className="bg-white pb-6">
               <View className="flex-row items-center justify-between px-4 pt-3 pb-1">
                 <TouchableOpacity onPress={() => { setEndTime(null); setEndPickerVisible(false); }}>
-                  <Text className="text-slate-400 font-medium">Clear</Text>
+                  <Text className="text-zinc-400 font-medium">Clear</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setEndPickerVisible(false)}>
                   <Text className="text-amber-600 font-semibold text-base">Done</Text>
@@ -437,7 +437,7 @@ export default function NewJamScreen() {
             {/* Cover image */}
             <TouchableOpacity
               onPress={pickCoverImage}
-              className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4"
+              className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-4"
             >
               {coverAsset ? (
                 <View>
@@ -448,20 +448,20 @@ export default function NewJamScreen() {
                 </View>
               ) : (
                 <View className="items-center justify-center py-8 gap-1">
-                  <Ionicons name="image-outline" size={28} color="#94a3b8" />
-                  <Text className="text-slate-400 text-sm mt-1">Add cover image (optional)</Text>
+                  <Ionicons name="image-outline" size={28} color="#a1a1aa" />
+                  <Text className="text-zinc-400 text-sm mt-1">Add cover image (optional)</Text>
                 </View>
               )}
             </TouchableOpacity>
 
             {/* Name */}
-            <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">
-              <View className="px-4 py-3 border-b border-slate-100">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Name</Text>
+            <View className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-4">
+              <View className="px-4 py-3 border-b border-zinc-100">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-1.5">Name</Text>
                 <TextInput
-                  className="text-slate-900 text-base"
+                  className="text-zinc-900 text-base"
                   placeholder="Leave blank for auto-name"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#a1a1aa"
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="sentences"
@@ -470,11 +470,11 @@ export default function NewJamScreen() {
 
               {/* Description */}
               <View className="px-4 py-3">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Notes (optional)</Text>
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-1.5">Notes (optional)</Text>
                 <TextInput
-                  className="text-slate-900"
+                  className="text-zinc-900"
                   placeholder="What to bring, parking info, song suggestions…"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#a1a1aa"
                   value={description}
                   onChangeText={setDescription}
                   multiline
@@ -486,29 +486,29 @@ export default function NewJamScreen() {
             </View>
 
             {/* Date & Time */}
-            <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">
+            <View className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-4">
               <TouchableOpacity
                 onPress={() => setDatePickerVisible(true)}
-                className="px-4 py-3 border-b border-slate-100 flex-row items-center justify-between"
+                className="px-4 py-3 border-b border-zinc-100 flex-row items-center justify-between"
               >
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">Date</Text>
-                <Text className="text-slate-900 font-medium">{formatDateDisplay(date)}</Text>
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Date</Text>
+                <Text className="text-zinc-900 font-medium">{formatDateDisplay(date)}</Text>
               </TouchableOpacity>
 
               <View className="flex-row">
                 <TouchableOpacity
                   onPress={() => setStartPickerVisible(true)}
-                  className="flex-1 px-4 py-3 border-r border-slate-100 flex-row items-center justify-between"
+                  className="flex-1 px-4 py-3 border-r border-zinc-100 flex-row items-center justify-between"
                 >
-                  <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">Start</Text>
-                  <Text className="text-slate-900 font-medium">{formatTimeDisplay(startTime)}</Text>
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Start</Text>
+                  <Text className="text-zinc-900 font-medium">{formatTimeDisplay(startTime)}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => setEndPickerVisible(true)}
                   className="flex-1 px-4 py-3 flex-row items-center justify-between"
                 >
-                  <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">End</Text>
-                  <Text className={`font-medium ${endTime ? 'text-slate-900' : 'text-slate-400'}`}>
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">End</Text>
+                  <Text className={`font-medium ${endTime ? 'text-zinc-900' : 'text-zinc-400'}`}>
                     {endTime ? formatTimeDisplay(endTime) : 'Optional'}
                   </Text>
                 </TouchableOpacity>
@@ -516,14 +516,14 @@ export default function NewJamScreen() {
             </View>
 
             {/* Location */}
-            <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">
+            <View className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-4">
               <TouchableOpacity
                 onPress={() => { if (!locationTbd) setLocationModalVisible(true); }}
-                className="px-4 py-3 border-b border-slate-100 flex-row items-center justify-between"
+                className="px-4 py-3 border-b border-zinc-100 flex-row items-center justify-between"
                 disabled={locationTbd}
               >
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">Location</Text>
-                <Text className={`font-medium flex-1 text-right ml-4 ${fullAddress && !locationTbd ? 'text-slate-900' : 'text-slate-400'}`} numberOfLines={1}>
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Location</Text>
+                <Text className={`font-medium flex-1 text-right ml-4 ${fullAddress && !locationTbd ? 'text-zinc-900' : 'text-zinc-400'}`} numberOfLines={1}>
                   {locationTbd ? 'TBD' : (fullAddress || 'Tap to search')}
                 </Text>
               </TouchableOpacity>
@@ -531,36 +531,36 @@ export default function NewJamScreen() {
                 onPress={() => { setLocationTbd(!locationTbd); if (!locationTbd) { setFullAddress(''); setNeighborhood(''); } }}
                 className="px-4 py-3 flex-row items-center gap-3"
               >
-                <View className={`w-5 h-5 rounded border-2 items-center justify-center ${locationTbd ? 'bg-amber-500 border-amber-500' : 'border-slate-300'}`}>
+                <View className={`w-5 h-5 rounded border-2 items-center justify-center ${locationTbd ? 'bg-amber-500 border-amber-500' : 'border-zinc-300'}`}>
                   {locationTbd && <Ionicons name="checkmark" size={12} color="white" />}
                 </View>
-                <Text className="text-slate-700 text-sm">Location TBD</Text>
+                <Text className="text-zinc-700 text-sm">Location TBD</Text>
               </TouchableOpacity>
             </View>
 
             {/* Visibility & Settings */}
-            <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-4">
-              <View className="px-4 py-3 border-b border-slate-100">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Visibility</Text>
+            <View className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-4">
+              <View className="px-4 py-3 border-b border-zinc-100">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">Visibility</Text>
                 <View className="flex-row gap-2">
                   {VISIBILITY_OPTIONS.map(opt => (
                     <TouchableOpacity
                       key={opt.value}
                       onPress={() => setVisibility(opt.value)}
-                      className={`flex-1 rounded-xl py-2.5 items-center border ${visibility === opt.value ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+                      className={`flex-1 rounded-xl py-2.5 items-center border ${visibility === opt.value ? 'bg-amber-500 border-amber-500' : 'bg-white border-zinc-200'}`}
                     >
-                      <Text className={`text-sm font-semibold ${visibility === opt.value ? 'text-white' : 'text-slate-600'}`}>{opt.label}</Text>
+                      <Text className={`text-sm font-semibold ${visibility === opt.value ? 'text-white' : 'text-zinc-600'}`}>{opt.label}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
 
-              <View className="px-4 py-3 border-b border-slate-100">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Capacity (optional)</Text>
+              <View className="px-4 py-3 border-b border-zinc-100">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-1.5">Capacity (optional)</Text>
                 <TextInput
-                  className="text-slate-900"
+                  className="text-zinc-900"
                   placeholder="No limit"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#a1a1aa"
                   value={capacity}
                   onChangeText={setCapacity}
                   keyboardType="number-pad"
@@ -571,24 +571,24 @@ export default function NewJamScreen() {
                 onPress={() => setGuestsCanInvite(!guestsCanInvite)}
                 className="px-4 py-3 flex-row items-center gap-3"
               >
-                <View className={`w-5 h-5 rounded border-2 items-center justify-center ${guestsCanInvite ? 'bg-amber-500 border-amber-500' : 'border-slate-300'}`}>
+                <View className={`w-5 h-5 rounded border-2 items-center justify-center ${guestsCanInvite ? 'bg-amber-500 border-amber-500' : 'border-zinc-300'}`}>
                   {guestsCanInvite && <Ionicons name="checkmark" size={12} color="white" />}
                 </View>
                 <View className="flex-1">
-                  <Text className="text-slate-900 font-medium">Guests can invite</Text>
-                  <Text className="text-xs text-slate-400">Attendees can invite other members</Text>
+                  <Text className="text-zinc-900 font-medium">Guests can invite</Text>
+                  <Text className="text-xs text-zinc-400">Attendees can invite other members</Text>
                 </View>
               </TouchableOpacity>
             </View>
 
             {/* Genres & Themes */}
-            <View className="bg-white rounded-xl border border-slate-100 overflow-hidden mb-6">
+            <View className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-6">
               <TouchableOpacity
                 onPress={() => setGenreModalVisible(true)}
-                className="px-4 py-3 border-b border-slate-100 flex-row items-center justify-between"
+                className="px-4 py-3 border-b border-zinc-100 flex-row items-center justify-between"
               >
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">Genres</Text>
-                <Text className={`font-medium flex-1 text-right ml-4 ${selectedGenreNames ? 'text-slate-900' : 'text-slate-400'}`} numberOfLines={1}>
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Genres</Text>
+                <Text className={`font-medium flex-1 text-right ml-4 ${selectedGenreNames ? 'text-zinc-900' : 'text-zinc-400'}`} numberOfLines={1}>
                   {selectedGenreNames || 'None selected'}
                 </Text>
               </TouchableOpacity>
@@ -597,8 +597,8 @@ export default function NewJamScreen() {
                 onPress={() => setThemeModalVisible(true)}
                 className="px-4 py-3 flex-row items-center justify-between"
               >
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">Themes</Text>
-                <Text className={`font-medium flex-1 text-right ml-4 ${selectedThemeNames ? 'text-slate-900' : 'text-slate-400'}`} numberOfLines={1}>
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Themes</Text>
+                <Text className={`font-medium flex-1 text-right ml-4 ${selectedThemeNames ? 'text-zinc-900' : 'text-zinc-400'}`} numberOfLines={1}>
                   {selectedThemeNames || 'None selected'}
                 </Text>
               </TouchableOpacity>

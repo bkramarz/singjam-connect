@@ -10,8 +10,8 @@ export default function SignInPrompt({ message }: { message: string }) {
       <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-4">
         <Ionicons name="lock-closed-outline" size={24} color="#d97706" />
       </View>
-      <Text className="text-slate-900 font-semibold text-base text-center mb-1">{message}</Text>
-      <Text className="text-slate-400 text-sm text-center mb-5">
+      <Text className="text-zinc-900 font-semibold text-base text-center mb-1">{message}</Text>
+      <Text className="text-zinc-400 text-sm text-center mb-5">
         Sign in or create an account to continue.
       </Text>
       <TouchableOpacity

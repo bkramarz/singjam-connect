@@ -56,7 +56,7 @@ const INSTRUMENT_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Professional
 type InstrumentLevel = typeof INSTRUMENT_LEVELS[number];
 
 const LEVEL_COLOR: Record<InstrumentLevel, string> = {
-  Beginner: 'bg-slate-100 text-slate-500',
+  Beginner: 'bg-zinc-100 text-zinc-500',
   Intermediate: 'bg-sky-50 text-sky-700',
   Advanced: 'bg-amber-50 text-amber-700',
   Professional: 'bg-green-50 text-green-700',
@@ -127,21 +127,21 @@ function LocationModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Cancel</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Your Location</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Your Location</Text>
           <View style={{ width: 50 }} />
         </View>
 
-        <View className="px-4 py-3 border-b border-slate-100">
-          <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-            <Text className="text-slate-400 mr-2">🔍</Text>
+        <View className="px-4 py-3 border-b border-zinc-100">
+          <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2">
+            <Text className="text-zinc-400 mr-2">🔍</Text>
             <TextInput
-              className="flex-1 text-slate-900"
+              className="flex-1 text-zinc-900"
               placeholder="Search city or neighborhood…"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#a1a1aa"
               value={query}
               onChangeText={setQuery}
               autoFocus
@@ -149,7 +149,7 @@ function LocationModal({
             />
             {query.length > 0 && (
               <TouchableOpacity onPress={() => { setQuery(''); setSuggestions([]); }}>
-                <Text className="text-slate-400 ml-2">✕</Text>
+                <Text className="text-zinc-400 ml-2">✕</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -167,15 +167,15 @@ function LocationModal({
             renderItem={({ item }) => (
               <TouchableOpacity
                 onPress={() => { onSelect(item.value); onClose(); }}
-                className="px-4 py-3 border-b border-slate-100"
+                className="px-4 py-3 border-b border-zinc-100"
               >
-                <Text className="text-slate-900">📍 {item.label}</Text>
+                <Text className="text-zinc-900">📍 {item.label}</Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
               query.length >= 2 ? (
                 <View className="items-center justify-center pt-12">
-                  <Text className="text-slate-400">No results found</Text>
+                  <Text className="text-zinc-400">No results found</Text>
                 </View>
               ) : null
             }
@@ -211,42 +211,42 @@ function InstrumentSearch({
             <TouchableOpacity
               key={i}
               onPress={(e) => onSelect(i, e)}
-              className="border border-slate-200 rounded-xl px-3 py-1.5"
+              className="border border-zinc-200 rounded-xl px-3 py-1.5"
             >
-              <Text className="text-sm text-slate-700">+ {i}</Text>
+              <Text className="text-sm text-zinc-700">+ {i}</Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
-      <View className="flex-row items-center border border-slate-300 rounded-xl px-3 py-2">
-        <Ionicons name="search" size={16} color="#94a3b8" style={{ marginRight: 6 }} />
+      <View className="flex-row items-center border border-zinc-300 rounded-xl px-3 py-2">
+        <Ionicons name="search" size={16} color="#a1a1aa" style={{ marginRight: 6 }} />
         <TextInput
-          className="flex-1 text-slate-900"
+          className="flex-1 text-zinc-900"
           placeholder="Search all instruments…"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#a1a1aa"
           value={query}
           onChangeText={setQuery}
           autoCapitalize="words"
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={() => setQuery('')}>
-            <Ionicons name="close-circle" size={16} color="#94a3b8" />
+            <Ionicons name="close-circle" size={16} color="#a1a1aa" />
           </TouchableOpacity>
         )}
       </View>
       {trimmed.length > 0 && (
-        <View className="mt-1 rounded-xl border border-slate-200 overflow-hidden">
+        <View className="mt-1 rounded-xl border border-zinc-200 overflow-hidden">
           {filtered.length > 0 ? filtered.map(i => (
             <TouchableOpacity
               key={i}
               onPress={(e) => { onSelect(i, e); setQuery(''); }}
-              className="px-3 py-2.5 border-b border-slate-100"
+              className="px-3 py-2.5 border-b border-zinc-100"
             >
-              <Text className="text-slate-900">{i}</Text>
+              <Text className="text-zinc-900">{i}</Text>
             </TouchableOpacity>
           )) : (
             <View className="px-3 py-2.5">
-              <Text className="text-slate-400">No matches</Text>
+              <Text className="text-zinc-400">No matches</Text>
             </View>
           )}
         </View>
@@ -284,9 +284,9 @@ function GenreSearch({
               <TouchableOpacity
                 key={g}
                 onPress={() => onToggle(g)}
-                className={`rounded-xl border px-3 py-1.5 ${isSelected ? 'bg-slate-900 border-slate-900' : 'border-slate-200'}`}
+                className={`rounded-xl border px-3 py-1.5 ${isSelected ? 'bg-zinc-900 border-zinc-900' : 'border-zinc-200'}`}
               >
-                <Text className={`text-sm ${isSelected ? 'text-white' : 'text-slate-700'}`}>
+                <Text className={`text-sm ${isSelected ? 'text-white' : 'text-zinc-700'}`}>
                   {isSelected ? `✓ ${g}` : `+ ${g}`}
                 </Text>
               </TouchableOpacity>
@@ -294,34 +294,34 @@ function GenreSearch({
           })}
         </View>
       )}
-      <View className="flex-row items-center border border-slate-300 rounded-xl px-3 py-2">
-        <Ionicons name="search" size={16} color="#94a3b8" style={{ marginRight: 6 }} />
+      <View className="flex-row items-center border border-zinc-300 rounded-xl px-3 py-2">
+        <Ionicons name="search" size={16} color="#a1a1aa" style={{ marginRight: 6 }} />
         <TextInput
-          className="flex-1 text-slate-900"
+          className="flex-1 text-zinc-900"
           placeholder="Search all genres…"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#a1a1aa"
           value={query}
           onChangeText={setQuery}
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={() => setQuery('')}>
-            <Ionicons name="close-circle" size={16} color="#94a3b8" />
+            <Ionicons name="close-circle" size={16} color="#a1a1aa" />
           </TouchableOpacity>
         )}
       </View>
       {trimmed.length > 0 && (
-        <View className="mt-1 rounded-xl border border-slate-200 overflow-hidden">
+        <View className="mt-1 rounded-xl border border-zinc-200 overflow-hidden">
           {filtered.length > 0 ? filtered.map(g => (
             <TouchableOpacity
               key={g}
               onPress={() => { onToggle(g); setQuery(''); }}
-              className="px-3 py-2.5 border-b border-slate-100"
+              className="px-3 py-2.5 border-b border-zinc-100"
             >
-              <Text className="text-slate-900">{g}</Text>
+              <Text className="text-zinc-900">{g}</Text>
             </TouchableOpacity>
           )) : (
             <View className="px-3 py-2.5">
-              <Text className="text-slate-400">No matches</Text>
+              <Text className="text-zinc-400">No matches</Text>
             </View>
           )}
         </View>
@@ -592,7 +592,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
   const usernameHintColor =
     usernameStatus === 'available' ? 'text-green-600' :
     usernameStatus === 'taken' || usernameStatus === 'invalid' ? 'text-red-500' :
-    'text-slate-400';
+    'text-zinc-400';
 
   const instrumentEntries = Object.entries(instruments);
 
@@ -608,8 +608,8 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-6 pt-16 pb-10">
-            <Text className="text-3xl font-bold text-slate-900 mb-1">{title}</Text>
-            <Text className="text-slate-400 mb-8">{subtitle}</Text>
+            <Text className="text-3xl font-bold text-zinc-900 mb-1">{title}</Text>
+            <Text className="text-zinc-400 mb-8">{subtitle}</Text>
 
             {/* Profile photo */}
             <View className="flex-row items-center mb-6">
@@ -617,8 +617,8 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                 {avatarUrl ? (
                   <Image source={{ uri: avatarUrl }} className="h-16 w-16 rounded-full" />
                 ) : (
-                  <View className="h-16 w-16 items-center justify-center rounded-full bg-slate-100">
-                    <Text className="text-2xl text-slate-400">
+                  <View className="h-16 w-16 items-center justify-center rounded-full bg-zinc-100">
+                    <Text className="text-2xl text-zinc-400">
                       {firstName[0]?.toUpperCase() ?? '?'}
                     </Text>
                   </View>
@@ -634,7 +634,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                 )}
               </TouchableOpacity>
               <View className="ml-4 flex-1">
-                <Text className="text-sm font-medium text-slate-700">Profile photo</Text>
+                <Text className="text-sm font-medium text-zinc-700">Profile photo</Text>
                 <TouchableOpacity onPress={handleAvatarPress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   <Text className="text-sm text-amber-600 mt-0.5">
                     {avatarUrl ? 'Change photo' : 'Add a photo'}
@@ -646,9 +646,9 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
             {/* Name row */}
             <View className="flex-row mb-4">
               <View className="flex-1 mr-2">
-                <Text className="text-sm font-medium text-slate-700 mb-1">First name</Text>
+                <Text className="text-sm font-medium text-zinc-700 mb-1">First name</Text>
                 <TextInput
-                  className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                  className="border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
                   placeholder="Jane"
                   value={firstName}
                   onChangeText={setFirstName}
@@ -656,9 +656,9 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                 />
               </View>
               <View className="flex-1 ml-2">
-                <Text className="text-sm font-medium text-slate-700 mb-1">Last name</Text>
+                <Text className="text-sm font-medium text-zinc-700 mb-1">Last name</Text>
                 <TextInput
-                  className="border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
+                  className="border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
                   placeholder="Smith"
                   value={lastName}
                   onChangeText={setLastName}
@@ -669,18 +669,18 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
 
             {/* Username */}
             <View className="mb-4">
-              <Text className="text-sm font-medium text-slate-700 mb-1">Username</Text>
-              <View className="flex-row items-center border border-slate-200 rounded-xl px-4 py-3">
-                <Text className="text-slate-400 mr-1">@</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-1">Username</Text>
+              <View className="flex-row items-center border border-zinc-200 rounded-xl px-4 py-3">
+                <Text className="text-zinc-400 mr-1">@</Text>
                 <TextInput
-                  className="flex-1 text-slate-900"
+                  className="flex-1 text-zinc-900"
                   placeholder="yourname"
                   value={username}
                   onChangeText={handleUsernameChange}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
-                {usernameStatus === 'checking' && <ActivityIndicator size="small" color="#94a3b8" />}
+                {usernameStatus === 'checking' && <ActivityIndicator size="small" color="#a1a1aa" />}
               </View>
               {usernameHint ? (
                 <Text className={`text-xs mt-1 ${usernameHintColor}`}>{usernameHint}</Text>
@@ -689,13 +689,13 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
 
             {/* Location */}
             <View className="mb-4">
-              <Text className="text-sm font-medium text-slate-700 mb-1">City</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-1">City</Text>
               <TouchableOpacity
                 onPress={() => setLocationModalVisible(true)}
-                className="border border-slate-200 rounded-xl px-4 py-3 flex-row items-center"
+                className="border border-zinc-200 rounded-xl px-4 py-3 flex-row items-center"
               >
-                <Text className="text-slate-400 mr-2">📍</Text>
-                <Text className={`flex-1 ${neighborhood ? 'text-slate-900' : 'text-slate-400'}`}>
+                <Text className="text-zinc-400 mr-2">📍</Text>
+                <Text className={`flex-1 ${neighborhood ? 'text-zinc-900' : 'text-zinc-400'}`}>
                   {neighborhood || 'City or neighborhood'}
                 </Text>
                 {neighborhood ? (
@@ -703,7 +703,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                     onPress={() => setNeighborhood('')}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text className="text-slate-400">✕</Text>
+                    <Text className="text-zinc-400">✕</Text>
                   </TouchableOpacity>
                 ) : null}
               </TouchableOpacity>
@@ -711,7 +711,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
 
             {/* Singing voice */}
             <View className="mb-6">
-              <Text className="text-sm font-medium text-slate-700 mb-2">Singing</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-2">Singing</Text>
               <View className="flex-row mb-3">
                 {(['lead', 'backup'] as const).map((voice, i) => {
                   const active = singing.has(voice);
@@ -720,10 +720,10 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                       key={voice}
                       onPress={() => toggleSinging(voice)}
                       className={`flex-1 rounded-xl py-3 items-center border ${i === 0 ? 'mr-2' : 'ml-2'} ${
-                        active ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'
+                        active ? 'bg-zinc-900 border-zinc-900' : 'bg-white border-zinc-200'
                       }`}
                     >
-                      <Text className={`font-medium text-sm ${active ? 'text-white' : 'text-slate-600'}`}>
+                      <Text className={`font-medium text-sm ${active ? 'text-white' : 'text-zinc-600'}`}>
                         {voice === 'lead' ? 'Lead vocals' : 'Backup vocals'}
                       </Text>
                     </TouchableOpacity>
@@ -733,10 +733,10 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
               <TouchableOpacity
                 onPress={() => setSinging(prev => (prev.has('none') ? new Set() : new Set(['none'])))}
                 className={`rounded-xl py-3 items-center border ${
-                  singing.has('none') ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'
+                  singing.has('none') ? 'bg-zinc-900 border-zinc-900' : 'bg-white border-zinc-200'
                 }`}
               >
-                <Text className={`font-medium text-sm ${singing.has('none') ? 'text-white' : 'text-slate-600'}`}>
+                <Text className={`font-medium text-sm ${singing.has('none') ? 'text-white' : 'text-zinc-600'}`}>
                   I don't sing
                 </Text>
               </TouchableOpacity>
@@ -744,12 +744,12 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
 
             {/* Instruments */}
             <View className="mb-8">
-              <Text className="text-sm font-medium text-slate-700 mb-2">Instruments</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-2">Instruments</Text>
 
               {/* You play */}
               {instrumentEntries.length > 0 && (
-                <View className="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3">
-                  <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">You play</Text>
+                <View className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 mb-3">
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">You play</Text>
                   <View className="flex-row flex-wrap gap-2">
                     {instrumentEntries
                       .sort(([aName, aLevel], [bName, bLevel]) => {
@@ -758,22 +758,22 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
                         return diff !== 0 ? diff : aName.localeCompare(bName);
                       })
                       .map(([name, level]) => (
-                        <View key={name} className="flex-row items-center rounded-full border border-slate-200 bg-slate-100 pl-3 pr-1 py-1">
+                        <View key={name} className="flex-row items-center rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-1 py-1">
                           <TouchableOpacity
                             onPress={(e) => pickInstrumentLevel(name, e)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             className="flex-row items-center"
                           >
-                            <Text className="text-sm font-medium text-slate-700 mr-1.5">{name}</Text>
-                            <Text className="text-xs text-slate-500">{level}</Text>
-                            <Ionicons name="chevron-down" size={12} color="#94a3b8" style={{ marginLeft: 2 }} />
+                            <Text className="text-sm font-medium text-zinc-700 mr-1.5">{name}</Text>
+                            <Text className="text-xs text-zinc-500">{level}</Text>
+                            <Ionicons name="chevron-down" size={12} color="#a1a1aa" style={{ marginLeft: 2 }} />
                           </TouchableOpacity>
                           <TouchableOpacity
                             onPress={() => removeInstrument(name)}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             className="ml-1.5"
                           >
-                            <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                            <Ionicons name="close-circle" size={16} color="#a1a1aa" />
                           </TouchableOpacity>
                         </View>
                       ))}
@@ -782,36 +782,36 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
               )}
 
               {/* Add an instrument */}
-              <View className="rounded-xl border border-dashed border-slate-300 p-3">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Add an instrument</Text>
+              <View className="rounded-xl border border-dashed border-zinc-300 p-3">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">Add an instrument</Text>
                 <InstrumentSearch added={instruments} onSelect={pickInstrumentLevel} />
               </View>
             </View>
 
             {/* Favorite genres */}
             <View className="mb-8">
-              <Text className="text-sm font-medium text-slate-700 mb-2">Favorite genres</Text>
+              <Text className="text-sm font-medium text-zinc-700 mb-2">Favorite genres</Text>
 
               {favoriteGenres.length > 0 && (
-                <View className="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-3">
-                  <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Your genres</Text>
+                <View className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 mb-3">
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">Your genres</Text>
                   <View className="flex-row flex-wrap gap-2">
                     {[...favoriteGenres].sort((a, b) => a.localeCompare(b)).map(g => (
                       <TouchableOpacity
                         key={g}
                         onPress={() => toggleFavoriteGenre(g)}
-                        className="flex-row items-center rounded-full border border-slate-200 bg-slate-100 pl-3 pr-1 py-1"
+                        className="flex-row items-center rounded-full border border-zinc-200 bg-zinc-100 pl-3 pr-1 py-1"
                       >
-                        <Text className="text-sm font-medium text-slate-700 mr-1.5">{g}</Text>
-                        <Ionicons name="close-circle" size={14} color="#94a3b8" />
+                        <Text className="text-sm font-medium text-zinc-700 mr-1.5">{g}</Text>
+                        <Ionicons name="close-circle" size={14} color="#a1a1aa" />
                       </TouchableOpacity>
                     ))}
                   </View>
                 </View>
               )}
 
-              <View className="rounded-xl border border-dashed border-slate-300 p-3">
-                <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Add a genre</Text>
+              <View className="rounded-xl border border-dashed border-zinc-300 p-3">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">Add a genre</Text>
                 <GenreSearch
                   allGenres={allGenres}
                   selected={favoriteGenres}
@@ -826,7 +826,7 @@ export default function ProfileForm({ title, subtitle, submitLabel, onSave }: Pr
             <TouchableOpacity
               onPress={handleSave}
               disabled={saving}
-              className="bg-slate-900 rounded-xl py-4 items-center"
+              className="bg-zinc-900 rounded-xl py-4 items-center"
             >
               {saving ? (
                 <ActivityIndicator color="#fff" />

@@ -128,16 +128,16 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Add to Set</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Add to Set</Text>
           <View style={{ width: 50 }} />
         </View>
 
-        <View className="px-4 py-2 bg-slate-50 border-b border-slate-100">
-          <Text className="text-slate-500 text-sm" numberOfLines={1}>
+        <View className="px-4 py-2 bg-zinc-50 border-b border-zinc-100">
+          <Text className="text-zinc-500 text-sm" numberOfLines={1}>
             {songs.length === 1 ? `"${songs[0].title}"` : `${songs.length} songs selected`}
           </Text>
         </View>
@@ -148,8 +148,8 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
           </View>
         ) : sets.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-slate-900 font-semibold mb-1">No sets yet</Text>
-            <Text className="text-slate-400 text-sm text-center">
+            <Text className="text-zinc-900 font-semibold mb-1">No sets yet</Text>
+            <Text className="text-zinc-400 text-sm text-center">
               Create a set from the Sets tab to organise songs.
             </Text>
           </View>
@@ -162,13 +162,13 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
               const isAdded = added.has(item.id) || inSets.has(item.id);
               const isPending = pending === item.id;
               return (
-                <View className="mx-4 mb-2 rounded-xl border border-slate-100 bg-white px-4 py-3 flex-row items-center">
+                <View className="mx-4 mb-2 rounded-xl border border-zinc-100 bg-white px-4 py-3 flex-row items-center">
                   <View className="flex-1 mr-3">
-                    <Text className="font-semibold text-slate-900" numberOfLines={1}>
+                    <Text className="font-semibold text-zinc-900" numberOfLines={1}>
                       {item.name}
                     </Text>
                     {item.ownerName ? (
-                      <Text className="text-xs text-slate-400" numberOfLines={1}>Shared by {item.ownerName}</Text>
+                      <Text className="text-xs text-zinc-400" numberOfLines={1}>Shared by {item.ownerName}</Text>
                     ) : null}
                   </View>
                   {isPending ? (

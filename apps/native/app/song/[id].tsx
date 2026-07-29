@@ -84,7 +84,7 @@ function openUrl(url: string) {
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <Text className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
+    <Text className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
       {title}
     </Text>
   );

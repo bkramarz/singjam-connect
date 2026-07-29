@@ -136,21 +136,21 @@ function AddSongModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Add Song</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Add Song</Text>
           <View style={{ width: 50 }} />
         </View>
 
-        <View className="px-4 py-3 border-b border-slate-100">
-          <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2">
-            <Text className="text-slate-400 mr-2">🔍</Text>
+        <View className="px-4 py-3 border-b border-zinc-100">
+          <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2">
+            <Text className="text-zinc-400 mr-2">🔍</Text>
             <TextInput
-              className="flex-1 text-slate-900"
+              className="flex-1 text-zinc-900"
               placeholder="Search by title or artist…"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#a1a1aa"
               value={query}
               onChangeText={setQuery}
               autoFocus
@@ -159,7 +159,7 @@ function AddSongModal({
             />
             {query.length > 0 ? (
               <TouchableOpacity onPress={() => setQuery('')}>
-                <Text className="text-slate-400 ml-2">✕</Text>
+                <Text className="text-zinc-400 ml-2">✕</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -178,15 +178,15 @@ function AddSongModal({
               const already = existingIds.has(item.song_id);
               const pending = pendingId === item.song_id;
               return (
-                <View className="flex-row items-center px-4 py-3 border-b border-slate-100">
+                <View className="flex-row items-center px-4 py-3 border-b border-zinc-100">
                   <View className="flex-1 mr-3">
-                    <Text className="text-slate-900 font-medium" numberOfLines={1}>{item.title}</Text>
+                    <Text className="text-zinc-900 font-medium" numberOfLines={1}>{item.title}</Text>
                     {item.display_artist ? (
-                      <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{item.display_artist}</Text>
+                      <Text className="text-zinc-400 text-sm mt-0.5" numberOfLines={1}>{item.display_artist}</Text>
                     ) : null}
                   </View>
                   {already ? (
-                    <Text className="text-slate-400 text-sm">Added</Text>
+                    <Text className="text-zinc-400 text-sm">Added</Text>
                   ) : pending ? (
                     <ActivityIndicator size="small" color="#d97706" />
                   ) : (
@@ -202,7 +202,7 @@ function AddSongModal({
             }}
             ListEmptyComponent={
               query.length > 0 ? (
-                <Text className="text-center text-slate-400 mt-12">No songs found</Text>
+                <Text className="text-center text-zinc-400 mt-12">No songs found</Text>
               ) : null
             }
           />
@@ -226,13 +226,13 @@ function KeyPicker({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
-        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-2 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose}>
             <Text className="text-amber-600 font-medium">Cancel</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Select Key</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Select Key</Text>
           <TouchableOpacity onPress={() => { onSelect(null); onClose(); }}>
-            <Text className="text-slate-400 font-medium">Clear</Text>
+            <Text className="text-zinc-400 font-medium">Clear</Text>
           </TouchableOpacity>
         </View>
         <ScrollView>
@@ -240,9 +240,9 @@ function KeyPicker({
             <TouchableOpacity
               key={k}
               onPress={() => { onSelect(k); onClose(); }}
-              className={`px-6 py-4 border-b border-slate-100 flex-row items-center justify-between ${current === k ? 'bg-amber-50' : ''}`}
+              className={`px-6 py-4 border-b border-zinc-100 flex-row items-center justify-between ${current === k ? 'bg-amber-50' : ''}`}
             >
-              <Text className={`text-base ${current === k ? 'text-amber-700 font-semibold' : 'text-slate-900'}`}>{k}</Text>
+              <Text className={`text-base ${current === k ? 'text-amber-700 font-semibold' : 'text-zinc-900'}`}>{k}</Text>
               {current === k ? <Ionicons name="checkmark" size={18} color="#d97706" /> : null}
             </TouchableOpacity>
           ))}
@@ -320,7 +320,7 @@ function SongRow({
         onClose={() => setKeyPickerVisible(false)}
         onSelect={onKeyChange}
       />
-      <View className={`px-4 py-3 border-b border-slate-100 ${isActive ? 'bg-amber-50' : 'bg-white'}`}>
+      <View className={`px-4 py-3 border-b border-zinc-100 ${isActive ? 'bg-amber-50' : 'bg-white'}`}>
         <View className="flex-row items-center">
           {canEdit && drag ? (
             <TouchableOpacity
@@ -329,17 +329,17 @@ function SongRow({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               className="mr-3"
             >
-              <Ionicons name="reorder-three-outline" size={20} color="#94a3b8" />
+              <Ionicons name="reorder-three-outline" size={20} color="#a1a1aa" />
             </TouchableOpacity>
           ) : (
             <View className="w-7 items-center mr-2">
-              <Text className="text-slate-300 text-sm font-medium">{displayPosition}</Text>
+              <Text className="text-zinc-300 text-sm font-medium">{displayPosition}</Text>
             </View>
           )}
           <View className="flex-1 min-w-0">
-            <Text className="text-slate-900 font-medium" numberOfLines={1}>{song.songs.title}</Text>
+            <Text className="text-zinc-900 font-medium" numberOfLines={1}>{song.songs.title}</Text>
             {artist ? (
-              <Text className="text-slate-400 text-sm mt-0.5" numberOfLines={1}>{artist}</Text>
+              <Text className="text-zinc-400 text-sm mt-0.5" numberOfLines={1}>{artist}</Text>
             ) : null}
           </View>
           {canEdit ? (
@@ -351,7 +351,7 @@ function SongRow({
               <Ionicons
                 name={song.played ? 'checkmark-circle' : 'checkmark-circle-outline'}
                 size={18}
-                color={song.played ? '#16a34a' : '#94a3b8'}
+                color={song.played ? '#16a34a' : '#a1a1aa'}
               />
             </TouchableOpacity>
           ) : song.played ? (
@@ -362,9 +362,9 @@ function SongRow({
           {canEdit ? (
             <TouchableOpacity
               onPress={() => setKeyPickerVisible(true)}
-              className={`mr-3 px-2.5 py-1 rounded-lg border ${song.key_note ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
+              className={`mr-3 px-2.5 py-1 rounded-lg border ${song.key_note ? 'border-amber-200 bg-amber-50' : 'border-zinc-200 bg-white'}`}
             >
-              <Text className={`text-xs font-medium ${song.key_note ? 'text-amber-700' : 'text-slate-400'}`}>
+              <Text className={`text-xs font-medium ${song.key_note ? 'text-amber-700' : 'text-zinc-400'}`}>
                 {song.key_note ?? 'Key'}
               </Text>
             </TouchableOpacity>
@@ -375,7 +375,7 @@ function SongRow({
           ) : null}
           {canEdit ? (
             <TouchableOpacity onPress={confirmRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="trash-outline" size={16} color="#94a3b8" />
+              <Ionicons name="trash-outline" size={16} color="#a1a1aa" />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -564,11 +564,11 @@ function SetSettingsModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Set Settings</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Set Settings</Text>
           <View style={{ width: 48 }} />
         </View>
 
@@ -576,16 +576,16 @@ function SetSettingsModal({
           {/* Sharing controls (owner + co-owners) */}
           {canManage && (
             <View className="px-4 pt-5 pb-2">
-              <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Sharing</Text>
+              <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">Sharing</Text>
               {SHARING_OPTIONS.map(opt => (
                 <TouchableOpacity
                   key={opt.value}
                   onPress={() => onSharingChange(opt.value)}
-                  className={`flex-row items-center px-4 py-3 mb-2 rounded-xl border ${linkSharing === opt.value ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                  className={`flex-row items-center px-4 py-3 mb-2 rounded-xl border ${linkSharing === opt.value ? 'border-amber-400 bg-amber-50' : 'border-zinc-200 bg-white'}`}
                 >
                   <View className="flex-1">
-                    <Text className={`font-semibold ${linkSharing === opt.value ? 'text-amber-800' : 'text-slate-900'}`}>{opt.label}</Text>
-                    <Text className="text-xs text-slate-400 mt-0.5">{opt.desc}</Text>
+                    <Text className={`font-semibold ${linkSharing === opt.value ? 'text-amber-800' : 'text-zinc-900'}`}>{opt.label}</Text>
+                    <Text className="text-xs text-zinc-400 mt-0.5">{opt.desc}</Text>
                   </View>
                   {linkSharing === opt.value && <Ionicons name="checkmark" size={18} color="#d97706" />}
                 </TouchableOpacity>
@@ -595,16 +595,16 @@ function SetSettingsModal({
 
           {/* Collaborators */}
           <View className="px-4 pt-4 pb-8">
-            <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Collaborators</Text>
+            <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">Collaborators</Text>
 
             {collaborators.length === 0 ? (
-              <Text className="text-slate-400 text-sm mb-4">No collaborators yet.</Text>
+              <Text className="text-zinc-400 text-sm mb-4">No collaborators yet.</Text>
             ) : (
               collaborators.map(c => (
-                <View key={c.id} className="flex-row items-center py-2 border-b border-slate-50">
+                <View key={c.id} className="flex-row items-center py-2 border-b border-zinc-50">
                   <View className="flex-1">
-                    <Text className="text-slate-900 font-medium">{c.display_name ?? c.username ?? 'Unknown'}</Text>
-                    {c.username ? <Text className="text-xs text-slate-400">@{c.username}</Text> : null}
+                    <Text className="text-zinc-900 font-medium">{c.display_name ?? c.username ?? 'Unknown'}</Text>
+                    {c.username ? <Text className="text-xs text-zinc-400">@{c.username}</Text> : null}
                   </View>
                   {canManageCollaborator(c) ? (
                     <TouchableOpacity
@@ -617,11 +617,11 @@ function SetSettingsModal({
                       <Ionicons name="chevron-down" size={12} color="#d97706" />
                     </TouchableOpacity>
                   ) : (
-                    <Text className="text-xs text-slate-400 mr-3">{ROLE_LABELS[c.role] ?? c.role}</Text>
+                    <Text className="text-xs text-zinc-400 mr-3">{ROLE_LABELS[c.role] ?? c.role}</Text>
                   )}
                   {canManageCollaborator(c) && (
                     <TouchableOpacity onPress={() => handleRemoveCollaborator(c)} disabled={busyId === c.id} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="close-circle-outline" size={18} color="#94a3b8" />
+                      <Ionicons name="close-circle-outline" size={18} color="#a1a1aa" />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -636,33 +636,33 @@ function SetSettingsModal({
                     <TouchableOpacity
                       key={r}
                       onPress={() => setInviteRole(r)}
-                      className={`px-3 py-1 rounded-full border ${inviteRole === r ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+                      className={`px-3 py-1 rounded-full border ${inviteRole === r ? 'bg-amber-500 border-amber-500' : 'bg-white border-zinc-200'}`}
                     >
-                      <Text className={`text-xs font-medium ${inviteRole === r ? 'text-white' : 'text-slate-600'}`}>{ROLE_LABELS[r]}</Text>
+                      <Text className={`text-xs font-medium ${inviteRole === r ? 'text-white' : 'text-zinc-600'}`}>{ROLE_LABELS[r]}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2 mb-2">
-                  <Ionicons name="search" size={14} color="#94a3b8" style={{ marginRight: 6 }} />
+                <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2 mb-2">
+                  <Ionicons name="search" size={14} color="#a1a1aa" style={{ marginRight: 6 }} />
                   <TextInput
-                    className="flex-1 text-slate-900"
+                    className="flex-1 text-zinc-900"
                     placeholder="Search by name or @username…"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#a1a1aa"
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
-                  {searching && <ActivityIndicator size="small" color="#94a3b8" />}
+                  {searching && <ActivityIndicator size="small" color="#a1a1aa" />}
                 </View>
                 {searchResults.map(user => {
                   const name = [user.display_name, user.last_name].filter(Boolean).join(' ') || user.username || 'Unknown';
                   const isAdded = addedIds.has(user.id);
                   return (
-                    <View key={user.id} className="flex-row items-center py-2 border-b border-slate-50">
+                    <View key={user.id} className="flex-row items-center py-2 border-b border-zinc-50">
                       <View className="flex-1">
-                        <Text className="text-slate-900 font-medium">{name}</Text>
-                        {user.username ? <Text className="text-xs text-slate-400">@{user.username}</Text> : null}
+                        <Text className="text-zinc-900 font-medium">{name}</Text>
+                        {user.username ? <Text className="text-xs text-zinc-400">@{user.username}</Text> : null}
                       </View>
                       <TouchableOpacity
                         onPress={() => handleAddCollaborator(user)}
@@ -1059,7 +1059,7 @@ export default function SetDetailScreen() {
       <>
         <Stack.Screen options={{ title: 'Set' }} />
         <View className="flex-1 bg-white items-center justify-center">
-          <Text className="text-slate-400">Set not found</Text>
+          <Text className="text-zinc-400">Set not found</Text>
         </View>
       </>
     );
@@ -1091,7 +1091,7 @@ export default function SetDetailScreen() {
             <View className="flex-row gap-4">
               {canEdit && (
                 <TouchableOpacity onPress={() => setSettingsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="settings-outline" size={20} color="#64748b" />
+                  <Ionicons name="settings-outline" size={20} color="#71717a" />
                 </TouchableOpacity>
               )}
               {isOwner && (
@@ -1128,20 +1128,20 @@ export default function SetDetailScreen() {
       <ContentContainer style={{ backgroundColor: 'white' }}>
       <View className="flex-1 bg-white">
         {set.description ? (
-          <View className="px-4 py-3 border-b border-slate-100">
-            <Text className="text-slate-500 text-sm">{set.description}</Text>
+          <View className="px-4 py-3 border-b border-zinc-100">
+            <Text className="text-zinc-500 text-sm">{set.description}</Text>
           </View>
         ) : null}
 
         {/* Sort tabs + filter */}
         {songs.length > 0 && (
-          <View className="px-4 pt-2 pb-2 border-b border-slate-100">
-            <View className="flex-row items-center bg-slate-100 rounded-xl px-3 py-2 mb-2">
-              <Ionicons name="search" size={16} color="#94a3b8" style={{ marginRight: 8 }} />
+          <View className="px-4 pt-2 pb-2 border-b border-zinc-100">
+            <View className="flex-row items-center bg-zinc-100 rounded-xl px-3 py-2 mb-2">
+              <Ionicons name="search" size={16} color="#a1a1aa" style={{ marginRight: 8 }} />
               <TextInput
-                className="flex-1 text-slate-900 text-sm"
+                className="flex-1 text-zinc-900 text-sm"
                 placeholder="Filter songs…"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#a1a1aa"
                 value={filterQuery}
                 onChangeText={setFilterQuery}
                 autoCapitalize="none"
@@ -1149,7 +1149,7 @@ export default function SetDetailScreen() {
               />
               {filterQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setFilterQuery('')}>
-                  <Text className="text-slate-400 ml-2">✕</Text>
+                  <Text className="text-zinc-400 ml-2">✕</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1158,9 +1158,9 @@ export default function SetDetailScreen() {
                 <TouchableOpacity
                   key={key}
                   onPress={() => setSortBy(key)}
-                  className={`px-3 py-1 rounded-full border ${sortBy === key ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+                  className={`px-3 py-1 rounded-full border ${sortBy === key ? 'bg-amber-500 border-amber-500' : 'bg-white border-zinc-200'}`}
                 >
-                  <Text className={`text-xs font-medium ${sortBy === key ? 'text-white' : 'text-slate-600'}`}>
+                  <Text className={`text-xs font-medium ${sortBy === key ? 'text-white' : 'text-zinc-600'}`}>
                     {key === 'custom' ? 'Custom' : key === 'title_asc' ? 'A → Z' : 'Z → A'}
                   </Text>
                 </TouchableOpacity>
@@ -1171,8 +1171,8 @@ export default function SetDetailScreen() {
 
         {songs.length === 0 ? (
           <View className="flex-1 items-center justify-center py-20 px-8">
-            <Text className="text-slate-900 font-semibold mb-1">No songs yet</Text>
-            <Text className="text-slate-400 text-sm text-center">
+            <Text className="text-zinc-900 font-semibold mb-1">No songs yet</Text>
+            <Text className="text-zinc-400 text-sm text-center">
               {canEdit ? 'Tap "Add Song" to start building this set.' : 'This set has no songs yet.'}
             </Text>
           </View>
@@ -1206,7 +1206,7 @@ export default function SetDetailScreen() {
             contentContainerStyle={{ paddingBottom: canEdit ? 140 : 40 }}
             ListEmptyComponent={
               <View className="items-center justify-center py-16 px-8">
-                <Text className="text-slate-400 text-sm">No songs match this filter</Text>
+                <Text className="text-zinc-400 text-sm">No songs match this filter</Text>
               </View>
             }
             renderItem={({ item, index }) => (
@@ -1225,25 +1225,25 @@ export default function SetDetailScreen() {
         )}
 
         {canEdit ? (
-          <View className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-2 bg-white border-t border-slate-100">
+          <View className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-2 bg-white border-t border-zinc-100">
             {isOwner && (
               <TouchableOpacity
                 onPress={spotifyExporting ? undefined : handleSpotifyExport}
                 disabled={spotifyExporting}
-                className="flex-row items-center justify-center gap-2 py-2.5 mb-2 rounded-xl border border-slate-200"
+                className="flex-row items-center justify-center gap-2 py-2.5 mb-2 rounded-xl border border-zinc-200"
               >
                 {spotifyExporting ? (
                   <ActivityIndicator size="small" color="#1db954" />
                 ) : (
                   <Ionicons name="musical-notes-outline" size={16} color="#1db954" />
                 )}
-                <Text className="text-slate-700 text-sm font-medium">
+                <Text className="text-zinc-700 text-sm font-medium">
                   {set.spotify_playlist_id
                     ? (spotifyExporting ? 'Syncing…' : 'Sync Spotify playlist')
                     : (spotifyExporting ? 'Exporting…' : 'Export to Spotify')}
                 </Text>
                 {set.spotify_playlist_id && !spotifyExporting ? (
-                  <Ionicons name="open-outline" size={13} color="#94a3b8" />
+                  <Ionicons name="open-outline" size={13} color="#a1a1aa" />
                 ) : null}
               </TouchableOpacity>
             )}

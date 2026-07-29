@@ -60,11 +60,11 @@ function toggleSet(set: Set<string>, value: string): Set<string> {
 function SkeletonCard() {
   return (
     <View className="mx-4 border-x border-b border-zinc-200 bg-white p-4">
-      <View className="h-4 bg-slate-200 rounded w-2/3 mb-2" />
-      <View className="h-3 bg-slate-100 rounded w-1/2 mb-3" />
+      <View className="h-4 bg-zinc-200 rounded w-2/3 mb-2" />
+      <View className="h-3 bg-zinc-100 rounded w-1/2 mb-3" />
       <View className="flex-row gap-2 ml-8">
-        <View className="h-8 w-20 bg-slate-100 rounded-xl" />
-        <View className="h-8 w-20 bg-slate-100 rounded-xl" />
+        <View className="h-8 w-20 bg-zinc-100 rounded-xl" />
+        <View className="h-8 w-20 bg-zinc-100 rounded-xl" />
       </View>
     </View>
   );
@@ -415,11 +415,11 @@ export default function RepertoireScreen() {
       {/* Search card — mirrors web's bordered search panel */}
       <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
         <View className="flex-row items-center bg-white border border-zinc-200 rounded-xl px-3 py-2">
-          <Ionicons name="search" size={16} color="#94a3b8" />
+          <Ionicons name="search" size={16} color="#a1a1aa" />
           <TextInput
-            className="flex-1 text-slate-900 ml-2"
+            className="flex-1 text-zinc-900 ml-2"
             placeholder="Search by title, songwriter, or artist…"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor="#a1a1aa"
             value={query}
             onChangeText={setQuery}
             autoCapitalize="none"
@@ -427,7 +427,7 @@ export default function RepertoireScreen() {
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')}>
-              <Text className="text-slate-400 ml-2">✕</Text>
+              <Text className="text-zinc-400 ml-2">✕</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -443,7 +443,7 @@ export default function RepertoireScreen() {
             })}
             className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
           >
-            <Text className="text-sm text-slate-700">{roleLabel}</Text>
+            <Text className="text-sm text-zinc-700">{roleLabel}</Text>
             <Ionicons name="chevron-down" size={14} color="#71717a" />
           </TouchableOpacity>
         )}
@@ -451,7 +451,7 @@ export default function RepertoireScreen() {
 
       {/* Search mode replaces the toolbar with a result count, as on web */}
       {searching ? (
-        <Text className="mx-4 mt-4 px-1 text-sm text-slate-500">
+        <Text className="mx-4 mt-4 px-1 text-sm text-zinc-500">
           {searchLoading
             ? 'Searching…'
             : `${sortedSearchResults.length} result${sortedSearchResults.length === 1 ? '' : 's'}`}
@@ -498,10 +498,10 @@ export default function RepertoireScreen() {
           </TouchableOpacity>
           <View className="flex-row items-center gap-2 ml-auto">
             <TouchableOpacity onPress={handleBulkAddToSet} className="rounded-xl border border-zinc-300 bg-white px-2 py-1.5">
-              <Text className="text-xs text-slate-700">Add to set…</Text>
+              <Text className="text-xs text-zinc-700">Add to set…</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleBulkConfidence} className="rounded-xl border border-zinc-300 bg-white px-2 py-1.5">
-              <Text className="text-xs text-slate-700">Change role…</Text>
+              <Text className="text-xs text-zinc-700">Change role…</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleBulkRemove} className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5">
               <Text className="text-xs text-zinc-500">Remove</Text>
@@ -598,10 +598,10 @@ export default function RepertoireScreen() {
 
       <ContentContainer>
       {/* Header */}
-      <View className="px-4 pt-4 pb-3 bg-white border-b border-slate-100">
-        <Text className="text-2xl font-bold text-slate-900">My Repertoire</Text>
+      <View className="px-4 pt-4 pb-3 bg-white border-b border-zinc-100">
+        <Text className="text-2xl font-bold text-zinc-900">My Repertoire</Text>
         {!loading && (
-          <Text className="text-slate-400 text-sm mt-0.5">
+          <Text className="text-zinc-400 text-sm mt-0.5">
             {songs.length} {songs.length === 1 ? 'song' : 'songs'}
           </Text>
         )}
@@ -629,7 +629,7 @@ export default function RepertoireScreen() {
               <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
                 {confidenceFilter !== 'all' || extFilterCount > 0 ? (
                   <>
-                    <Text className="text-sm text-slate-500">No songs match these filters.</Text>
+                    <Text className="text-sm text-zinc-500">No songs match these filters.</Text>
                     {extFilterCount > 0 && (
                       <TouchableOpacity onPress={() => setExtFilters(emptyFilterDimensions())} className="mt-3">
                         <Text className="text-amber-600 font-medium text-sm">Clear filters</Text>

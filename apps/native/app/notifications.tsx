@@ -35,9 +35,9 @@ function timeAgo(iso: string): string {
 
 function SkeletonRow() {
   return (
-    <View className="px-4 py-4 border-b border-slate-100">
-      <View className="h-4 w-2/3 bg-slate-200 rounded mb-2" />
-      <View className="h-3 w-1/2 bg-slate-100 rounded" />
+    <View className="px-4 py-4 border-b border-zinc-100">
+      <View className="h-4 w-2/3 bg-zinc-200 rounded mb-2" />
+      <View className="h-3 w-1/2 bg-zinc-100 rounded" />
     </View>
   );
 }
@@ -46,24 +46,24 @@ function NotifRow({ notif, onPress }: { notif: Notification; onPress: () => void
   return (
     <TouchableOpacity
       onPress={onPress}
-      className={`px-4 py-4 border-b border-slate-100 flex-row items-start ${notif.read ? '' : 'bg-amber-50'}`}
+      className={`px-4 py-4 border-b border-zinc-100 flex-row items-start ${notif.read ? '' : 'bg-amber-50'}`}
     >
       <View className="flex-1">
         <View className="flex-row items-center mb-0.5">
           {!notif.read && (
             <View className="w-2 h-2 rounded-full bg-amber-500 mr-2 mt-1 flex-shrink-0" />
           )}
-          <Text className={`font-semibold text-slate-900 flex-1 ${notif.read ? '' : 'text-slate-900'}`} numberOfLines={2}>
+          <Text className={`font-semibold text-zinc-900 flex-1 ${notif.read ? '' : 'text-zinc-900'}`} numberOfLines={2}>
             {notif.title}
           </Text>
         </View>
         {notif.body ? (
-          <Text className="text-sm text-slate-500 mt-0.5 ml-4" numberOfLines={2}>{notif.body}</Text>
+          <Text className="text-sm text-zinc-500 mt-0.5 ml-4" numberOfLines={2}>{notif.body}</Text>
         ) : null}
-        <Text className="text-xs text-slate-400 mt-1 ml-4">{timeAgo(notif.created_at)}</Text>
+        <Text className="text-xs text-zinc-400 mt-1 ml-4">{timeAgo(notif.created_at)}</Text>
       </View>
       {notif.link ? (
-        <Ionicons name="chevron-forward" size={14} color="#94a3b8" className="mt-1" />
+        <Ionicons name="chevron-forward" size={14} color="#a1a1aa" className="mt-1" />
       ) : null}
     </TouchableOpacity>
   );
@@ -147,9 +147,9 @@ export default function NotificationsScreen() {
           </View>
         ) : allItems.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
-            <Ionicons name="notifications-off-outline" size={40} color="#cbd5e1" />
-            <Text className="text-slate-900 font-semibold mt-3">No notifications</Text>
-            <Text className="text-slate-400 text-sm text-center mt-1">
+            <Ionicons name="notifications-off-outline" size={40} color="#d4d4d8" />
+            <Text className="text-zinc-900 font-semibold mt-3">No notifications</Text>
+            <Text className="text-zinc-400 text-sm text-center mt-1">
               Jam invites and other activity will appear here.
             </Text>
           </View>
@@ -163,8 +163,8 @@ export default function NotificationsScreen() {
             renderItem={({ item }) => {
               if (item.type === 'header') {
                 return (
-                  <View className="px-4 pt-4 pb-1 bg-slate-50 border-b border-slate-100">
-                    <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  <View className="px-4 pt-4 pb-1 bg-zinc-50 border-b border-zinc-100">
+                    <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
                       {item.title}
                     </Text>
                   </View>

@@ -47,10 +47,10 @@ function SkeletonProfile() {
   return (
     <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
       <View className="flex-row items-center" style={{ gap: 16 }}>
-        <View className="h-20 w-20 rounded-full bg-slate-200" />
+        <View className="h-20 w-20 rounded-full bg-zinc-200" />
         <View className="flex-1 gap-2">
-          <View className="h-5 w-36 rounded bg-slate-200" />
-          <View className="h-4 w-24 rounded bg-slate-100" />
+          <View className="h-5 w-36 rounded bg-zinc-200" />
+          <View className="h-4 w-24 rounded bg-zinc-100" />
         </View>
       </View>
     </View>
@@ -206,7 +206,7 @@ export default function ProfileScreen() {
                     <ActivityIndicator color="white" size="small" />
                   </View>
                 ) : (
-                  <View className="absolute bottom-0 right-0 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-slate-700">
+                  <View className="absolute bottom-0 right-0 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-zinc-700">
                     <Ionicons name="camera" size={10} color="white" />
                   </View>
                 )}

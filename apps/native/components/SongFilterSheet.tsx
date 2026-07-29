@@ -33,15 +33,15 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
   return (
     <TouchableOpacity
       onPress={onPress}
-      className={`px-3 py-1.5 rounded-full border mr-2 mb-2 ${selected ? 'bg-amber-500 border-amber-500' : 'bg-white border-slate-200'}`}
+      className={`px-3 py-1.5 rounded-full border mr-2 mb-2 ${selected ? 'bg-amber-500 border-amber-500' : 'bg-white border-zinc-200'}`}
     >
-      <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-slate-600'}`}>{label}</Text>
+      <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-zinc-600'}`}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
 function SectionLabel({ title }: { title: string }) {
-  return <Text className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2 mt-4">{title}</Text>;
+  return <Text className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2 mt-4">{title}</Text>;
 }
 
 export default function SongFilterSheet<T extends SongFilterState>({
@@ -82,17 +82,17 @@ export default function SongFilterSheet<T extends SongFilterState>({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
-        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-slate-100">
+        <View className="flex-row items-center px-4 pt-4 pb-3 border-b border-zinc-100">
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text className="text-amber-600 font-medium">Done</Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-center font-semibold text-slate-900">Filters</Text>
+          <Text className="flex-1 text-center font-semibold text-zinc-900">Filters</Text>
           <TouchableOpacity
             onPress={() => onChange({ ...filters, ...emptyFilterDimensions() })}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             disabled={activeCount === 0}
           >
-            <Text className={`font-medium ${activeCount > 0 ? 'text-red-500' : 'text-slate-300'}`}>Clear</Text>
+            <Text className={`font-medium ${activeCount > 0 ? 'text-red-500' : 'text-zinc-300'}`}>Clear</Text>
           </TouchableOpacity>
         </View>
 
@@ -158,19 +158,19 @@ export default function SongFilterSheet<T extends SongFilterState>({
               <SectionLabel title="Year" />
               <View className="flex-row items-center" style={{ gap: 8 }}>
                 <TextInput
-                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+                  className="flex-1 border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900"
                   placeholder={String(yearBounds.min)}
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#a1a1aa"
                   keyboardType="number-pad"
                   maxLength={4}
                   value={filters.yearMin}
                   onChangeText={t => set({ yearMin: t.replace(/[^0-9]/g, '') })}
                 />
-                <Text className="text-slate-400">–</Text>
+                <Text className="text-zinc-400">–</Text>
                 <TextInput
-                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"
+                  className="flex-1 border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900"
                   placeholder={yearBounds.max != null ? String(yearBounds.max) : 'To'}
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#a1a1aa"
                   keyboardType="number-pad"
                   maxLength={4}
                   value={filters.yearMax}
@@ -181,8 +181,8 @@ export default function SongFilterSheet<T extends SongFilterState>({
           )}
           {!hasAnyOption && emptyHint && (
             <View className="items-center pt-16">
-              <Text className="text-slate-400 text-sm">{emptyHint.title}</Text>
-              <Text className="text-slate-400 text-sm mt-1">{emptyHint.detail}</Text>
+              <Text className="text-zinc-400 text-sm">{emptyHint.title}</Text>
+              <Text className="text-zinc-400 text-sm mt-1">{emptyHint.detail}</Text>
             </View>
           )}
         </ScrollView>
