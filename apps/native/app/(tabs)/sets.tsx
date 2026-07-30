@@ -11,6 +11,7 @@ import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import { readCache, writeCache } from '@/lib/cache';
 import BrandHeader from '@/components/BrandHeader';
 import ContentContainer from '@/components/ContentContainer';
+import PromptCard from '@/components/PromptCard';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -415,35 +416,27 @@ export default function SetsScreen() {
           contentContainerStyle={{ paddingBottom: 40 }}
           ListHeaderComponent={
             authenticated && !hasRepertoire ? (
-              <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
-                <Text className="text-base font-semibold text-zinc-900">Your repertoire is empty</Text>
-                <Text className="mt-1 text-sm text-zinc-500 text-center">
-                  Add songs you know to build sets for your jams and performances.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => router.push('/songs' as any)}
-                  className="mt-4 rounded-xl bg-amber-500 px-5 py-2.5"
-                >
-                  <Text className="text-sm font-semibold text-white">Browse songs →</Text>
-                </TouchableOpacity>
+              <View className="mt-4">
+                <PromptCard
+                  variant="nudge"
+                  title="Your repertoire is empty"
+                  body="Add songs you know to build sets for your jams and performances."
+                  actionLabel="Browse songs →"
+                  onAction={() => router.push('/songs' as any)}
+                />
               </View>
             ) : null
           }
           ListFooterComponent={
             !authenticated ? (
-              <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-8 items-center">
-                <Text className="text-base font-semibold text-zinc-900 text-center">
-                  Build sets for your jams and gigs
-                </Text>
-                <Text className="mt-2 text-sm text-zinc-500 text-center">
-                  Sign up to build your own sets, track your repertoire, and find jam partners who know the same songs.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => router.push('/(auth)/sign-in?mode=signup' as any)}
-                  className="mt-4"
-                >
-                  <Text className="text-sm font-medium text-amber-600">Sign up →</Text>
-                </TouchableOpacity>
+              <View className="mt-4">
+                <PromptCard
+                  variant="guest"
+                  title="Build sets for your jams and gigs"
+                  body="Sign up to build your own sets, track your repertoire, and find jam partners who know the same songs."
+                  actionLabel="Sign up →"
+                  onAction={() => router.push('/(auth)/sign-in?mode=signup' as any)}
+                />
               </View>
             ) : null
           }

@@ -1,12 +1,11 @@
 import { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Alert, Image, ScrollView, ActivityIndicator } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { Redirect, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { unregisterPushToken } from '@/lib/push';
 import { useAuth } from '@/lib/auth-context';
-import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
 import ContentContainer from '@/components/ContentContainer';
 
@@ -83,7 +82,9 @@ export default function ProfileScreen() {
   );
 
   const { session, initialised } = useAuth();
-  if (initialised && !session) return <SignInPrompt message="Sign in to see your profile" />;
+  // The tab bar sends a guest straight to auth (see (tabs)/_layout.tsx); this
+  // covers the other ways of landing here — signing out, or a deep link.
+  if (initialised && !session) return <Redirect href={'/(auth)/sign-in' as any} />;
 
   async function uploadAvatar(asset: ImagePicker.ImagePickerAsset) {
     setUploadingAvatar(true);

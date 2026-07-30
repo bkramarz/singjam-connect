@@ -33,6 +33,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Extended filters (genre/culture/language/theme/vibe/tonality/meter) | ✅ | Full-screen sheet vs web inline panel — intentional. |
 | Year range filter | ✅ | Added 2026-07-20 (PR consolidated in 7740057). |
 | Cascading filter options | ✅ | Added 2026-07-20 — each dimension derived from songs passing other filters. |
+| Signed-out view | ✅ | Fixed 2026-07-29. Native showed the generic `SignInPrompt` lock wall; web keeps the "My Repertoire" heading + subtitle and pitches the feature ("Track the songs you know" → Sign in). Native now matches. This is the app's **initial route**, so it was the first screen a guest saw. All four tabs' guest/empty cards now come from one `components/PromptCard.tsx` (web's two card shapes: `guest` = roomy + amber text link, `nudge` = amber filled button), so they can't drift apart again. `SignInPrompt` survives only for the screens that are genuinely account-only (notifications, account, profile). |
+| Empty-repertoire state | ✅ | Copy matches web ("Your repertoire is empty" + "Search for a song above, or pick one from the suggestions below"), with the suggestions list below it. Native additionally keeps the collapsed submit-a-song panel while searching — intentional. |
 | Add-song search (ranked) | ✅ | `search_songs` RPC; lead-gating on `singing_voice`. |
 | Add-song rows (composers + jammers) | ✅ | Via `formatComposers` + popularity. |
 | Suggestions ("Songs you might know") | ✅ | `SuggestionCard`, infinite scroll (PR #241). |
@@ -41,6 +43,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 ### Song Library / Search (`apps/native/app/songs.tsx` ↔ web `/search`)
 | Feature | Status | Notes |
 |---|---|---|
+| Signed-out view | ✅ | Verified 2026-07-29 — neither app gates the catalog: guests browse and search, and tapping a role on a row routes to sign-in (web `/auth?next=`, native `/(auth)/sign-in`) instead of upserting. No sign-in card on either side, by design; the catalog *is* the pitch. |
+| Empty-repertoire state | ✅ | Verified 2026-07-29 — "Hide my songs" is hidden on both sides until you have at least one song, and neither app shows an empty-repertoire nudge here (you are already in the place that fixes it). |
 | Sort on toolbar | ✅ | Moved out of the filter modal 2026-07-20. |
 | Filters + Year + cascading | ✅ | Same as repertoire. |
 | Result rows (composers/artist/jammers) | ✅ | Rebuilt 2026-07-28 to reuse `SuggestionCard` (native's web-`SongCard` mirror): bordered card, title + (songwriters) — production/artist (year), genre chips + jammer count. Replaced the old thin `border-b` rows. |
@@ -66,6 +70,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Sets list: create affordance | ✅ | Rationalised 2026-07-29 to **one entry point per app**: a dashed "New set" card as the first row of "Your sets". Web had two (a near-invisible ghost `+` in the section header *and* the dashed card at the foot of the list); native had three (a filled amber `+` in the page header, the dashed card as `ListHeaderComponent` above every section heading, and a "Create a set" button in `ListEmptyComponent` — all three rendered at once on an empty account, because `sections` was seeded unconditionally with `Your Sets`). The card sits at the **top** because both apps order owned sets `created_at desc`, so that is where the set you just made appears; a footer button would have been spatially disconnected from its own result. It doubles as the empty state, so native's separate "No sets yet" block is gone. **Note:** the Jams tab solves this differently (ghost `+` in the section header, dashed card only when the hosting section is empty — mutually exclusive rather than deduplicated). Sets and Jams are now internally inconsistent; unify if it grates. |
 | New set screen | ✅ | 2026-07-29: native `set/new.tsx` was the last native set mutation doing a **direct `sets` insert**; it now calls `POST /api/sets` (bearer), which is also the only path that honours `jamId` and its attendee→collaborator fan-out. Both apps keep name + optional description on a dedicated screen. |
 | Set detail: songs, reorder, key, leaders | ✅ | `set/[id].tsx`. |
+| Set detail: signed-out view | ✅ | Fixed 2026-07-29. `load()` opened with `if (!user) return`, so a guest tapping a public set from the list sat on the spinner forever — the tab let you browse to sets you then couldn't open. Guests now load them read-only (`isPublicViewer` already hides leader pills), as on web. |
+| Set detail: visibility gate | ✅ | Added 2026-07-29 with the above, and **necessary for it**: RLS on `sets`/`set_songs` is `create policy … using (true)`, so the database hands any set — private included — to any caller, anonymous ones too (verified against prod with the anon key). Web enforces private/link access in `set/[id]/page.tsx`; native had **no gate at all**, so any signed-in user with a set id could already read a private set, and letting guests load would have widened that to anonymous. Native now mirrors web's gate. **Note native has no admin/song_editor exemption** (it never fetches the profile role), so an admin can't open a private set they don't collaborate on from the phone — admin is desktop-only by choice. |
 | Leader/support display + public-viewer gate | ✅ | Native now renders per-song Lead/Support pills (explicit leaders + participant repertoire confidence), hidden from public viewers via `isPublicViewer = !isOwner && !isCollaborator`, editor-toggleable — mirrors web `SetSongRow`. Replaced the old self-only leader star. (native has no CSV/PDF export, so those web gates don't apply.) Derivation still inline; see core-extraction backlog. |
 | Co-owner role | ✅ | Native recognizes `co-owner` (full owner powers except delete + assigning co-owners). All native set mutations now route through the web API via bearer (single-source authz), so co-owners aren't blocked by owner/editor-only RLS. Owner-only: delete + granting/changing co-owner. |
 | Mark-as-played | ✅ | PR #187 / #240; `reorderSongsForPlayed` in core. Now via `PATCH /songs/[songId]` + reorder. |
@@ -85,6 +91,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Feature | Status | Notes |
 |---|---|---|
 | Jams list + card | ✅ | `JamCard`; time format aligned to web (device locale, TZ only when set). |
+| Jams list: signed-out view | ✅ | Added 2026-07-29. Both apps let guests browse official/past events; web also closes with a "Join the session → Sign in" card and native had **no guest affordance at all**. Native now renders the same card in the list footer. |
+| Jams list: empty state | ✅ | Fixed 2026-07-29. Native swapped the whole `SectionList` for a centred "No upcoming jams" block once every section was empty — which also removed the hosting section and with it the **only "Post a jam" entry point on the tab**, exactly on the empty account that needs it. (Same failure as the sets-list create affordance in #267.) The list now always renders; web's "No jams yet. Be the first to post one!" card is a footer, signed-in only, since a guest already gets the sign-in card. |
 | RSVP / waitlist | ✅ | Web route via bearer (PR #238). |
 | Invite respond / cancel / copy | ✅ | PR #238. |
 | Jam detail | ✅ | |
@@ -96,10 +104,13 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 |---|---|---|
 | Match list + search | ✅ | `match_jammers` / `search_users` RPCs. |
 | Invite to jam | ✅ | |
+| Signed-out view | ✅ | Fixed 2026-07-29 — was the generic `SignInPrompt` wall; now web's "Find jammers" heading + subtitle with a "See who you could jam with" card. The search box is dropped for guests (it needs a session), as on web. |
+| Empty-repertoire state | ✅ | Fixed 2026-07-29 — the card was there but had **no way out of it**; web's amber "Browse songs →" CTA was missing. Now present (→ native `/songs`), and the copy matches web. |
 
 ### Sign up / Account creation (`apps/native/app/(auth)` ↔ web `/auth` + `/account` setup)
 | Feature | Status | Notes |
 |---|---|---|
+| "Sign in" tab for guests | ✅ | 2026-07-29: the fifth tab reads "Sign in" for a guest, but tapping it opened a profile tab whose entire content was *another* sign-in button. It now intercepts `tabPress` and opens `/(auth)/sign-in` directly, like web's top-nav Sign in link; the tab you were on stays selected underneath. `(tabs)/profile.tsx` redirects there too, covering sign-out and deep links. |
 | Welcome screen | ✅ | Native-only entry (logo, tagline, Get started / Sign in / Continue as Guest). Web opens straight to the form — intentional (app launch vs web page). |
 | Email/password + confirm, Google, Apple, forgot-password | ✅ | Aligned. |
 | Signup value-prop subcopy | ✅ | Added 2026-07-21 — native now shows web's "Discover new music…" copy in signin+signup. |
@@ -162,10 +173,18 @@ Already shared in core: `formatComposers`, `mergeSuggestionsById`, `reorderSongs
     `added_by_user_id` and skips the confidence upsert — songs added to a set from native
     have no attribution recorded.
   - No rename / description editing on native at all; web's inline "Edit set name" saves both.
-  - Private + link-shared access flows absent on native (web has `SetRequestAccess` and
-    `SetJoinPrompt`), so a set invite link opened on a phone dead-ends at "Set not found".
+  - Private + link-shared **flows** still absent on native (web has `SetRequestAccess` and
+    `SetJoinPrompt`). Since 2026-07-29 native at least *explains* the block — "This set is private"
+    / "Sign in to open this set" — instead of dead-ending at "Set not found", but there is still no
+    way to request access, and no auto-join for `link` sets (web adds a signed-in visitor as a
+    viewer server-side on first visit; native just shows the set without recording them).
   - Native lacks: add-to-repertoire from a set row, YouTube playlist export, Ultimate Guitar
     playlist URL, per-song media add. (CSV/PDF stay desktop-only by choice.)
+- **Native never reads the `jam_invites` feature flag.** Web gates the "Jams you're hosting"
+  section (and so "Post a jam") on `invitesEnabled || isAdmin`, and disables the invite buttons on
+  `/friends` and profiles when the flag is off; native shows all of it unconditionally. Harmless
+  while the flag is on, but flipping it off would not take effect on the phone. Found during the
+  2026-07-29 guest/empty-state pass; not fixed there to keep that PR to guest + empty states.
 - Add-to-set "+ New set" inline create (native).
 - Google Places New API migration (L3).
 - Search pagination on native (superseded by the offline-catalog track — see `project_offline_catalog` memory).

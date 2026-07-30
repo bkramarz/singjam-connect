@@ -14,6 +14,7 @@ import { duplicateJam } from '@/lib/jams';
 import JamCard, { type JamItem } from '@/components/JamCard';
 import BrandHeader from '@/components/BrandHeader';
 import ContentContainer from '@/components/ContentContainer';
+import PromptCard from '@/components/PromptCard';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -243,13 +244,6 @@ export default function JamsScreen() {
         <View className="pt-4">
           {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
         </View>
-      ) : isEmpty ? (
-        <View className="flex-1 items-center justify-center">
-          <Text className="mb-1 text-base font-semibold text-zinc-900">No upcoming jams</Text>
-          <Text className="px-8 text-center text-sm text-zinc-400">
-            Check back soon for SingJam events, or post a jam of your own.
-          </Text>
-        </View>
       ) : (
         <SectionList
           sections={sections}
@@ -288,6 +282,29 @@ export default function JamsScreen() {
               onRefresh={() => load(true)}
               tintColor="#d97706"
             />
+          }
+          // Web order: the guest pitch, then the "nothing here yet" card — the
+          // latter signed-in only, since a guest already has the pitch. Both sit
+          // below the sections so the hosting section (and with it the only
+          // "Post a jam" affordance) stays on screen on an empty account.
+          ListFooterComponent={
+            !userId ? (
+              <View className="mt-4">
+                <PromptCard
+                  variant="guest"
+                  title="Join the session"
+                  body="Sign in to RSVP to community jams, post your own, and get invited to private sessions by other musicians."
+                  actionLabel="Sign in →"
+                  onAction={() => router.push('/(auth)/sign-in' as any)}
+                />
+              </View>
+            ) : isEmpty ? (
+              <View className="mx-4 mt-4 rounded-2xl border border-zinc-200 bg-white p-8 items-center">
+                <Text className="text-sm text-zinc-500 text-center">
+                  No jams yet. Be the first to post one!
+                </Text>
+              </View>
+            ) : null
           }
           stickySectionHeadersEnabled={false}
           contentContainerStyle={{ paddingBottom: 24 }}
