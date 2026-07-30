@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import { formatComposers, reorderSongsForPlayed } from '@singjam/core';
 import ContentContainer from '@/components/ContentContainer';
+import PromptCard from '@/components/PromptCard';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
@@ -696,6 +697,7 @@ export default function SetDetailScreen() {
   const [isCollaborator, setIsCollaborator] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [blocked, setBlocked] = useState<'private' | 'join' | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -820,8 +822,7 @@ export default function SetDetailScreen() {
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setMyUserId(user.id);
+    setMyUserId(user?.id ?? null);
 
     const [setRes, songsRes, collabRes, allCollabRes] = await Promise.all([
       supabase
@@ -834,13 +835,15 @@ export default function SetDetailScreen() {
         .select('id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, song_composers(people(name)))')
         .eq('set_id', id)
         .order('position', { ascending: true }),
-      supabase
-        .from('set_collaborators')
-        .select('role')
-        .eq('set_id', id)
-        .eq('user_id', user.id)
-        .eq('status', 'accepted')
-        .maybeSingle(),
+      user
+        ? supabase
+            .from('set_collaborators')
+            .select('role')
+            .eq('set_id', id)
+            .eq('user_id', user.id)
+            .eq('status', 'accepted')
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase
         .from('set_collaborators')
         .select('id, user_id, role, profiles(display_name, last_name, username)')
@@ -854,12 +857,20 @@ export default function SetDetailScreen() {
     setSet(s);
     setSongs((songsRes.data ?? []) as any as SetSong[]);
 
-    const isOwner = s.owner_user_id === user.id;
-    const myRole = collabRes.data?.role ?? null;
+    const isOwner = !!user && s.owner_user_id === user.id;
+    const myRole = (collabRes.data as { role?: string } | null)?.role ?? null;
     const coOwner = myRole === 'co-owner';
     setCanEdit(isOwner || myRole === 'editor' || coOwner);
     setIsCoOwner(coOwner);
     setIsCollaborator(!!collabRes.data);
+
+    // Visibility gate, mirroring web set/[id]/page.tsx. RLS on `sets` is
+    // `using (true)` — it will hand any row to any caller, anonymous included —
+    // so private/link access is enforced here, not by the database.
+    if (!isOwner && !collabRes.data) {
+      if (s.link_sharing === 'private') setBlocked('private');
+      else if (s.link_sharing === 'link' && !user) setBlocked('join');
+    }
 
     const collabs: Collaborator[] = ((allCollabRes.data ?? []) as any[]).map((c: any) => ({
       id: c.id,
@@ -1060,6 +1071,34 @@ export default function SetDetailScreen() {
         <Stack.Screen options={{ title: 'Set' }} />
         <View className="flex-1 bg-white items-center justify-center">
           <Text className="text-zinc-400">Set not found</Text>
+        </View>
+      </>
+    );
+  }
+
+  // Web serves these two as SetRequestAccess / SetJoinPrompt; native has neither
+  // flow yet, so it explains the block instead of showing the set.
+  if (blocked) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Set' }} />
+        <View className="flex-1 bg-slate-50 justify-center">
+          {blocked === 'private' ? (
+            <PromptCard
+              variant="guest"
+              title="This set is private"
+              body="Only its owner and collaborators can open it. Ask them to share it with you."
+              {...(myUserId ? {} : { actionLabel: 'Sign in →', onAction: () => router.push('/(auth)/sign-in' as any) })}
+            />
+          ) : (
+            <PromptCard
+              variant="guest"
+              title="Sign in to open this set"
+              body="This set is shared by link, and joining it needs a SingJam account."
+              actionLabel="Sign in →"
+              onAction={() => router.push('/(auth)/sign-in' as any)}
+            />
+          )}
         </View>
       </>
     );

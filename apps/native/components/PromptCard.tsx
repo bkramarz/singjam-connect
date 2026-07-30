@@ -8,24 +8,27 @@ type Props = {
   variant: 'guest' | 'nudge';
   title: string;
   body: string;
-  actionLabel: string;
-  onAction: () => void;
+  // Omit both to render a message with no call to action — e.g. a private set,
+  // where signing in wouldn't get the viewer any further.
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 export default function PromptCard({ variant, title, body, actionLabel, onAction }: Props) {
   const guest = variant === 'guest';
+  const action = actionLabel && onAction ? { label: actionLabel, onPress: onAction } : null;
 
   return (
     <View className={`mx-4 rounded-2xl border border-zinc-200 bg-white items-center ${guest ? 'p-8' : 'p-6'}`}>
       <Text className="text-base font-semibold text-zinc-900 text-center">{title}</Text>
       <Text className={`text-sm text-zinc-500 text-center ${guest ? 'mt-2' : 'mt-1'}`}>{body}</Text>
-      {guest ? (
-        <TouchableOpacity onPress={onAction} className="mt-4">
-          <Text className="text-sm font-medium text-amber-600">{actionLabel}</Text>
+      {!action ? null : guest ? (
+        <TouchableOpacity onPress={action.onPress} className="mt-4">
+          <Text className="text-sm font-medium text-amber-600">{action.label}</Text>
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity onPress={onAction} className="mt-4 rounded-xl bg-amber-500 px-5 py-2.5">
-          <Text className="text-sm font-semibold text-white">{actionLabel}</Text>
+        <TouchableOpacity onPress={action.onPress} className="mt-4 rounded-xl bg-amber-500 px-5 py-2.5">
+          <Text className="text-sm font-semibold text-white">{action.label}</Text>
         </TouchableOpacity>
       )}
     </View>

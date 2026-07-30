@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, Text, View, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
@@ -44,6 +44,7 @@ function ProfileTabIcon({
 
 export default function TabLayout() {
   const { session, profile } = useAuth();
+  const router = useRouter();
   const signedIn = !!session;
   const initial = (profile?.display_name ?? profile?.username ?? '?')[0].toUpperCase();
   const { width } = useWindowDimensions();
@@ -79,6 +80,16 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="profile"
+        // For a guest this tab is a "Sign in" button, so it opens the auth screen
+        // directly rather than a tab whose only content is another sign-in button.
+        listeners={{
+          tabPress: (e) => {
+            if (!signedIn) {
+              e.preventDefault();
+              router.push('/(auth)/sign-in' as any);
+            }
+          },
+        }}
         options={{
           title: signedIn ? 'Profile' : 'Sign in',
           tabBarIcon: ({ focused }) => (
