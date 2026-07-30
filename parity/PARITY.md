@@ -33,6 +33,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Extended filters (genre/culture/language/theme/vibe/tonality/meter) | ✅ | Full-screen sheet vs web inline panel — intentional. |
 | Year range filter | ✅ | Added 2026-07-20 (PR consolidated in 7740057). |
 | Cascading filter options | ✅ | Added 2026-07-20 — each dimension derived from songs passing other filters. |
+| Signed-out view | ✅ | Fixed 2026-07-29. Native showed the generic `SignInPrompt` lock wall; web keeps the "My Repertoire" heading + subtitle and pitches the feature ("Track the songs you know" → Sign in). Native now matches. This is the app's **initial route**, so it was the first screen a guest saw. All four tabs' guest/empty cards now come from one `components/PromptCard.tsx` (web's two card shapes: `guest` = roomy + amber text link, `nudge` = amber filled button), so they can't drift apart again. `SignInPrompt` survives only for the screens that are genuinely account-only (notifications, account, profile). |
+| Empty-repertoire state | ✅ | Copy matches web ("Your repertoire is empty" + "Search for a song above, or pick one from the suggestions below"), with the suggestions list below it. Native additionally keeps the collapsed submit-a-song panel while searching — intentional. |
 | Add-song search (ranked) | ✅ | `search_songs` RPC; lead-gating on `singing_voice`. |
 | Add-song rows (composers + jammers) | ✅ | Via `formatComposers` + popularity. |
 | Suggestions ("Songs you might know") | ✅ | `SuggestionCard`, infinite scroll (PR #241). |
@@ -41,6 +43,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 ### Song Library / Search (`apps/native/app/songs.tsx` ↔ web `/search`)
 | Feature | Status | Notes |
 |---|---|---|
+| Signed-out view | ✅ | Verified 2026-07-29 — neither app gates the catalog: guests browse and search, and tapping a role on a row routes to sign-in (web `/auth?next=`, native `/(auth)/sign-in`) instead of upserting. No sign-in card on either side, by design; the catalog *is* the pitch. |
+| Empty-repertoire state | ✅ | Verified 2026-07-29 — "Hide my songs" is hidden on both sides until you have at least one song, and neither app shows an empty-repertoire nudge here (you are already in the place that fixes it). |
 | Sort on toolbar | ✅ | Moved out of the filter modal 2026-07-20. |
 | Filters + Year + cascading | ✅ | Same as repertoire. |
 | Result rows (composers/artist/jammers) | ✅ | Rebuilt 2026-07-28 to reuse `SuggestionCard` (native's web-`SongCard` mirror): bordered card, title + (songwriters) — production/artist (year), genre chips + jammer count. Replaced the old thin `border-b` rows. |
@@ -85,6 +89,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 | Feature | Status | Notes |
 |---|---|---|
 | Jams list + card | ✅ | `JamCard`; time format aligned to web (device locale, TZ only when set). |
+| Jams list: signed-out view | ✅ | Added 2026-07-29. Both apps let guests browse official/past events; web also closes with a "Join the session → Sign in" card and native had **no guest affordance at all**. Native now renders the same card in the list footer. |
+| Jams list: empty state | ✅ | Fixed 2026-07-29. Native swapped the whole `SectionList` for a centred "No upcoming jams" block once every section was empty — which also removed the hosting section and with it the **only "Post a jam" entry point on the tab**, exactly on the empty account that needs it. (Same failure as the sets-list create affordance in #267.) The list now always renders; web's "No jams yet. Be the first to post one!" card is a footer, signed-in only, since a guest already gets the sign-in card. |
 | RSVP / waitlist | ✅ | Web route via bearer (PR #238). |
 | Invite respond / cancel / copy | ✅ | PR #238. |
 | Jam detail | ✅ | |
@@ -96,6 +102,8 @@ Legend: ✅ at parity · ⚠️ partial / known diff · ❌ missing · 🚫 desk
 |---|---|---|
 | Match list + search | ✅ | `match_jammers` / `search_users` RPCs. |
 | Invite to jam | ✅ | |
+| Signed-out view | ✅ | Fixed 2026-07-29 — was the generic `SignInPrompt` wall; now web's "Find jammers" heading + subtitle with a "See who you could jam with" card. The search box is dropped for guests (it needs a session), as on web. |
+| Empty-repertoire state | ✅ | Fixed 2026-07-29 — the card was there but had **no way out of it**; web's amber "Browse songs →" CTA was missing. Now present (→ native `/songs`), and the copy matches web. |
 
 ### Sign up / Account creation (`apps/native/app/(auth)` ↔ web `/auth` + `/account` setup)
 | Feature | Status | Notes |
@@ -166,6 +174,11 @@ Already shared in core: `formatComposers`, `mergeSuggestionsById`, `reorderSongs
     `SetJoinPrompt`), so a set invite link opened on a phone dead-ends at "Set not found".
   - Native lacks: add-to-repertoire from a set row, YouTube playlist export, Ultimate Guitar
     playlist URL, per-song media add. (CSV/PDF stay desktop-only by choice.)
+- **Native never reads the `jam_invites` feature flag.** Web gates the "Jams you're hosting"
+  section (and so "Post a jam") on `invitesEnabled || isAdmin`, and disables the invite buttons on
+  `/friends` and profiles when the flag is off; native shows all of it unconditionally. Harmless
+  while the flag is on, but flipping it off would not take effect on the phone. Found during the
+  2026-07-29 guest/empty-state pass; not fixed there to keep that PR to guest + empty states.
 - Add-to-set "+ New set" inline create (native).
 - Google Places New API migration (L3).
 - Search pagination on native (superseded by the offline-catalog track — see `project_offline_catalog` memory).

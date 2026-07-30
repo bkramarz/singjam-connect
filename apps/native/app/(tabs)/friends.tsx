@@ -7,9 +7,9 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import InviteToJamModal from '@/components/InviteToJamModal';
-import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
 import ContentContainer from '@/components/ContentContainer';
+import PromptCard from '@/components/PromptCard';
 
 type Match = {
   user_id: string;
@@ -232,7 +232,30 @@ export default function FriendsScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const { session, initialised } = useAuth();
-  if (initialised && !session) return <SignInPrompt message="Sign in to see your matches" />;
+  // Signed-out: mirror web's friends page — heading + subtitle kept, the search
+  // box dropped (it needs a session), and the feature pitched in a card.
+  if (initialised && !session) {
+    return (
+      <View className="flex-1 bg-slate-50">
+        <BrandHeader />
+        <ContentContainer>
+          <View className="px-4 pt-4 pb-3 bg-white border-b border-zinc-100">
+            <Text className="text-2xl font-bold text-zinc-900">Find jammers</Text>
+            <Text className="text-zinc-500 text-sm mt-0.5">Matched by shared songs and genre overlap.</Text>
+          </View>
+          <View className="mt-4">
+            <PromptCard
+              variant="guest"
+              title="See who you could jam with"
+              body="SingJam matches you with musicians who know the same songs as you. Add songs to your repertoire and we'll rank your best potential jam partners."
+              actionLabel="Sign in →"
+              onAction={() => router.push('/(auth)/sign-in' as any)}
+            />
+          </View>
+        </ContentContainer>
+      </View>
+    );
+  }
 
   function handleSearchChange(text: string) {
     setQuery(text);
@@ -353,17 +376,18 @@ export default function FriendsScreen() {
           }
           ListEmptyComponent={
             !hasRepertoire ? (
-              <View className="mx-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
-                <Text className="font-semibold text-zinc-900 mb-1">Your repertoire is empty</Text>
-                <Text className="text-zinc-400 text-sm text-center">
-                  Add songs to your repertoire and SingJam will match you with musicians who know the same songs.
-                </Text>
-              </View>
+              <PromptCard
+                variant="nudge"
+                title="Your repertoire is empty"
+                body="Add songs you know and SingJam will match you with musicians who share your repertoire."
+                actionLabel="Browse songs →"
+                onAction={() => router.push('/songs' as any)}
+              />
             ) : (
               <View className="mx-4 rounded-2xl border border-zinc-200 bg-white p-6 items-center">
-                <Text className="font-semibold text-zinc-900 mb-1">No matches yet</Text>
-                <Text className="text-zinc-400 text-sm text-center">
-                  As more musicians join and add songs, you'll see matches here.
+                <Text className="text-base font-semibold text-zinc-900">No matches yet</Text>
+                <Text className="mt-1 text-sm text-zinc-500 text-center">
+                  As more musicians join and add songs, you'll start seeing matches here.
                 </Text>
               </View>
             )

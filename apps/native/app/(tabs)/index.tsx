@@ -13,9 +13,9 @@ import RepertoireCard from '@/components/RepertoireCard';
 import SuggestionCard, { type Suggestion } from '@/components/SuggestionCard';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
 import AddToSetModal from '@/components/AddToSetModal';
-import SignInPrompt from '@/components/SignInPrompt';
 import BrandHeader from '@/components/BrandHeader';
 import ContentContainer from '@/components/ContentContainer';
+import PromptCard from '@/components/PromptCard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -577,7 +577,30 @@ export default function RepertoireScreen() {
   ) : null;
 
   const { session, initialised } = useAuth();
-  if (initialised && !session) return <SignInPrompt message="Sign in to see your repertoire" />;
+  // Signed-out: web keeps the page heading and pitches the feature rather than
+  // showing a bare lock wall (web repertoire/page.tsx).
+  if (initialised && !session) {
+    return (
+      <View className="flex-1 bg-slate-50">
+        <BrandHeader />
+        <ContentContainer>
+          <View className="px-4 pt-4 pb-3 bg-white border-b border-zinc-100">
+            <Text className="text-2xl font-bold text-zinc-900">My Repertoire</Text>
+            <Text className="text-zinc-500 text-sm mt-0.5">Every song you know or want to learn.</Text>
+          </View>
+          <View className="mt-4">
+            <PromptCard
+              variant="guest"
+              title="Track the songs you know"
+              body="Add songs to your repertoire — as a lead, support, or something you're learning — and SingJam will match you with musicians who share your songs."
+              actionLabel="Sign in →"
+              onAction={() => router.push('/(auth)/sign-in' as any)}
+            />
+          </View>
+        </ContentContainer>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-slate-50">
