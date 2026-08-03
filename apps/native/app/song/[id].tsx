@@ -139,22 +139,21 @@ function extractYouTubeId(url: string | null | undefined): string | null {
   return null;
 }
 
-// YouTube rejects an embed whose page has no resolvable origin with "Error 153"
-// — a WebView fed bare `html` loads as about:blank, which is exactly that case.
-// Both halves of the fix matter: `baseUrl` gives the document a real origin, and
-// the `origin` param has to name that same host for the player to accept it.
-const YT_ORIGIN = 'https://www.youtube.com';
-
+// A WebView fed bare `html` loads as about:blank, and YouTube refuses to embed
+// into a page with no resolvable origin ("Error 153"). So the document gets a
+// baseUrl and the embed gets a matching `origin` param. That origin has to be
+// our own site, the way a real embedding page would look — claiming to be
+// youtube.com itself is same-origin with the player and gets refused too.
 function YouTubePlayer({ videoId }: { videoId: string }) {
   const [playing, setPlaying] = useState(false);
-  const embedSrc = `${YT_ORIGIN}/embed/${videoId}?autoplay=1&playsinline=1&origin=${encodeURIComponent(YT_ORIGIN)}`;
+  const embedSrc = `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&origin=${encodeURIComponent(WEB_URL)}`;
   const embedHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}iframe{width:100%;height:100%;display:block}</style></head><body><iframe src="${embedSrc}" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></body></html>`;
 
   return (
     <View className="mb-3 rounded-xl overflow-hidden bg-black" style={{ aspectRatio: 16 / 9 }}>
       {playing ? (
         <WebView
-          source={{ html: embedHtml, baseUrl: YT_ORIGIN }}
+          source={{ html: embedHtml, baseUrl: WEB_URL }}
           style={{ flex: 1 }}
           allowsInlineMediaPlayback
           allowsFullscreenVideo
