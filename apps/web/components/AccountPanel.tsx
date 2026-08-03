@@ -717,11 +717,7 @@ export default function AccountPanel() {
                       setInstrumentLevels({ ...instrumentLevels, [pendingInstrument]: l });
                       setPendingInstrument(null);
                     }}
-                    className={`rounded-xl border px-3 py-1.5 text-sm transition-colors ${
-                      l === "Professional"
-                        ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                        : "border-indigo-200 bg-white text-zinc-700 hover:bg-indigo-100"
-                    }`}
+                    className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-sm text-zinc-700 transition-colors hover:bg-indigo-100"
                   >
                     {l}
                   </button>
