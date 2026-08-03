@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Linking, Alert, Image,
+  Linking, Alert, Image, Animated,
 } from 'react-native';
-import type { GestureResponderEvent } from 'react-native';
+import type { GestureResponderEvent, LayoutChangeEvent } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
@@ -139,15 +139,22 @@ function extractYouTubeId(url: string | null | undefined): string | null {
   return null;
 }
 
+// YouTube rejects an embed whose page has no resolvable origin with "Error 153"
+// — a WebView fed bare `html` loads as about:blank, which is exactly that case.
+// Both halves of the fix matter: `baseUrl` gives the document a real origin, and
+// the `origin` param has to name that same host for the player to accept it.
+const YT_ORIGIN = 'https://www.youtube.com';
+
 function YouTubePlayer({ videoId }: { videoId: string }) {
   const [playing, setPlaying] = useState(false);
-  const embedHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}iframe{width:100%;height:100%;display:block}</style></head><body><iframe src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></body></html>`;
+  const embedSrc = `${YT_ORIGIN}/embed/${videoId}?autoplay=1&playsinline=1&origin=${encodeURIComponent(YT_ORIGIN)}`;
+  const embedHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}iframe{width:100%;height:100%;display:block}</style></head><body><iframe src="${embedSrc}" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></body></html>`;
 
   return (
     <View className="mb-3 rounded-xl overflow-hidden bg-black" style={{ aspectRatio: 16 / 9 }}>
       {playing ? (
         <WebView
-          source={{ html: embedHtml }}
+          source={{ html: embedHtml, baseUrl: YT_ORIGIN }}
           style={{ flex: 1 }}
           allowsInlineMediaPlayback
           allowsFullscreenVideo
@@ -214,6 +221,21 @@ export default function SongDetailScreen() {
   const [addToSetVisible, setAddToSetVisible] = useState(false);
 
   const canLead = !!singingVoice && singingVoice !== 'none';
+
+  // The nav bar is empty at rest so the first screenful matches web, then the
+  // title fades in once the heading scrolls away. Driven natively off the scroll
+  // offset rather than state, so it costs nothing per frame.
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [headingBottom, setHeadingBottom] = useState(0);
+  const onHeadingLayout = useCallback((e: LayoutChangeEvent) => {
+    const { y, height } = e.nativeEvent.layout;
+    setHeadingBottom(y + height);
+  }, []);
+  const headerTitleOpacity = scrollY.interpolate({
+    inputRange: [Math.max(headingBottom - 24, 0), Math.max(headingBottom, 1) + 8],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   useEffect(() => {
     if (!songId) return;
@@ -339,10 +361,32 @@ export default function SongDetailScreen() {
     });
   }
 
+  // Web exposes Remove as its own button next to the role control, so it lives
+  // outside the sheet here too — the sheet keeps its entry as well, matching how
+  // the repertoire cards behave.
+  function handleRemoveFromRepertoire() {
+    if (!myUserId || !song) return;
+    const songId = song.id;
+    const uid = myUserId;
+
+    Alert.alert('Remove from repertoire', `Remove "${song.title}" from your repertoire?`, [
+      {
+        text: 'Remove', style: 'destructive', onPress: () => {
+          supabase.from('user_songs')
+            .delete().eq('user_id', uid).eq('song_id', songId)
+            .then(({ error }) => {
+              if (error) Alert.alert('Error', error.message);
+              else setMyConfidence(null);
+            });
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function handleChangeConfidence(event: GestureResponderEvent) {
     if (!myUserId || !song) return;
     const songId = song.id;
-    const songTitle = song.title;
     const uid = myUserId;
 
     function update(confidence: string) {
@@ -355,22 +399,6 @@ export default function SongDetailScreen() {
         });
     }
 
-    function remove() {
-      Alert.alert('Remove from repertoire', `Remove "${songTitle}" from your repertoire?`, [
-        {
-          text: 'Remove', style: 'destructive', onPress: () => {
-            supabase.from('user_songs')
-              .delete().eq('user_id', uid).eq('song_id', songId)
-              .then(({ error }) => {
-                if (error) Alert.alert('Error', error.message);
-                else setMyConfidence(null);
-              });
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
-
     showOptionsSheet({
       title: song.title,
       anchor: anchorFrom(event),
@@ -378,7 +406,7 @@ export default function SongDetailScreen() {
         { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => update('lead') },
         { label: 'Support', onPress: () => update('support') },
         { label: 'Learn', onPress: () => update('learn') },
-        { label: 'Remove from repertoire', destructive: true, onPress: remove },
+        { label: 'Remove from repertoire', destructive: true, onPress: handleRemoveFromRepertoire },
       ],
     });
   }
@@ -411,12 +439,7 @@ export default function SongDetailScreen() {
   }
 
   const CONFIDENCE_LABEL: Record<string, string> = { lead: 'Lead', support: 'Support', learn: 'Learn' };
-  const CONFIDENCE_STYLE: Record<string, string> = {
-    lead: 'bg-amber-100 text-amber-700',
-    support: 'bg-slate-100 text-slate-600',
-    learn: 'bg-slate-100 text-slate-500',
-  };
-  const confStyle = myConfidence ? CONFIDENCE_STYLE[myConfidence] ?? CONFIDENCE_STYLE.learn : '';
+  const isLead = myConfidence === 'lead';
 
   const tonalityPills = song.tonality ? song.tonality.split(',').map(s => s.trim()).filter(Boolean) : [];
   const meterPills = song.meter ? song.meter.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -454,35 +477,49 @@ export default function SongDetailScreen() {
           <>
             <TouchableOpacity
               onPress={handleChangeConfidence}
-              className={`px-4 py-2 rounded-full border ${confStyle.split(' ')[0]} border-transparent`}
+              className={`flex-row items-center rounded-xl border px-3 py-2 ${
+                isLead ? 'border-amber-400 bg-amber-100' : 'border-slate-200 bg-white'
+              }`}
             >
-              <Text className={`text-sm font-semibold ${confStyle.split(' ')[1]}`}>
-                {CONFIDENCE_LABEL[myConfidence]} ▾
+              <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-slate-700'}`}>
+                {CONFIDENCE_LABEL[myConfidence]}
               </Text>
+              <Ionicons
+                name="chevron-down"
+                size={12}
+                color={isLead ? '#92400e' : '#64748b'}
+                style={{ marginLeft: 4 }}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setAddToSetVisible(true)}
-              className="flex-row items-center gap-1 px-4 py-2 rounded-full border border-slate-200"
+              className="flex-row items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
             >
               <Ionicons name="list-outline" size={14} color="#64748b" />
-              <Text className="text-slate-600 text-sm font-medium">Add to set</Text>
+              <Text className="text-slate-600 text-sm">Add to set</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleRemoveFromRepertoire}
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
+            >
+              <Text className="text-xs text-slate-400">Remove</Text>
             </TouchableOpacity>
           </>
         ) : (
           <TouchableOpacity
             onPress={handleAddToRepertoire}
-            className="bg-amber-500 rounded-full px-4 py-2"
+            className="rounded-xl bg-indigo-500 px-4 py-2"
           >
-            <Text className="text-white text-sm font-semibold">+ Add to repertoire</Text>
+            <Text className="text-white text-sm font-medium">+ Add to repertoire</Text>
           </TouchableOpacity>
         )}
         {isAdmin ? (
           // The song editor is web-only, so admins hand off to the browser.
           <TouchableOpacity
             onPress={() => openUrl(`${WEB_URL}/admin/songs/${song!.slug ?? song!.id}`)}
-            className="flex-row items-center gap-1 px-4 py-2 rounded-full border border-slate-300"
+            className="flex-row items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-2"
           >
-            <Text className="text-slate-600 text-sm font-medium">Edit</Text>
+            <Text className="text-slate-600 text-sm">Edit</Text>
             <Ionicons name="open-outline" size={13} color="#94a3b8" />
           </TouchableOpacity>
         ) : null}
@@ -492,7 +529,19 @@ export default function SongDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: '', headerTintColor: '#d97706' }} />
+      <Stack.Screen
+        options={{
+          headerTintColor: '#d97706',
+          headerTitle: () => (
+            <Animated.Text
+              numberOfLines={1}
+              style={{ opacity: headerTitleOpacity, fontSize: 17, fontWeight: '600', color: '#0f172a' }}
+            >
+              {song.title}
+            </Animated.Text>
+          ),
+        }}
+      />
 
       {song && (
         <AddToSetModal
@@ -503,11 +552,21 @@ export default function SongDetailScreen() {
       )}
 
       <ContentContainer style={{ backgroundColor: 'white' }}>
-      <ScrollView className="flex-1 bg-white" contentContainerStyle={{ paddingBottom: 60 }}>
+      <Animated.ScrollView
+        // Plain style rather than className: this is the app's only Animated
+        // component, and NativeWind's className handling for it is unproven.
+        style={{ flex: 1, backgroundColor: 'white' }}
+        contentContainerStyle={{ paddingBottom: 60 }}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+      >
 
         {/* Title + meta */}
         <View className="px-4 pt-5 pb-4 border-b border-slate-100">
-          <View className="flex-row items-start justify-between gap-4">
+          <View className="flex-row items-start justify-between gap-4" onLayout={onHeadingLayout}>
             <Text className="flex-1 text-2xl font-bold text-slate-900">{song.title}</Text>
             <View className="shrink-0 flex-row items-center gap-3 mt-1">
               {popularity > 0 ? (
@@ -731,7 +790,7 @@ export default function SongDetailScreen() {
           </TouchableOpacity>
         </View>
 
-      </ScrollView>
+      </Animated.ScrollView>
       </ContentContainer>
     </>
   );
