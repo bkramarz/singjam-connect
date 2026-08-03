@@ -3,21 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { formatComposersLong, sortByLastName } from "@singjam/core";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import RepertoireButton from "@/components/RepertoireButton";
 import AddToSetPanel from "@/components/AddToSetPanel";
-
-function formatComposersLong(names: string[], cultures: string[]): string {
-  const isTraditional = names.some((n) => n.toLowerCase() === "traditional");
-  const others = names.filter((n) => n.toLowerCase() !== "traditional");
-  const parts: string[] = [];
-  if (isTraditional) {
-    const culture = cultures[0];
-    parts.push(culture ? `Traditional - ${culture}` : "Traditional");
-  }
-  parts.push(...others);
-  return parts.join(", ");
-}
 
 function TagRow({ label, tags }: { label: string; tags: string[] }) {
   return (
@@ -251,9 +240,8 @@ export default function SongPageContent() {
 
   const { song, isAdmin, isLoggedIn, singingVoice, userSongConfidence, popularity } = data;
 
-  const byLastName = (a: string, b: string) => a.split(" ").at(-1)!.localeCompare(b.split(" ").at(-1)!);
-  const composers = (song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean).sort(byLastName) as string[];
-  const lyricists = (song.song_lyricists as any[]).map((x: any) => x.people?.name).filter(Boolean).sort(byLastName) as string[];
+  const composers = sortByLastName((song.song_composers as any[]).map((x: any) => x.people?.name).filter(Boolean));
+  const lyricists = sortByLastName((song.song_lyricists as any[]).map((x: any) => x.people?.name).filter(Boolean));
   const cultureRows = song.song_cultures as any[];
   const musicSpecificRows = cultureRows.filter((x: any) => x.context === "music");
   const lyricsSpecificRows = cultureRows.filter((x: any) => x.context === "lyrics");
