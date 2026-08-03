@@ -11,6 +11,7 @@ import {
   formatComposersLong,
   sortByLastName,
   fetchSongJammers,
+  type SongJammer,
   type SongJammers,
 } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
@@ -215,6 +216,7 @@ export default function SongDetailScreen() {
   const [popularity, setPopularity] = useState(0);
   const [singingVoice, setSingingVoice] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [myJammerEntry, setMyJammerEntry] = useState<SongJammer | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [addToSetVisible, setAddToSetVisible] = useState(false);
@@ -269,7 +271,9 @@ export default function SongDetailScreen() {
             .eq('user_id', user.id).eq('song_id', songId).maybeSingle()
         : Promise.resolve({ data: null }),
       user
-        ? supabase.from('profiles').select('role, singing_voice').eq('id', user.id).single()
+        ? supabase.from('profiles')
+            .select('role, singing_voice, display_name, last_name, username')
+            .eq('id', user.id).single()
         : Promise.resolve({ data: null }),
       user ? fetchSongJammers(supabase, songId) : Promise.resolve(null),
       // The count comes from the web API because it reads through the service
@@ -326,12 +330,52 @@ export default function SongDetailScreen() {
     });
 
     setMyConfidence((confidenceRes.data as any)?.confidence ?? null);
-    setSingingVoice((profileRes.data as any)?.singing_voice ?? null);
-    setIsAdmin((profileRes.data as any)?.role === 'admin');
+    const p = profileRes.data as any;
+    setSingingVoice(p?.singing_voice ?? null);
+    setIsAdmin(p?.role === 'admin');
+    if (user && p) {
+      setMyJammerEntry({
+        userId: user.id,
+        name: [p.display_name, p.last_name].filter(Boolean).join(' ') || 'Unknown',
+        username: p.username ?? '',
+      });
+    }
     setPopularity(count);
     if (jammersRes) setJammers(jammersRes);
 
     setLoading(false);
+  }
+
+  // Paint the new role straight away and roll back if the write fails, the way
+  // the repertoire tab and song library already do — waiting on the round-trip
+  // put a visible lag on every tap. Web moves the viewer between the Jammers
+  // rows on the same tick, so this does too.
+  function applyConfidence(next: string | null, write: () => PromiseLike<{ error: any }>) {
+    const previousConfidence = myConfidence;
+    const previousJammers = jammers;
+
+    setMyConfidence(next);
+    if (myJammerEntry) {
+      setJammers(prev => {
+        if (!prev) return prev;
+        const without = (arr: SongJammer[]) => arr.filter(j => j.userId !== myJammerEntry.userId);
+        const updated: SongJammers = { lead: without(prev.lead), support: without(prev.support), learn: without(prev.learn) };
+        if (next === 'lead' || next === 'support' || next === 'learn') {
+          updated[next] = [...updated[next], myJammerEntry];
+        }
+        return updated;
+      });
+    }
+    if (next && !previousConfidence) setPopularity(n => n + 1);
+    if (!next && previousConfidence) setPopularity(n => Math.max(n - 1, 0));
+
+    write().then(({ error }) => {
+      if (!error) return;
+      Alert.alert('Error', error.message);
+      setMyConfidence(previousConfidence);
+      setJammers(previousJammers);
+      setPopularity(n => (next && !previousConfidence ? Math.max(n - 1, 0) : !next && previousConfidence ? n + 1 : n));
+    });
   }
 
   async function handleAddToRepertoire(event: GestureResponderEvent) {
@@ -340,14 +384,12 @@ export default function SongDetailScreen() {
     const songId = song.id;
     const uid = myUserId;
 
-    function upsert(confidence: string) {
-      supabase.from('user_songs')
-        .upsert({ user_id: uid, song_id: songId, confidence }, { onConflict: 'user_id,song_id' })
-        .then(({ error }) => {
-          if (error) Alert.alert('Error', error.message);
-          else setMyConfidence(confidence);
-        });
-    }
+    const upsert = (confidence: string) => applyConfidence(confidence, () =>
+      supabase.from('user_songs').upsert(
+        { user_id: uid, song_id: songId, confidence, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,song_id' }
+      )
+    );
 
     showOptionsSheet({
       title: `Add "${song.title}" as…`,
@@ -370,14 +412,9 @@ export default function SongDetailScreen() {
 
     Alert.alert('Remove from repertoire', `Remove "${song.title}" from your repertoire?`, [
       {
-        text: 'Remove', style: 'destructive', onPress: () => {
-          supabase.from('user_songs')
-            .delete().eq('user_id', uid).eq('song_id', songId)
-            .then(({ error }) => {
-              if (error) Alert.alert('Error', error.message);
-              else setMyConfidence(null);
-            });
-        },
+        text: 'Remove', style: 'destructive', onPress: () => applyConfidence(null, () =>
+          supabase.from('user_songs').delete().eq('user_id', uid).eq('song_id', songId)
+        ),
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -388,15 +425,11 @@ export default function SongDetailScreen() {
     const songId = song.id;
     const uid = myUserId;
 
-    function update(confidence: string) {
+    const update = (confidence: string) => applyConfidence(confidence, () =>
       supabase.from('user_songs')
-        .update({ confidence })
+        .update({ confidence, updated_at: new Date().toISOString() })
         .eq('user_id', uid).eq('song_id', songId)
-        .then(({ error }) => {
-          if (error) Alert.alert('Error', error.message);
-          else setMyConfidence(confidence);
-        });
-    }
+    );
 
     showOptionsSheet({
       title: song.title,
