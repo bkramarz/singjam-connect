@@ -225,18 +225,26 @@ export default function RepertoireScreen() {
   const extFilterCount = countActiveFilters(extFilters);
   const allSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id));
 
-  async function handleConfidenceChange(songId: string, confidence: string) {
+  // Latest-value refs so the row callbacks below can stay referentially stable.
+  // Without them every edit rebuilds the callbacks, which re-renders every
+  // visible row rather than only the song that actually changed.
+  const latest = useRef({ songs, suggestions, load });
+  latest.current = { songs, suggestions, load };
+
+  const handleConfidenceChange = useCallback(async (song: { song_id: string }, confidence: string) => {
+    const songId = song.song_id;
     setSongs(prev => prev.map(s => s.song_id === songId ? { ...s, confidence } : s));
     const { error } = await supabase.from('user_songs').update({ confidence }).eq('user_id', userId).eq('song_id', songId);
-    if (error) { Alert.alert('Error', error.message); load(); }
-  }
+    if (error) { Alert.alert('Error', error.message); latest.current.load(); }
+  }, [userId]);
 
-  async function handleRemove(songId: string) {
+  const handleRemove = useCallback(async (song: { song_id: string }) => {
+    const songId = song.song_id;
     setSongs(prev => prev.filter(s => s.song_id !== songId));
     setSelectedIds(prev => { const next = new Set(prev); next.delete(songId); return next; });
     const { error } = await supabase.from('user_songs').delete().eq('user_id', userId).eq('song_id', songId);
-    if (error) { Alert.alert('Error', error.message); load(); }
-  }
+    if (error) { Alert.alert('Error', error.message); latest.current.load(); }
+  }, [userId]);
 
 
   const loadMoreSuggestions = useCallback(async () => {
@@ -260,10 +268,10 @@ export default function RepertoireScreen() {
 
   // Mirrors web's addSong from the suggestions panel: optimistically drop the
   // suggestion and insert it into the repertoire, reverting both on error.
-  async function addFromSuggestion(s: Suggestion, confidence: string) {
+  const addFromSuggestion = useCallback(async (s: Suggestion, confidence: string) => {
     if (!userId) return;
-    const prevSongs = songs;
-    const prevSuggestions = suggestions;
+    const prevSongs = latest.current.songs;
+    const prevSuggestions = latest.current.suggestions;
     setSuggestions(prev => prev.filter(x => x.song_id !== s.song_id));
     setSongs(prev => {
       if (prev.find(x => x.song_id === s.song_id)) {
@@ -299,11 +307,19 @@ export default function RepertoireScreen() {
       setSongs(prevSongs);
       setSuggestions(prevSuggestions);
     }
-  }
+  }, [userId]);
 
-  function toggleSelect(songId: string) {
-    setSelectedIds(prev => toggleSet(prev, songId));
-  }
+  const toggleSelect = useCallback((song: { song_id: string }) => {
+    setSelectedIds(prev => toggleSet(prev, song.song_id));
+  }, []);
+
+  const viewSong = useCallback((song: { song_id: string }) => {
+    router.push(`/song/${song.song_id}` as any);
+  }, [router]);
+
+  const addOneToSet = useCallback((song: { song_id: string; title: string }) => {
+    setAddToSetSongs([{ id: song.song_id, title: song.title }]);
+  }, []);
 
   function toggleSelectAll() {
     setSelectedIds(allSelected ? new Set() : new Set(filtered.map(s => s.song_id)));
@@ -359,18 +375,18 @@ export default function RepertoireScreen() {
   const renderItem = useCallback(
     ({ item, index }: { item: RichUserSong; index: number }) => (
       <RepertoireCard
-        song={{ ...item, productions: item.productions ?? [] }}
+        song={item}
         selected={selectedIds.has(item.song_id)}
         canLead={canLead}
         isLast={index === filtered.length - 1}
-        onToggleSelect={() => toggleSelect(item.song_id)}
-        onConfidenceChange={(confidence) => handleConfidenceChange(item.song_id, confidence)}
-        onAddToSet={() => setAddToSetSongs([{ id: item.song_id, title: item.title }])}
-        onView={() => router.push(`/song/${item.song_id}` as any)}
-        onRemove={() => handleRemove(item.song_id)}
+        onToggleSelect={toggleSelect}
+        onConfidenceChange={handleConfidenceChange}
+        onAddToSet={addOneToSet}
+        onView={viewSong}
+        onRemove={handleRemove}
       />
     ),
-    [userId, songs, selectedIds, canLead, filtered.length]
+    [selectedIds, canLead, filtered.length, toggleSelect, handleConfidenceChange, addOneToSet, viewSong, handleRemove]
   );
 
   // Search results reuse the same two cards web does: owned songs keep their role
@@ -381,15 +397,15 @@ export default function RepertoireScreen() {
       if (owned) {
         return (
           <RepertoireCard
-            song={{ ...owned, productions: owned.productions ?? [] }}
+            song={owned}
             selected={selectedIds.has(owned.song_id)}
             canLead={canLead}
             isLast={index === sortedSearchResults.length - 1}
-            onToggleSelect={() => toggleSelect(owned.song_id)}
-            onConfidenceChange={(confidence) => handleConfidenceChange(owned.song_id, confidence)}
-            onAddToSet={() => setAddToSetSongs([{ id: owned.song_id, title: owned.title }])}
-            onView={() => router.push(`/song/${owned.song_id}` as any)}
-            onRemove={() => handleRemove(owned.song_id)}
+            onToggleSelect={toggleSelect}
+            onConfidenceChange={handleConfidenceChange}
+            onAddToSet={addOneToSet}
+            onView={viewSong}
+            onRemove={handleRemove}
           />
         );
       }
@@ -397,12 +413,13 @@ export default function RepertoireScreen() {
         <SuggestionCard
           song={item}
           canLead={canLead}
-          onAdd={(confidence) => addFromSuggestion(item, confidence)}
-          onView={() => router.push(`/song/${item.song_id}` as any)}
+          onAdd={addFromSuggestion}
+          onView={viewSong}
         />
       );
     },
-    [songsById, selectedIds, canLead, sortedSearchResults.length, userId, songs]
+    [songsById, selectedIds, canLead, sortedSearchResults.length, toggleSelect,
+     handleConfidenceChange, addOneToSet, viewSong, handleRemove, addFromSuggestion]
   );
 
   const roleLabel = confidenceFilter === 'all'
@@ -564,8 +581,8 @@ export default function RepertoireScreen() {
           key={s.song_id}
           song={s}
           canLead={canLead}
-          onAdd={(confidence) => addFromSuggestion(s, confidence)}
-          onView={() => router.push(`/song/${s.song_id}` as any)}
+          onAdd={addFromSuggestion}
+          onView={viewSong}
         />
       ))}
       {suggestionsLoadingMore && (

@@ -245,10 +245,16 @@ export default function SongLibraryScreen() {
     return applySort(filtered, filters.sortBy);
   }, [query, allSongs, searchResults, filters, hideMySongs, myConfidence]);
 
+  // Read through a ref so the row callbacks below can stay referentially stable.
+  // Depending on the Map directly would rebuild them on every repertoire edit,
+  // which re-renders every visible row instead of just the one that changed.
+  const myConfidenceRef = useRef(myConfidence);
+  myConfidenceRef.current = myConfidence;
+
   // Adding and changing the role are the same upsert, exactly as on web.
-  async function addSong(song: SongMeta, confidence: string) {
+  const addSong = useCallback(async (song: { song_id: string }, confidence: string) => {
     if (!userId) { router.push('/(auth)/sign-in' as any); return; }
-    const previous = myConfidence;
+    const previous = myConfidenceRef.current;
     setMyConfidence(prev => new Map(prev).set(song.song_id, confidence));
     const { error } = await supabase.from('user_songs').upsert(
       { user_id: userId, song_id: song.song_id, confidence, updated_at: new Date().toISOString() },
@@ -258,17 +264,21 @@ export default function SongLibraryScreen() {
       Alert.alert('Error', error.message);
       setMyConfidence(previous);
     }
-  }
+  }, [userId, router]);
+
+  const viewSong = useCallback((song: { song_id: string }) => {
+    router.push(`/song/${song.song_id}` as any);
+  }, [router]);
 
   const renderItem = useCallback(({ item }: { item: SongMeta }) => (
     <SuggestionCard
       song={item}
       canLead={canLead}
       confidence={myConfidence.get(item.song_id) ?? null}
-      onAdd={(confidence) => addSong(item, confidence)}
-      onView={() => router.push(`/song/${item.song_id}` as any)}
+      onAdd={addSong}
+      onView={viewSong}
     />
-  ), [myConfidence, canLead, userId]);
+  ), [myConfidence, canLead, addSong, viewSong]);
 
   const activeFilterCount = countActiveFilters(filters);
   const sortLabel = SORT_OPTIONS.find(o => o.key === filters.sortBy)?.label ?? 'Popular';
