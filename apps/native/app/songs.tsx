@@ -227,10 +227,19 @@ export default function SongLibraryScreen() {
 
   // Derive each filter dimension's options from songs passing the OTHER active
   // filters, so choosing one facet narrows the rest (cascading, like web).
+  //
+  // Deliberately depends on the individual dimensions rather than the whole
+  // `filters` object: this screen keeps `sortBy` in there too, and re-sorting
+  // cannot change which facets exist — depending on the object rebuilt all seven
+  // option lists every time you changed the sort order. Likewise `myConfidence`
+  // only reaches the pool while "Hide my songs" is on, so ordinary repertoire
+  // edits shouldn't rebuild them either.
+  const { genres, cultures, languages, themes, vibe, tonality, meter, yearMin, yearMax } = filters;
+  const hiddenIds = hideMySongs ? myConfidence : null;
   const options = useMemo(() => {
-    const pool = hideMySongs ? allSongs.filter(s => !myConfidence.has(s.song_id)) : allSongs;
-    return deriveFilterOptions(pool, filters);
-  }, [allSongs, filters, hideMySongs, myConfidence]);
+    const pool = hiddenIds ? allSongs.filter(s => !hiddenIds.has(s.song_id)) : allSongs;
+    return deriveFilterOptions(pool, { genres, cultures, languages, themes, vibe, tonality, meter, yearMin, yearMax });
+  }, [allSongs, hiddenIds, genres, cultures, languages, themes, vibe, tonality, meter, yearMin, yearMax]);
 
   const yearBounds = useMemo(() => {
     const years = allSongs.map(s => s.year).filter((y): y is number => y != null);
