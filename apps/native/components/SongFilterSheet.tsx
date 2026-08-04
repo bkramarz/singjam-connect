@@ -1,3 +1,4 @@
+import { memo, useCallback, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { countActiveFilters, type SongFilterState, type SongFilterOptions } from '@singjam/core';
 
@@ -29,16 +30,31 @@ export function toggleFilterValue(set: Set<string>, value: string): Set<string> 
   return next;
 }
 
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+type MultiDim = 'genres' | 'cultures' | 'languages' | 'themes';
+type SingleDim = 'vibe' | 'tonality' | 'meter';
+type ChipDim = MultiDim | SingleDim;
+
+const MULTI: MultiDim[] = ['genres', 'cultures', 'languages', 'themes'];
+
+// Memoised, and it reports which dimension it belongs to rather than closing over
+// a handler: the sheet renders ~200 chips off a full catalog, and rebuilding an
+// inline onPress for each of them re-rendered the lot on every tap. With a stable
+// onToggle only the chip whose `selected` actually flipped re-renders.
+const Chip = memo(function Chip({ label, dim, selected, onToggle }: {
+  label: string;
+  dim: ChipDim;
+  selected: boolean;
+  onToggle: (dim: ChipDim, value: string) => void;
+}) {
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={() => onToggle(dim, label)}
       className={`px-3 py-1.5 rounded-full border mr-2 mb-2 ${selected ? 'bg-amber-500 border-amber-500' : 'bg-white border-zinc-200'}`}
     >
       <Text className={`text-sm font-medium ${selected ? 'text-white' : 'text-zinc-600'}`}>{label}</Text>
     </TouchableOpacity>
   );
-}
+});
 
 function SectionLabel({ title }: { title: string }) {
   return <Text className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2 mt-4">{title}</Text>;
@@ -68,6 +84,22 @@ export default function SongFilterSheet<T extends SongFilterState>({
   function set(patch: Partial<SongFilterState>) {
     onChange({ ...filters, ...patch });
   }
+
+  // Latest-value refs so the chips' onToggle can stay referentially stable across
+  // renders without going stale — otherwise memoising Chip buys nothing.
+  const latest = useRef({ filters, onChange });
+  latest.current = { filters, onChange };
+
+  const handleToggle = useCallback((dim: ChipDim, value: string) => {
+    const { filters: f, onChange: emit } = latest.current;
+    if ((MULTI as string[]).includes(dim)) {
+      const key = dim as MultiDim;
+      emit({ ...f, [key]: toggleFilterValue(f[key], value) });
+    } else {
+      const key = dim as SingleDim;
+      emit({ ...f, [key]: f[key] === value ? '' : value });
+    }
+  }, []);
 
   const hasAnyOption =
     options.genres.length > 0 ||
@@ -101,7 +133,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Genre" />
               <View className="flex-row flex-wrap">
-                {options.genres.map(g => <Chip key={g} label={g} selected={filters.genres.has(g)} onPress={() => set({ genres: toggleFilterValue(filters.genres, g) })} />)}
+                {options.genres.map(g => <Chip key={g} label={g} dim="genres" selected={filters.genres.has(g)} onToggle={handleToggle} />)}
               </View>
             </>
           )}
@@ -109,7 +141,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Culture" />
               <View className="flex-row flex-wrap">
-                {options.cultures.map(c => <Chip key={c} label={c} selected={filters.cultures.has(c)} onPress={() => set({ cultures: toggleFilterValue(filters.cultures, c) })} />)}
+                {options.cultures.map(c => <Chip key={c} label={c} dim="cultures" selected={filters.cultures.has(c)} onToggle={handleToggle} />)}
               </View>
             </>
           )}
@@ -117,7 +149,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Language" />
               <View className="flex-row flex-wrap">
-                {options.languages.map(l => <Chip key={l} label={l} selected={filters.languages.has(l)} onPress={() => set({ languages: toggleFilterValue(filters.languages, l) })} />)}
+                {options.languages.map(l => <Chip key={l} label={l} dim="languages" selected={filters.languages.has(l)} onToggle={handleToggle} />)}
               </View>
             </>
           )}
@@ -125,7 +157,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Theme" />
               <View className="flex-row flex-wrap">
-                {options.themes.map(t => <Chip key={t} label={t} selected={filters.themes.has(t)} onPress={() => set({ themes: toggleFilterValue(filters.themes, t) })} />)}
+                {options.themes.map(t => <Chip key={t} label={t} dim="themes" selected={filters.themes.has(t)} onToggle={handleToggle} />)}
               </View>
             </>
           )}
@@ -133,7 +165,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Vibe" />
               <View className="flex-row flex-wrap">
-                {options.vibes.map(v => <Chip key={v} label={v} selected={filters.vibe === v} onPress={() => set({ vibe: filters.vibe === v ? '' : v })} />)}
+                {options.vibes.map(v => <Chip key={v} label={v} dim="vibe" selected={filters.vibe === v} onToggle={handleToggle} />)}
               </View>
             </>
           )}
@@ -141,7 +173,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Tonality" />
               <View className="flex-row flex-wrap">
-                {options.tonalities.map(t => <Chip key={t} label={t} selected={filters.tonality === t} onPress={() => set({ tonality: filters.tonality === t ? '' : t })} />)}
+                {options.tonalities.map(t => <Chip key={t} label={t} dim="tonality" selected={filters.tonality === t} onToggle={handleToggle} />)}
               </View>
             </>
           )}
@@ -149,7 +181,7 @@ export default function SongFilterSheet<T extends SongFilterState>({
             <>
               <SectionLabel title="Meter" />
               <View className="flex-row flex-wrap">
-                {options.meters.map(m => <Chip key={m} label={m} selected={filters.meter === m} onPress={() => set({ meter: filters.meter === m ? '' : m })} />)}
+                {options.meters.map(m => <Chip key={m} label={m} dim="meter" selected={filters.meter === m} onToggle={handleToggle} />)}
               </View>
             </>
           )}

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,22 +22,24 @@ export type RepertoireCardSong = {
   popularity: number;
 };
 
+// Every callback takes the song back rather than being bound to it, so a list
+// can hand each row the same functions and let memo skip the untouched ones.
 type Props = {
   song: RepertoireCardSong;
   selected: boolean;
   canLead: boolean;
   isLast: boolean;
-  onToggleSelect: () => void;
-  onConfidenceChange: (confidence: string) => void;
-  onAddToSet: () => void;
-  onView: () => void;
-  onRemove: () => void;
+  onToggleSelect: (song: RepertoireCardSong) => void;
+  onConfidenceChange: (song: RepertoireCardSong, confidence: string) => void;
+  onAddToSet: (song: RepertoireCardSong) => void;
+  onView: (song: RepertoireCardSong) => void;
+  onRemove: (song: RepertoireCardSong) => void;
 };
 
 // Mirrors the repertoire row card in web's repertoire/page.tsx: checkbox,
 // title + (songwriters), production/artist line, jammer count, then a
 // confidence control + Add to set / View / Remove actions.
-export default function RepertoireCard({
+function RepertoireCard({
   song, selected, canLead, isLast,
   onToggleSelect, onConfidenceChange, onAddToSet, onView, onRemove,
 }: Props) {
@@ -45,16 +48,16 @@ export default function RepertoireCard({
       title: song.title,
       anchor: anchorFrom(event),
       options: [
-        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => onConfidenceChange('lead') },
-        { label: 'Support', onPress: () => onConfidenceChange('support') },
-        { label: 'Learn', onPress: () => onConfidenceChange('learn') },
+        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => onConfidenceChange(song, 'lead') },
+        { label: 'Support', onPress: () => onConfidenceChange(song, 'support') },
+        { label: 'Learn', onPress: () => onConfidenceChange(song, 'learn') },
       ],
     });
   }
 
   function handleRemoveTap() {
     Alert.alert('Remove song', `Remove "${song.title}" from your repertoire?`, [
-      { text: 'Remove', style: 'destructive', onPress: onRemove },
+      { text: 'Remove', style: 'destructive', onPress: () => onRemove(song) },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
@@ -73,7 +76,7 @@ export default function RepertoireCard({
     >
       <View className="flex-row items-start">
         <TouchableOpacity
-          onPress={onToggleSelect}
+          onPress={() => onToggleSelect(song)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           className="mt-0.5 mr-3"
         >
@@ -85,7 +88,7 @@ export default function RepertoireCard({
         </TouchableOpacity>
 
         <View className="flex-1 min-w-0">
-          <TouchableOpacity onPress={onView}>
+          <TouchableOpacity onPress={() => onView(song)}>
             <Text numberOfLines={1}>
               <Text className="font-medium text-zinc-900">{song.title}</Text>
               {composersLabel ? (
@@ -122,14 +125,14 @@ export default function RepertoireCard({
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={onAddToSet}
+          onPress={() => onAddToSet(song)}
           className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5"
         >
           <Text className="text-sm text-zinc-600">Add to set</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={onView}
+          onPress={() => onView(song)}
           className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5"
         >
           <Text className="text-sm text-zinc-600">View</Text>
@@ -145,3 +148,5 @@ export default function RepertoireCard({
     </View>
   );
 }
+
+export default memo(RepertoireCard);

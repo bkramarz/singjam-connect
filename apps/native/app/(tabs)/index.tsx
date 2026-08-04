@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
 import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
+import InlineDropdown from '@/components/InlineDropdown';
 import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import RepertoireCard from '@/components/RepertoireCard';
 import SuggestionCard, { type Suggestion } from '@/components/SuggestionCard';
@@ -223,20 +224,31 @@ export default function RepertoireScreen() {
     [searchResults, existingIds]
   );
   const extFilterCount = countActiveFilters(extFilters);
-  const allSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id));
+  const allSelected = useMemo(
+    () => filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id)),
+    [filtered, selectedIds]
+  );
 
-  async function handleConfidenceChange(songId: string, confidence: string) {
+  // Latest-value refs so the row callbacks below can stay referentially stable.
+  // Without them every edit rebuilds the callbacks, which re-renders every
+  // visible row rather than only the song that actually changed.
+  const latest = useRef({ songs, suggestions, load });
+  latest.current = { songs, suggestions, load };
+
+  const handleConfidenceChange = useCallback(async (song: { song_id: string }, confidence: string) => {
+    const songId = song.song_id;
     setSongs(prev => prev.map(s => s.song_id === songId ? { ...s, confidence } : s));
     const { error } = await supabase.from('user_songs').update({ confidence }).eq('user_id', userId).eq('song_id', songId);
-    if (error) { Alert.alert('Error', error.message); load(); }
-  }
+    if (error) { Alert.alert('Error', error.message); latest.current.load(); }
+  }, [userId]);
 
-  async function handleRemove(songId: string) {
+  const handleRemove = useCallback(async (song: { song_id: string }) => {
+    const songId = song.song_id;
     setSongs(prev => prev.filter(s => s.song_id !== songId));
     setSelectedIds(prev => { const next = new Set(prev); next.delete(songId); return next; });
     const { error } = await supabase.from('user_songs').delete().eq('user_id', userId).eq('song_id', songId);
-    if (error) { Alert.alert('Error', error.message); load(); }
-  }
+    if (error) { Alert.alert('Error', error.message); latest.current.load(); }
+  }, [userId]);
 
 
   const loadMoreSuggestions = useCallback(async () => {
@@ -260,10 +272,10 @@ export default function RepertoireScreen() {
 
   // Mirrors web's addSong from the suggestions panel: optimistically drop the
   // suggestion and insert it into the repertoire, reverting both on error.
-  async function addFromSuggestion(s: Suggestion, confidence: string) {
+  const addFromSuggestion = useCallback(async (s: Suggestion, confidence: string) => {
     if (!userId) return;
-    const prevSongs = songs;
-    const prevSuggestions = suggestions;
+    const prevSongs = latest.current.songs;
+    const prevSuggestions = latest.current.suggestions;
     setSuggestions(prev => prev.filter(x => x.song_id !== s.song_id));
     setSongs(prev => {
       if (prev.find(x => x.song_id === s.song_id)) {
@@ -299,11 +311,19 @@ export default function RepertoireScreen() {
       setSongs(prevSongs);
       setSuggestions(prevSuggestions);
     }
-  }
+  }, [userId]);
 
-  function toggleSelect(songId: string) {
-    setSelectedIds(prev => toggleSet(prev, songId));
-  }
+  const toggleSelect = useCallback((song: { song_id: string }) => {
+    setSelectedIds(prev => toggleSet(prev, song.song_id));
+  }, []);
+
+  const viewSong = useCallback((song: { song_id: string }) => {
+    router.push(`/song/${song.song_id}` as any);
+  }, [router]);
+
+  const addOneToSet = useCallback((song: { song_id: string; title: string }) => {
+    setAddToSetSongs([{ id: song.song_id, title: song.title }]);
+  }, []);
 
   function toggleSelectAll() {
     setSelectedIds(allSelected ? new Set() : new Set(filtered.map(s => s.song_id)));
@@ -359,18 +379,18 @@ export default function RepertoireScreen() {
   const renderItem = useCallback(
     ({ item, index }: { item: RichUserSong; index: number }) => (
       <RepertoireCard
-        song={{ ...item, productions: item.productions ?? [] }}
+        song={item}
         selected={selectedIds.has(item.song_id)}
         canLead={canLead}
         isLast={index === filtered.length - 1}
-        onToggleSelect={() => toggleSelect(item.song_id)}
-        onConfidenceChange={(confidence) => handleConfidenceChange(item.song_id, confidence)}
-        onAddToSet={() => setAddToSetSongs([{ id: item.song_id, title: item.title }])}
-        onView={() => router.push(`/song/${item.song_id}` as any)}
-        onRemove={() => handleRemove(item.song_id)}
+        onToggleSelect={toggleSelect}
+        onConfidenceChange={handleConfidenceChange}
+        onAddToSet={addOneToSet}
+        onView={viewSong}
+        onRemove={handleRemove}
       />
     ),
-    [userId, songs, selectedIds, canLead, filtered.length]
+    [selectedIds, canLead, filtered.length, toggleSelect, handleConfidenceChange, addOneToSet, viewSong, handleRemove]
   );
 
   // Search results reuse the same two cards web does: owned songs keep their role
@@ -381,15 +401,15 @@ export default function RepertoireScreen() {
       if (owned) {
         return (
           <RepertoireCard
-            song={{ ...owned, productions: owned.productions ?? [] }}
+            song={owned}
             selected={selectedIds.has(owned.song_id)}
             canLead={canLead}
             isLast={index === sortedSearchResults.length - 1}
-            onToggleSelect={() => toggleSelect(owned.song_id)}
-            onConfidenceChange={(confidence) => handleConfidenceChange(owned.song_id, confidence)}
-            onAddToSet={() => setAddToSetSongs([{ id: owned.song_id, title: owned.title }])}
-            onView={() => router.push(`/song/${owned.song_id}` as any)}
-            onRemove={() => handleRemove(owned.song_id)}
+            onToggleSelect={toggleSelect}
+            onConfidenceChange={handleConfidenceChange}
+            onAddToSet={addOneToSet}
+            onView={viewSong}
+            onRemove={handleRemove}
           />
         );
       }
@@ -397,18 +417,15 @@ export default function RepertoireScreen() {
         <SuggestionCard
           song={item}
           canLead={canLead}
-          onAdd={(confidence) => addFromSuggestion(item, confidence)}
-          onView={() => router.push(`/song/${item.song_id}` as any)}
+          onAdd={addFromSuggestion}
+          onView={viewSong}
         />
       );
     },
-    [songsById, selectedIds, canLead, sortedSearchResults.length, userId, songs]
+    [songsById, selectedIds, canLead, sortedSearchResults.length, toggleSelect,
+     handleConfidenceChange, addOneToSet, viewSong, handleRemove, addFromSuggestion]
   );
 
-  const roleLabel = confidenceFilter === 'all'
-    ? 'Any role'
-    : CONFIDENCE_LEVELS.find(l => l.key === confidenceFilter)?.label ?? 'Any role';
-  const sortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label ?? 'A → Z';
 
   const listHeader = (
     <View>
@@ -432,20 +449,14 @@ export default function RepertoireScreen() {
           )}
         </View>
         {!searching && (
-          <TouchableOpacity
-            onPress={(e) => showOptionsSheet({
-              title: 'Role',
-              anchor: anchorFrom(e),
-              options: [
-                { label: 'Any role', onPress: () => setConfidenceFilter('all') },
-                ...CONFIDENCE_LEVELS.map(l => ({ label: l.label, onPress: () => setConfidenceFilter(l.key) })),
-              ],
-            })}
-            className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
-          >
-            <Text className="text-sm text-zinc-700">{roleLabel}</Text>
-            <Ionicons name="chevron-down" size={14} color="#71717a" />
-          </TouchableOpacity>
+          <View className="mt-3 flex-row">
+            <InlineDropdown
+              value={confidenceFilter}
+              options={[{ key: 'all' as const, label: 'Any role' }, ...CONFIDENCE_LEVELS]}
+              onChange={setConfidenceFilter}
+              accessibilityLabel="Filter by role"
+            />
+          </View>
         )}
       </View>
 
@@ -464,17 +475,12 @@ export default function RepertoireScreen() {
           {filtered.length} of {songs.length}
         </Text>
         <View className="flex-row items-center gap-2">
-          <TouchableOpacity
-            onPress={(e) => showOptionsSheet({
-              title: 'Sort',
-              anchor: anchorFrom(e),
-              options: SORT_OPTIONS.map(o => ({ label: o.label, onPress: () => setSortBy(o.key) })),
-            })}
-            className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
-          >
-            <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
-            <Ionicons name="chevron-down" size={11} color="#71717a" />
-          </TouchableOpacity>
+          <InlineDropdown
+            value={sortBy}
+            options={SORT_OPTIONS}
+            onChange={setSortBy}
+            accessibilityLabel="Sort"
+          />
           <TouchableOpacity
             onPress={() => setFilterModalVisible(true)}
             className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${
@@ -531,7 +537,11 @@ export default function RepertoireScreen() {
   // "Songs you might know" — mirrors web's SuggestionsPanel, shown below the
   // list (and below the empty-state card) but hidden while searching.
   const showSuggestions = !searching && suggestions.length > 0;
-  const listFooter = searching ? (
+  // Memoised because, unlike the Song Library's, this footer carries up to 20
+  // SuggestionCards outside the virtualised list — rebuilding that tree on
+  // every sort or filter change is the main reason Repertoire felt heavier
+  // than Search for the same interaction.
+  const listFooter = useMemo(() => searching ? (
     searchLoading ? null : (
       <View className="mx-4 mt-4">
         {/* Collapsed behind a button like web's SubmitSongForm — the expanded
@@ -564,8 +574,8 @@ export default function RepertoireScreen() {
           key={s.song_id}
           song={s}
           canLead={canLead}
-          onAdd={(confidence) => addFromSuggestion(s, confidence)}
-          onView={() => router.push(`/song/${s.song_id}` as any)}
+          onAdd={addFromSuggestion}
+          onView={viewSong}
         />
       ))}
       {suggestionsLoadingMore && (
@@ -574,7 +584,11 @@ export default function RepertoireScreen() {
         </View>
       )}
     </View>
-  ) : null;
+  ) : null, [
+    searching, searchLoading, submitOpen, query, router,
+    showSuggestions, suggestions, canLead, addFromSuggestion, viewSong,
+    suggestionsLoadingMore,
+  ]);
 
   const { session, initialised } = useAuth();
   // Signed-out: web keeps the page heading and pitches the feature rather than
