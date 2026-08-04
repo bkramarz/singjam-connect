@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Text, TouchableOpacity, Alert, Linking } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
@@ -27,11 +28,13 @@ const CONFIDENCE_LABELS: Record<string, string> = {
   learn: 'Learn',
 };
 
+// The callbacks take the song back rather than being bound to it, so a list can
+// hand every row the same two functions and let memo do its job.
 type Props = {
   song: Suggestion;
   canLead: boolean;
-  onAdd: (confidence: string) => void;
-  onView: () => void;
+  onAdd: (song: Suggestion, confidence: string) => void;
+  onView: (song: Suggestion) => void;
   // Set when the song is already in the user's repertoire: the Add button is
   // replaced by web's "✓ In your repertoire" pill plus a role control.
   confidence?: string | null;
@@ -42,15 +45,15 @@ type Props = {
 // YouTube and Spotify players inline; here they open the apps instead, since a
 // WebView per row would hurt list scrolling and Spotify only plays full tracks
 // in its own app. Spacing is tighter than web's so more songs fit a phone.
-export default function SuggestionCard({ song, canLead, onAdd, onView, confidence }: Props) {
+function SuggestionCard({ song, canLead, onAdd, onView, confidence }: Props) {
   function handleAddTap(event: GestureResponderEvent) {
     showOptionsSheet({
       title: confidence ? song.title : `Add "${song.title}" as…`,
       anchor: anchorFrom(event),
       options: [
-        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => onAdd('lead') },
-        { label: 'Support', onPress: () => onAdd('support') },
-        { label: 'Learn', onPress: () => onAdd('learn') },
+        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => onAdd(song, 'lead') },
+        { label: 'Support', onPress: () => onAdd(song, 'support') },
+        { label: 'Learn', onPress: () => onAdd(song, 'learn') },
       ],
     });
   }
@@ -68,7 +71,7 @@ export default function SuggestionCard({ song, canLead, onAdd, onView, confidenc
   return (
     <View className="mx-4 mb-2 rounded-2xl border border-zinc-200 bg-white p-4">
       <View className="flex-row items-start" style={{ gap: 8 }}>
-        <TouchableOpacity onPress={onView} className="flex-1 min-w-0">
+        <TouchableOpacity onPress={() => onView(song)} className="flex-1 min-w-0">
           <Text numberOfLines={3}>
             <Text className="font-medium text-zinc-900">{song.title}</Text>
             {composersLabel ? (
@@ -145,10 +148,12 @@ export default function SuggestionCard({ song, canLead, onAdd, onView, confidenc
             <Text className="text-sm font-medium text-white">+ Add to repertoire</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={onView} className="rounded-xl border border-zinc-200 px-3 py-1.5">
+        <TouchableOpacity onPress={() => onView(song)} className="rounded-xl border border-zinc-200 px-3 py-1.5">
           <Text className="text-sm text-zinc-600">View</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
+
+export default memo(SuggestionCard);

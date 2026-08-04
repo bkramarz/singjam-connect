@@ -12,7 +12,7 @@ import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
 import SuggestionCard from '@/components/SuggestionCard';
 import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
-import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
+import InlineDropdown from '@/components/InlineDropdown';
 
 // A superset of SuggestionCard's `Suggestion`, so catalog rows render in the
 // same card web uses while still carrying the fields the filters need.
@@ -227,10 +227,19 @@ export default function SongLibraryScreen() {
 
   // Derive each filter dimension's options from songs passing the OTHER active
   // filters, so choosing one facet narrows the rest (cascading, like web).
+  //
+  // Deliberately depends on the individual dimensions rather than the whole
+  // `filters` object: this screen keeps `sortBy` in there too, and re-sorting
+  // cannot change which facets exist — depending on the object rebuilt all seven
+  // option lists every time you changed the sort order. Likewise `myConfidence`
+  // only reaches the pool while "Hide my songs" is on, so ordinary repertoire
+  // edits shouldn't rebuild them either.
+  const { genres, cultures, languages, themes, vibe, tonality, meter, yearMin, yearMax } = filters;
+  const hiddenIds = hideMySongs ? myConfidence : null;
   const options = useMemo(() => {
-    const pool = hideMySongs ? allSongs.filter(s => !myConfidence.has(s.song_id)) : allSongs;
-    return deriveFilterOptions(pool, filters);
-  }, [allSongs, filters, hideMySongs, myConfidence]);
+    const pool = hiddenIds ? allSongs.filter(s => !hiddenIds.has(s.song_id)) : allSongs;
+    return deriveFilterOptions(pool, { genres, cultures, languages, themes, vibe, tonality, meter, yearMin, yearMax });
+  }, [allSongs, hiddenIds, genres, cultures, languages, themes, vibe, tonality, meter, yearMin, yearMax]);
 
   const yearBounds = useMemo(() => {
     const years = allSongs.map(s => s.year).filter((y): y is number => y != null);
@@ -245,10 +254,16 @@ export default function SongLibraryScreen() {
     return applySort(filtered, filters.sortBy);
   }, [query, allSongs, searchResults, filters, hideMySongs, myConfidence]);
 
+  // Read through a ref so the row callbacks below can stay referentially stable.
+  // Depending on the Map directly would rebuild them on every repertoire edit,
+  // which re-renders every visible row instead of just the one that changed.
+  const myConfidenceRef = useRef(myConfidence);
+  myConfidenceRef.current = myConfidence;
+
   // Adding and changing the role are the same upsert, exactly as on web.
-  async function addSong(song: SongMeta, confidence: string) {
+  const addSong = useCallback(async (song: { song_id: string }, confidence: string) => {
     if (!userId) { router.push('/(auth)/sign-in' as any); return; }
-    const previous = myConfidence;
+    const previous = myConfidenceRef.current;
     setMyConfidence(prev => new Map(prev).set(song.song_id, confidence));
     const { error } = await supabase.from('user_songs').upsert(
       { user_id: userId, song_id: song.song_id, confidence, updated_at: new Date().toISOString() },
@@ -258,20 +273,23 @@ export default function SongLibraryScreen() {
       Alert.alert('Error', error.message);
       setMyConfidence(previous);
     }
-  }
+  }, [userId, router]);
+
+  const viewSong = useCallback((song: { song_id: string }) => {
+    router.push(`/song/${song.song_id}` as any);
+  }, [router]);
 
   const renderItem = useCallback(({ item }: { item: SongMeta }) => (
     <SuggestionCard
       song={item}
       canLead={canLead}
       confidence={myConfidence.get(item.song_id) ?? null}
-      onAdd={(confidence) => addSong(item, confidence)}
-      onView={() => router.push(`/song/${item.song_id}` as any)}
+      onAdd={addSong}
+      onView={viewSong}
     />
-  ), [myConfidence, canLead, userId]);
+  ), [myConfidence, canLead, addSong, viewSong]);
 
   const activeFilterCount = countActiveFilters(filters);
-  const sortLabel = SORT_OPTIONS.find(o => o.key === filters.sortBy)?.label ?? 'Popular';
   const searching = query.trim().length > 0;
 
   const listHeader = (
@@ -304,20 +322,12 @@ export default function SongLibraryScreen() {
 
       {/* Sort / filters / hide-my-songs, then the catalog total — web's order */}
       <View className="mx-4 mt-3 flex-row items-center px-1" style={{ gap: 8 }}>
-        <TouchableOpacity
-          onPress={(e) => showOptionsSheet({
-            title: 'Sort',
-            anchor: anchorFrom(e),
-            options: SORT_OPTIONS.map(o => ({
-              label: o.label,
-              onPress: () => setFilters(f => ({ ...f, sortBy: o.key })),
-            })),
-          })}
-          className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
-        >
-          <Ionicons name="chevron-down" size={11} color="#71717a" />
-          <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
-        </TouchableOpacity>
+        <InlineDropdown
+          value={filters.sortBy}
+          options={SORT_OPTIONS}
+          onChange={(sortBy) => setFilters(f => ({ ...f, sortBy }))}
+          accessibilityLabel="Sort"
+        />
         <TouchableOpacity
           onPress={() => setFilterModalVisible(true)}
           className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${

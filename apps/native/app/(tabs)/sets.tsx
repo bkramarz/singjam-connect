@@ -335,11 +335,20 @@ export default function SetsScreen() {
         text: 'Yes, delete',
         style: 'destructive',
         onPress: async () => {
+          // Drop the row now and restore it if the call fails, rather than
+          // leaving it on screen for a round-trip plus a full list refetch.
+          const previous = sections;
           setBusyId(set.id);
+          setSections(prev => prev
+            .map(s => ({ ...s, data: s.data.filter(x => x.id !== set.id) }))
+            .filter(s => s.data.length > 0));
           try {
             const res = await apiFetch(`/api/sets/${set.id}`, 'DELETE');
             if (res?.ok) load();
-            else Alert.alert('Delete failed', 'Something went wrong deleting this set.');
+            else {
+              setSections(previous);
+              Alert.alert('Delete failed', 'Something went wrong deleting this set.');
+            }
           } finally {
             setBusyId(null);
           }
