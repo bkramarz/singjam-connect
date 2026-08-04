@@ -224,7 +224,10 @@ export default function RepertoireScreen() {
     [searchResults, existingIds]
   );
   const extFilterCount = countActiveFilters(extFilters);
-  const allSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id));
+  const allSelected = useMemo(
+    () => filtered.length > 0 && filtered.every(s => selectedIds.has(s.song_id)),
+    [filtered, selectedIds]
+  );
 
   // Latest-value refs so the row callbacks below can stay referentially stable.
   // Without them every edit rebuilds the callbacks, which re-renders every
@@ -534,7 +537,11 @@ export default function RepertoireScreen() {
   // "Songs you might know" — mirrors web's SuggestionsPanel, shown below the
   // list (and below the empty-state card) but hidden while searching.
   const showSuggestions = !searching && suggestions.length > 0;
-  const listFooter = searching ? (
+  // Memoised because, unlike the Song Library's, this footer carries up to 20
+  // SuggestionCards outside the virtualised list — rebuilding that tree on
+  // every sort or filter change is the main reason Repertoire felt heavier
+  // than Search for the same interaction.
+  const listFooter = useMemo(() => searching ? (
     searchLoading ? null : (
       <View className="mx-4 mt-4">
         {/* Collapsed behind a button like web's SubmitSongForm — the expanded
@@ -577,7 +584,11 @@ export default function RepertoireScreen() {
         </View>
       )}
     </View>
-  ) : null;
+  ) : null, [
+    searching, searchLoading, submitOpen, query, router,
+    showSuggestions, suggestions, canLead, addFromSuggestion, viewSong,
+    suggestionsLoadingMore,
+  ]);
 
   const { session, initialised } = useAuth();
   // Signed-out: web keeps the page heading and pitches the feature rather than
