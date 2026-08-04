@@ -1,16 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Linking, Alert, Image,
+  Linking, Alert, Image, Animated,
 } from 'react-native';
-import type { GestureResponderEvent } from 'react-native';
+import type { GestureResponderEvent, LayoutChangeEvent } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
+import {
+  formatComposersLong,
+  sortByLastName,
+  fetchSongJammers,
+  type SongJammer,
+  type SongJammers,
+} from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import AddToSetModal from '@/components/AddToSetModal';
 import ContentContainer from '@/components/ContentContainer';
+import PromptCard from '@/components/PromptCard';
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +33,7 @@ type RecordingArtist = {
 
 type SongDetail = {
   id: string;
+  slug: string | null;
   title: string;
   display_artist: string | null;
   first_line: string | null;
@@ -31,6 +42,7 @@ type SongDetail = {
   genius_url: string | null;
   chord_chart_url: string | null;
   youtube_url: string | null;
+  year: number | null;
   year_written: number | null;
   tonality: string | null;
   meter: string | null;
@@ -48,31 +60,7 @@ type SongDetail = {
   productions: string[];
 };
 
-type JammerEntry = {
-  userId: string;
-  display_name: string | null;
-  username: string | null;
-};
-
-type Jammers = {
-  lead: JammerEntry[];
-  support: JammerEntry[];
-  learn: JammerEntry[];
-};
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatComposersLong(names: string[], cultures: string[]): string {
-  const isTraditional = names.some(n => n.toLowerCase() === 'traditional');
-  const others = names.filter(n => n.toLowerCase() !== 'traditional');
-  const parts: string[] = [];
-  if (isTraditional) {
-    const culture = cultures[0];
-    parts.push(culture ? `Traditional — ${culture}` : 'Traditional');
-  }
-  parts.push(...others);
-  return parts.join(', ');
-}
 
 function openUrl(url: string) {
   Linking.openURL(url).catch(() =>
@@ -112,7 +100,7 @@ function TagRow({ label, tags }: { label: string; tags: string[] }) {
 
 function JammerRow({ label, jammers, onTap }: {
   label: string;
-  jammers: JammerEntry[];
+  jammers: SongJammers['lead'];
   onTap: (userId: string) => void;
 }) {
   if (jammers.length === 0) return null;
@@ -126,9 +114,7 @@ function JammerRow({ label, jammers, onTap }: {
             onPress={() => onTap(j.userId)}
             className="bg-slate-100 rounded-full px-3 py-1 mr-1.5 mb-1.5"
           >
-            <Text className="text-slate-600 text-sm">
-              {j.display_name ?? (j.username ? `@${j.username}` : 'Unknown')}
-            </Text>
+            <Text className="text-slate-600 text-sm">{j.name}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -154,15 +140,21 @@ function extractYouTubeId(url: string | null | undefined): string | null {
   return null;
 }
 
-function YouTubePlayer({ videoId, label }: { videoId: string; label: string }) {
+// A WebView fed bare `html` loads as about:blank, and YouTube refuses to embed
+// into a page with no resolvable origin ("Error 153"). So the document gets a
+// baseUrl and the embed gets a matching `origin` param. That origin has to be
+// our own site, the way a real embedding page would look — claiming to be
+// youtube.com itself is same-origin with the player and gets refused too.
+function YouTubePlayer({ videoId }: { videoId: string }) {
   const [playing, setPlaying] = useState(false);
-  const embedHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}iframe{width:100%;height:100%;display:block}</style></head><body><iframe src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></body></html>`;
+  const embedSrc = `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&origin=${encodeURIComponent(WEB_URL)}`;
+  const embedHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0}html,body{width:100%;height:100%;background:#000}iframe{width:100%;height:100%;display:block}</style></head><body><iframe src="${embedSrc}" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></body></html>`;
 
   return (
     <View className="mb-3 rounded-xl overflow-hidden bg-black" style={{ aspectRatio: 16 / 9 }}>
       {playing ? (
         <WebView
-          source={{ html: embedHtml }}
+          source={{ html: embedHtml, baseUrl: WEB_URL }}
           style={{ flex: 1 }}
           allowsInlineMediaPlayback
           allowsFullscreenVideo
@@ -181,12 +173,33 @@ function YouTubePlayer({ videoId, label }: { videoId: string; label: string }) {
               <Ionicons name="play" size={26} color="white" style={{ marginLeft: 3 }} />
             </View>
           </View>
-          <View className="absolute bottom-0 left-0 right-0 px-3 py-2" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <Text className="text-white text-xs" numberOfLines={1}>{label}</Text>
-          </View>
         </TouchableOpacity>
       )}
     </View>
+  );
+}
+
+// Web embeds Spotify in an iframe, but on a phone that only ever yields a
+// 30-second preview — the full track needs the Spotify app. So both services get
+// an open-in-app button here, matching the icon treatment on the song library
+// cards. The YouTube player still plays inline; its button is for handing off to
+// the app (background audio, casting, saving to a playlist).
+function OpenInAppButton({ service, url }: { service: 'youtube' | 'spotify'; url: string }) {
+  const youtube = service === 'youtube';
+  return (
+    <TouchableOpacity
+      onPress={() => openUrl(url)}
+      className="flex-row items-center gap-1.5 border border-slate-200 rounded-xl px-3 py-2"
+      accessibilityLabel={youtube ? 'Watch on YouTube' : 'Play on Spotify'}
+    >
+      {youtube
+        ? <Ionicons name="logo-youtube" size={16} color="#ef4444" />
+        : <FontAwesome name="spotify" size={16} color="#22c55e" />}
+      <Text className="text-slate-600 text-sm font-medium">
+        {youtube ? 'YouTube' : 'Spotify'}
+      </Text>
+      <Ionicons name="open-outline" size={13} color="#94a3b8" />
+    </TouchableOpacity>
   );
 }
 
@@ -199,10 +212,31 @@ export default function SongDetailScreen() {
   const [song, setSong] = useState<SongDetail | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [myConfidence, setMyConfidence] = useState<string | null>(null);
-  const [jammers, setJammers] = useState<Jammers | null>(null);
+  const [jammers, setJammers] = useState<SongJammers | null>(null);
+  const [popularity, setPopularity] = useState(0);
+  const [singingVoice, setSingingVoice] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [myJammerEntry, setMyJammerEntry] = useState<SongJammer | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [addToSetVisible, setAddToSetVisible] = useState(false);
+
+  const canLead = !!singingVoice && singingVoice !== 'none';
+
+  // The nav bar is empty at rest so the first screenful matches web, then the
+  // title fades in once the heading scrolls away. Driven natively off the scroll
+  // offset rather than state, so it costs nothing per frame.
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [headingBottom, setHeadingBottom] = useState(0);
+  const onHeadingLayout = useCallback((e: LayoutChangeEvent) => {
+    const { y, height } = e.nativeEvent.layout;
+    setHeadingBottom(y + height);
+  }, []);
+  const headerTitleOpacity = scrollY.interpolate({
+    inputRange: [Math.max(headingBottom - 24, 0), Math.max(headingBottom, 1) + 8],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   useEffect(() => {
     if (!songId) return;
@@ -213,13 +247,13 @@ export default function SongDetailScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     setMyUserId(user?.id ?? null);
 
-    const [songRes, confidenceRes, jammersRes] = await Promise.all([
+    const [songRes, confidenceRes, profileRes, jammersRes, count] = await Promise.all([
       supabase
         .from('songs')
         .select(`
-          id, title, display_artist, first_line, hook, notes,
+          id, slug, title, display_artist, first_line, hook, notes,
           genius_url, chord_chart_url, youtube_url,
-          year_written, tonality, meter, vibe,
+          year, year_written, tonality, meter, vibe,
           song_alternate_titles(title),
           song_composers(people(name)),
           song_lyricists(people(name)),
@@ -237,11 +271,18 @@ export default function SongDetailScreen() {
             .eq('user_id', user.id).eq('song_id', songId).maybeSingle()
         : Promise.resolve({ data: null }),
       user
-        ? supabase.from('user_songs')
-            .select('confidence, user_id, profiles!user_id(id, display_name, username)')
-            .eq('song_id', songId)
-            .in('confidence', ['lead', 'support', 'learn'])
+        ? supabase.from('profiles')
+            .select('role, singing_voice, display_name, last_name, username')
+            .eq('id', user.id).single()
         : Promise.resolve({ data: null }),
+      user ? fetchSongJammers(supabase, songId) : Promise.resolve(null),
+      // The count comes from the web API because it reads through the service
+      // role there — RLS would otherwise hide other people's rows and undercount.
+      // The route is unauthenticated, so guests get the real number too.
+      fetch(`${WEB_URL}/api/songs/${songId}/count`)
+        .then(r => r.json())
+        .then(j => Number(j.count ?? 0))
+        .catch(() => 0),
     ]);
 
     if (!songRes.data) {
@@ -258,6 +299,7 @@ export default function SongDetailScreen() {
 
     setSong({
       id: s.id,
+      slug: s.slug ?? null,
       title: s.title ?? '',
       display_artist: s.display_artist ?? null,
       first_line: s.first_line ?? null,
@@ -266,13 +308,14 @@ export default function SongDetailScreen() {
       genius_url: s.genius_url ?? null,
       chord_chart_url: s.chord_chart_url ?? null,
       youtube_url: s.youtube_url ?? null,
+      year: s.year ?? null,
       year_written: s.year_written ?? null,
       tonality: s.tonality ?? null,
       meter: s.meter ?? null,
       vibe: s.vibe ?? null,
       altTitles: (s.song_alternate_titles ?? []).map((x: any) => x.title).filter(Boolean),
-      composers: (s.song_composers ?? []).map((x: any) => x.people?.name).filter(Boolean),
-      lyricists: (s.song_lyricists ?? []).map((x: any) => x.people?.name).filter(Boolean),
+      composers: sortByLastName((s.song_composers ?? []).map((x: any) => x.people?.name).filter(Boolean)),
+      lyricists: sortByLastName((s.song_lyricists ?? []).map((x: any) => x.people?.name).filter(Boolean)),
       musicCultures: (musicRows.length ? musicRows : noCtx).map((x: any) => x.cultures?.name).filter(Boolean),
       lyricsCultures: (lyricsRows.length ? lyricsRows : noCtx).map((x: any) => x.cultures?.name).filter(Boolean),
       recordingArtists: (s.song_recording_artists ?? [])
@@ -287,25 +330,52 @@ export default function SongDetailScreen() {
     });
 
     setMyConfidence((confidenceRes.data as any)?.confidence ?? null);
-
-    if (jammersRes.data) {
-      const lead: JammerEntry[] = [];
-      const support: JammerEntry[] = [];
-      const learn: JammerEntry[] = [];
-      for (const row of jammersRes.data as any[]) {
-        const entry = {
-          userId: row.user_id,
-          display_name: row.profiles?.display_name ?? null,
-          username: row.profiles?.username ?? null,
-        };
-        if (row.confidence === 'lead') lead.push(entry);
-        else if (row.confidence === 'support') support.push(entry);
-        else learn.push(entry);
-      }
-      setJammers({ lead, support, learn });
+    const p = profileRes.data as any;
+    setSingingVoice(p?.singing_voice ?? null);
+    setIsAdmin(p?.role === 'admin');
+    if (user && p) {
+      setMyJammerEntry({
+        userId: user.id,
+        name: [p.display_name, p.last_name].filter(Boolean).join(' ') || 'Unknown',
+        username: p.username ?? '',
+      });
     }
+    setPopularity(count);
+    if (jammersRes) setJammers(jammersRes);
 
     setLoading(false);
+  }
+
+  // Paint the new role straight away and roll back if the write fails, the way
+  // the repertoire tab and song library already do — waiting on the round-trip
+  // put a visible lag on every tap. Web moves the viewer between the Jammers
+  // rows on the same tick, so this does too.
+  function applyConfidence(next: string | null, write: () => PromiseLike<{ error: any }>) {
+    const previousConfidence = myConfidence;
+    const previousJammers = jammers;
+
+    setMyConfidence(next);
+    if (myJammerEntry) {
+      setJammers(prev => {
+        if (!prev) return prev;
+        const without = (arr: SongJammer[]) => arr.filter(j => j.userId !== myJammerEntry.userId);
+        const updated: SongJammers = { lead: without(prev.lead), support: without(prev.support), learn: without(prev.learn) };
+        if (next === 'lead' || next === 'support' || next === 'learn') {
+          updated[next] = [...updated[next], myJammerEntry];
+        }
+        return updated;
+      });
+    }
+    if (next && !previousConfidence) setPopularity(n => n + 1);
+    if (!next && previousConfidence) setPopularity(n => Math.max(n - 1, 0));
+
+    write().then(({ error }) => {
+      if (!error) return;
+      Alert.alert('Error', error.message);
+      setMyConfidence(previousConfidence);
+      setJammers(previousJammers);
+      setPopularity(n => (next && !previousConfidence ? Math.max(n - 1, 0) : !next && previousConfidence ? n + 1 : n));
+    });
   }
 
   async function handleAddToRepertoire(event: GestureResponderEvent) {
@@ -314,66 +384,61 @@ export default function SongDetailScreen() {
     const songId = song.id;
     const uid = myUserId;
 
-    function upsert(confidence: string) {
-      supabase.from('user_songs')
-        .upsert({ user_id: uid, song_id: songId, confidence }, { onConflict: 'user_id,song_id' })
-        .then(({ error }) => {
-          if (error) Alert.alert('Error', error.message);
-          else setMyConfidence(confidence);
-        });
-    }
+    const upsert = (confidence: string) => applyConfidence(confidence, () =>
+      supabase.from('user_songs').upsert(
+        { user_id: uid, song_id: songId, confidence, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,song_id' }
+      )
+    );
 
     showOptionsSheet({
-      title: 'Add to repertoire',
+      title: `Add "${song.title}" as…`,
       anchor: anchorFrom(event),
       options: [
-        { label: 'Lead', onPress: () => upsert('lead') },
+        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => upsert('lead') },
         { label: 'Support', onPress: () => upsert('support') },
         { label: 'Learn', onPress: () => upsert('learn') },
       ],
     });
   }
 
+  // Web exposes Remove as its own button next to the role control, so it lives
+  // outside the sheet here too — the sheet keeps its entry as well, matching how
+  // the repertoire cards behave.
+  function handleRemoveFromRepertoire() {
+    if (!myUserId || !song) return;
+    const songId = song.id;
+    const uid = myUserId;
+
+    Alert.alert('Remove from repertoire', `Remove "${song.title}" from your repertoire?`, [
+      {
+        text: 'Remove', style: 'destructive', onPress: () => applyConfidence(null, () =>
+          supabase.from('user_songs').delete().eq('user_id', uid).eq('song_id', songId)
+        ),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function handleChangeConfidence(event: GestureResponderEvent) {
     if (!myUserId || !song) return;
     const songId = song.id;
-    const songTitle = song.title;
     const uid = myUserId;
 
-    function update(confidence: string) {
+    const update = (confidence: string) => applyConfidence(confidence, () =>
       supabase.from('user_songs')
-        .update({ confidence })
+        .update({ confidence, updated_at: new Date().toISOString() })
         .eq('user_id', uid).eq('song_id', songId)
-        .then(({ error }) => {
-          if (error) Alert.alert('Error', error.message);
-          else setMyConfidence(confidence);
-        });
-    }
-
-    function remove() {
-      Alert.alert('Remove from repertoire', `Remove "${songTitle}" from your repertoire?`, [
-        {
-          text: 'Remove', style: 'destructive', onPress: () => {
-            supabase.from('user_songs')
-              .delete().eq('user_id', uid).eq('song_id', songId)
-              .then(({ error }) => {
-                if (error) Alert.alert('Error', error.message);
-                else setMyConfidence(null);
-              });
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    );
 
     showOptionsSheet({
       title: song.title,
       anchor: anchorFrom(event),
       options: [
-        { label: 'Lead', onPress: () => update('lead') },
+        { label: canLead ? 'Lead' : 'Lead (singers only)', disabled: !canLead, onPress: () => update('lead') },
         { label: 'Support', onPress: () => update('support') },
         { label: 'Learn', onPress: () => update('learn') },
-        { label: 'Remove from repertoire', destructive: true, onPress: remove },
+        { label: 'Remove from repertoire', destructive: true, onPress: handleRemoveFromRepertoire },
       ],
     });
   }
@@ -406,12 +471,7 @@ export default function SongDetailScreen() {
   }
 
   const CONFIDENCE_LABEL: Record<string, string> = { lead: 'Lead', support: 'Support', learn: 'Learn' };
-  const CONFIDENCE_STYLE: Record<string, string> = {
-    lead: 'bg-amber-100 text-amber-700',
-    support: 'bg-slate-100 text-slate-600',
-    learn: 'bg-slate-100 text-slate-500',
-  };
-  const confStyle = myConfidence ? CONFIDENCE_STYLE[myConfidence] ?? CONFIDENCE_STYLE.learn : '';
+  const isLead = myConfidence === 'lead';
 
   const tonalityPills = song.tonality ? song.tonality.split(',').map(s => s.trim()).filter(Boolean) : [];
   const meterPills = song.meter ? song.meter.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -429,14 +489,91 @@ export default function SongDetailScreen() {
     mediaEntries.push({ label: song.display_artist ?? song.title, youtubeId: extractYouTubeId(song.youtube_url), spotifyUrl: null });
   }
   const hasMedia = mediaEntries.length > 0;
+  // Web only names the artist when there is more than one recording to tell apart.
+  const showMediaLabels = mediaEntries.length > 1;
+
+  const allYears = [song.year_written, song.year, ...song.recordingArtists.map(ra => ra.year)]
+    .filter((y): y is number => !!y);
+  const earliestYear = allYears.length > 0 ? Math.min(...allYears) : null;
 
   const hasMusicalProps = tonalityPills.length > 0 || meterPills.length > 0 || !!song.vibe;
   const hasTags = song.genres.length > 0 || song.themes.length > 0 || song.cultures.length > 0 || song.languages.length > 0;
   const hasJammers = jammers && (jammers.lead.length > 0 || jammers.support.length > 0 || jammers.learn.length > 0);
 
+  // Web repeats this control group at the top and bottom of the page, so a long
+  // song doesn't force a scroll back up to change your role.
+  function renderRepertoireControls() {
+    return (
+      <View className="flex-row flex-wrap items-center gap-2 mt-4">
+        {myConfidence ? (
+          <>
+            <TouchableOpacity
+              onPress={handleChangeConfidence}
+              className={`flex-row items-center rounded-xl border px-3 py-2 ${
+                isLead ? 'border-amber-400 bg-amber-100' : 'border-slate-200 bg-white'
+              }`}
+            >
+              <Text className={`text-sm ${isLead ? 'text-amber-800 font-semibold' : 'text-slate-700'}`}>
+                {CONFIDENCE_LABEL[myConfidence]}
+              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={12}
+                color={isLead ? '#92400e' : '#64748b'}
+                style={{ marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAddToSetVisible(true)}
+              className="flex-row items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2"
+            >
+              <Ionicons name="list-outline" size={14} color="#64748b" />
+              <Text className="text-slate-600 text-sm">Add to set</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleRemoveFromRepertoire}
+              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
+            >
+              <Text className="text-xs text-slate-400">Remove</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity
+            onPress={handleAddToRepertoire}
+            className="rounded-xl bg-indigo-500 px-4 py-2"
+          >
+            <Text className="text-white text-sm font-medium">+ Add to repertoire</Text>
+          </TouchableOpacity>
+        )}
+        {isAdmin ? (
+          // The song editor is web-only, so admins hand off to the browser.
+          <TouchableOpacity
+            onPress={() => openUrl(`${WEB_URL}/admin/songs/${song!.slug ?? song!.id}`)}
+            className="flex-row items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-2"
+          >
+            <Text className="text-slate-600 text-sm">Edit</Text>
+            <Ionicons name="open-outline" size={13} color="#94a3b8" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <>
-      <Stack.Screen options={{ title: '', headerTintColor: '#d97706' }} />
+      <Stack.Screen
+        options={{
+          headerTintColor: '#d97706',
+          headerTitle: () => (
+            <Animated.Text
+              numberOfLines={1}
+              style={{ opacity: headerTitleOpacity, fontSize: 17, fontWeight: '600', color: '#0f172a' }}
+            >
+              {song.title}
+            </Animated.Text>
+          ),
+        }}
+      />
 
       {song && (
         <AddToSetModal
@@ -447,11 +584,33 @@ export default function SongDetailScreen() {
       )}
 
       <ContentContainer style={{ backgroundColor: 'white' }}>
-      <ScrollView className="flex-1 bg-white" contentContainerStyle={{ paddingBottom: 60 }}>
+      <Animated.ScrollView
+        // Plain style rather than className: this is the app's only Animated
+        // component, and NativeWind's className handling for it is unproven.
+        style={{ flex: 1, backgroundColor: 'white' }}
+        contentContainerStyle={{ paddingBottom: 60 }}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+      >
 
         {/* Title + meta */}
         <View className="px-4 pt-5 pb-4 border-b border-slate-100">
-          <Text className="text-2xl font-bold text-slate-900">{song.title}</Text>
+          <View className="flex-row items-start justify-between gap-4" onLayout={onHeadingLayout}>
+            <Text className="flex-1 text-2xl font-bold text-slate-900">{song.title}</Text>
+            <View className="shrink-0 flex-row items-center gap-3 mt-1">
+              {popularity > 0 ? (
+                <Text className="text-sm text-slate-400">
+                  {popularity} {popularity === 1 ? 'jammer' : 'jammers'}
+                </Text>
+              ) : null}
+              {earliestYear ? (
+                <Text className="text-sm text-slate-400">{earliestYear}</Text>
+              ) : null}
+            </View>
+          </View>
 
           {song.productions.length > 0 ? (
             <Text className="text-base text-slate-500 mt-0.5">
@@ -465,45 +624,13 @@ export default function SongDetailScreen() {
             <Text className="text-sm text-slate-400 mt-1">aka: {song.altTitles.join(' · ')}</Text>
           ) : null}
 
-          {song.year_written ? (
-            <Text className="text-sm text-slate-400 mt-1">Written {song.year_written}</Text>
-          ) : null}
-
-          {/* Repertoire action */}
-          <View className="flex-row flex-wrap items-center gap-2 mt-4">
-            {myConfidence ? (
-              <>
-                <TouchableOpacity
-                  onPress={handleChangeConfidence}
-                  className={`px-4 py-2 rounded-full border ${confStyle.split(' ')[0]} border-transparent`}
-                >
-                  <Text className={`text-sm font-semibold ${confStyle.split(' ')[1]}`}>
-                    {CONFIDENCE_LABEL[myConfidence]} ▾
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setAddToSetVisible(true)}
-                  className="flex-row items-center gap-1 px-4 py-2 rounded-full border border-slate-200"
-                >
-                  <Ionicons name="list-outline" size={14} color="#64748b" />
-                  <Text className="text-slate-600 text-sm font-medium">Add to set</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity
-                onPress={handleAddToRepertoire}
-                className="bg-amber-500 rounded-full px-4 py-2"
-              >
-                <Text className="text-white text-sm font-semibold">+ Add to repertoire</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {renderRepertoireControls()}
         </View>
 
         {/* Songwriters */}
         {(song.composers.length > 0 || song.lyricists.length > 0) ? (
           <View className="px-4 py-4 border-b border-slate-100">
-            <SectionHeader title="Songwriters" />
+            <SectionHeader title="Songwriter(s)" />
             {song.composers.length > 0 ? (
               <Text className="text-sm text-slate-700 mb-1">
                 <Text className="font-medium">Music: </Text>
@@ -519,40 +646,52 @@ export default function SongDetailScreen() {
           </View>
         ) : null}
 
-        {/* Recordings */}
-        {song.recordingArtists.length > 0 ? (
+        {/* Recordings — web groups the written year in here rather than the header */}
+        {(song.recordingArtists.length > 0 || song.year_written) ? (
           <View className="px-4 py-4 border-b border-slate-100">
-            <SectionHeader title="Recordings" />
-            <View className="flex-row flex-wrap">
-              {song.recordingArtists.map((ra, i) => (
-                <View key={i} className="bg-slate-100 rounded-full px-3 py-1 mr-1.5 mb-1.5 flex-row items-center gap-1.5">
-                  <Text className="text-slate-700 text-sm">{ra.name}</Text>
-                  {ra.year ? <Text className="text-slate-400 text-sm">{ra.year}</Text> : null}
+            {song.year_written ? (
+              <Text className="text-sm text-slate-600 mb-3">
+                <Text className="font-medium text-slate-700">Written: </Text>
+                {song.year_written}
+              </Text>
+            ) : null}
+            {song.recordingArtists.length > 0 ? (
+              <>
+                <SectionHeader title="Recordings" />
+                <View className="flex-row flex-wrap">
+                  {song.recordingArtists.map((ra, i) => (
+                    <View key={i} className="bg-slate-100 rounded-full px-3 py-1 mr-1.5 mb-1.5 flex-row items-center gap-1.5">
+                      <Text className="text-slate-700 text-sm">{ra.name}</Text>
+                      {ra.year ? <Text className="text-slate-400 text-sm">{ra.year}</Text> : null}
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              </>
+            ) : null}
           </View>
         ) : null}
 
-        {/* Media — YouTube embeds + Spotify links */}
+        {/* Media — inline YouTube player plus hand-off buttons for both apps */}
         {hasMedia ? (
           <View className="px-4 py-4 border-b border-slate-100">
             <SectionHeader title="Listen / Watch" />
             {mediaEntries.map((entry, i) => (
-              <View key={i}>
-                {entry.youtubeId ? (
-                  <YouTubePlayer videoId={entry.youtubeId} label={entry.label} />
+              <View key={i} className={i > 0 ? 'mt-4' : undefined}>
+                {showMediaLabels ? (
+                  <Text className="text-sm font-medium text-slate-500 mb-2">{entry.label}</Text>
                 ) : null}
-                {entry.spotifyUrl ? (
-                  <TouchableOpacity
-                    onPress={() => openUrl(entry.spotifyUrl!)}
-                    className="flex-row items-center py-2 mb-1"
-                  >
-                    <Ionicons name="musical-notes-outline" size={18} color="#1db954" style={{ marginRight: 10 }} />
-                    <Text className="flex-1 text-slate-700 text-sm">{entry.label} — Spotify</Text>
-                    <Ionicons name="open-outline" size={14} color="#94a3b8" />
-                  </TouchableOpacity>
-                ) : null}
+                {entry.youtubeId ? <YouTubePlayer videoId={entry.youtubeId} /> : null}
+                <View className="flex-row flex-wrap gap-2">
+                  {entry.youtubeId ? (
+                    <OpenInAppButton
+                      service="youtube"
+                      url={`https://www.youtube.com/watch?v=${entry.youtubeId}`}
+                    />
+                  ) : null}
+                  {entry.spotifyUrl ? (
+                    <OpenInAppButton service="spotify" url={entry.spotifyUrl} />
+                  ) : null}
+                </View>
               </View>
             ))}
           </View>
@@ -654,9 +793,36 @@ export default function SongDetailScreen() {
               <Text className="text-sm text-slate-400">No jammers have added this song yet.</Text>
             )}
           </View>
-        ) : null}
+        ) : (
+          <View className="py-4">
+            <PromptCard
+              variant="guest"
+              title={popularity > 0
+                ? `${popularity} ${popularity === 1 ? 'jammer knows' : 'jammers know'} this song`
+                : 'Find jammers who know this song'}
+              body={popularity > 0
+                ? 'Sign up to see who — and find your next jam.'
+                : 'Sign up and be the first to add it.'}
+              actionLabel="Sign in →"
+              onAction={() => router.push('/(auth)/sign-in' as any)}
+            />
+          </View>
+        )}
 
-      </ScrollView>
+        {/* Bottom action bar — mirrors web's repeat of the controls plus a way back */}
+        <View className="px-4 pt-2">
+          {renderRepertoireControls()}
+          <TouchableOpacity
+            onPress={() => router.replace((myConfidence ? '/(tabs)' : '/songs') as any)}
+            className="mt-4"
+          >
+            <Text className="text-sm text-amber-600">
+              {myConfidence ? '← Back to repertoire' : '← Back to search'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+      </Animated.ScrollView>
       </ContentContainer>
     </>
   );

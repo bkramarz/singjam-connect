@@ -11,6 +11,7 @@ export * from './utils/reorderSongsForPlayed';
 export * from './utils/setDisplayedSongs';
 export * from './utils/singingVoice';
 export * from './utils/songFilters';
+export * from './utils/songJammers';
 export * from './utils/sortRepertoireSearchResults';
 export * from './utils/userSong';
 export * from './utils/username';

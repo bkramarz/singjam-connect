@@ -704,28 +704,32 @@ export default function AccountPanel() {
 
           {/* Pending level pick */}
           {pendingInstrument && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-sm text-zinc-500">{pendingInstrument} —</span>
-              {INSTRUMENT_LEVELS.map((l) => (
+            <div className="mt-3 rounded-2xl border border-indigo-300 bg-indigo-50 p-4 space-y-2.5 animate-attention-pop">
+              <p className="text-sm font-semibold text-indigo-900">
+                How well do you play <span className="font-bold">{pendingInstrument}</span>?
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {INSTRUMENT_LEVELS.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => {
+                      setInstrumentLevels({ ...instrumentLevels, [pendingInstrument]: l });
+                      setPendingInstrument(null);
+                    }}
+                    className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-sm text-zinc-700 transition-colors hover:bg-indigo-100"
+                  >
+                    {l}
+                  </button>
+                ))}
                 <button
-                  key={l}
                   type="button"
-                  onClick={() => {
-                    setInstrumentLevels({ ...instrumentLevels, [pendingInstrument]: l });
-                    setPendingInstrument(null);
-                  }}
-                  className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100"
+                  onClick={() => setPendingInstrument(null)}
+                  className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-sm text-zinc-500 hover:bg-indigo-100"
                 >
-                  {l}
+                  ✕
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPendingInstrument(null)}
-                className="rounded-xl border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50"
-              >
-                ✕
-              </button>
+              </div>
             </div>
           )}
 

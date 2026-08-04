@@ -13,10 +13,16 @@ export function SortDropdown({
   value,
   onChange,
   options = SORT_OPTIONS,
+  align = "right",
 }: {
   value: SortBy;
   onChange: (v: SortBy) => void;
   options?: { value: SortBy; label: string }[];
+  // Which edge of the trigger the menu hangs off. Defaults to "right", which
+  // suits /repertoire's justify-between toolbar where the control sits at the
+  // right edge. /search puts it first in a left-aligned row, so the menu needs
+  // to open rightward or it hangs off the side of its own pill.
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -44,7 +50,7 @@ export function SortDropdown({
         {current?.label}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 min-w-[100px] rounded-lg border border-zinc-200 bg-white py-1 shadow-md">
+        <div className={`absolute ${align === "left" ? "left-0" : "right-0"} top-full z-20 mt-1 min-w-[100px] rounded-lg border border-zinc-200 bg-white py-1 shadow-md`}>
           {options.map((o) => (
             <button
               key={o.value}

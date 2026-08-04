@@ -219,7 +219,7 @@ export default function SongSearch({ initialQuery = "" }: { initialQuery?: strin
       <div className="space-y-2">
         <div className="flex flex-col gap-2 px-1">
           <div className="flex items-center gap-2">
-            <SortDropdown value={sortBy} onChange={setSortBy} options={SORT_OPTIONS} />
+            <SortDropdown value={sortBy} onChange={setSortBy} options={SORT_OPTIONS} align="left" />
             <button
               onClick={() => setFiltersOpen((o) => !o)}
               className={`h-7 flex items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors ${

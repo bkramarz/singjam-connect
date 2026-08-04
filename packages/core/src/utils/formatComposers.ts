@@ -14,3 +14,22 @@ export function formatComposers(composers: string[], cultures: string[]): string
   );
   return parts.join(", ");
 }
+
+// The song detail pages spell names out in full rather than abbreviating them,
+// and name a single culture for "Traditional" instead of listing every one.
+export function formatComposersLong(names: string[], cultures: string[]): string {
+  const isTraditional = names.some((n) => n.toLowerCase() === "traditional");
+  const others = names.filter((n) => n.toLowerCase() !== "traditional");
+  const parts: string[] = [];
+  if (isTraditional) {
+    const culture = cultures[0];
+    parts.push(culture ? `Traditional - ${culture}` : "Traditional");
+  }
+  parts.push(...others);
+  return parts.join(", ");
+}
+
+export function sortByLastName(names: string[]): string[] {
+  const lastName = (n: string) => n.trim().split(/\s+/).at(-1) ?? "";
+  return [...names].sort((a, b) => lastName(a).localeCompare(lastName(b)));
+}
