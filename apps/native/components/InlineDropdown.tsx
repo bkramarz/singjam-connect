@@ -25,7 +25,7 @@ export default function InlineDropdown<T extends string>({
   accessibilityLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null);
   const triggerRef = useRef<View>(null);
 
   const current = options.find(o => o.key === value);
@@ -33,7 +33,18 @@ export default function InlineDropdown<T extends string>({
   function openMenu() {
     triggerRef.current?.measureInWindow((x, y, width, height) => {
       const screenWidth = Dimensions.get('window').width;
-      setPos({ top: y + height + 4, right: Math.max(screenWidth - (x + width), 8) });
+      // Hang the menu off whichever edge of the trigger keeps it on screen: the
+      // Song Library's sort sits at the far left, so right-aligning it (as web
+      // does, where the control is on the right) ran it off the left edge.
+      // Picking by which half the trigger is in avoids having to measure the
+      // menu, which has no fixed width.
+      const alignLeft = x + width / 2 < screenWidth / 2;
+      setPos({
+        top: y + height + 4,
+        ...(alignLeft
+          ? { left: Math.max(x, 8) }
+          : { right: Math.max(screenWidth - (x + width), 8) }),
+      });
       setOpen(true);
     });
   }
@@ -54,10 +65,10 @@ export default function InlineDropdown<T extends string>({
         <Pressable className="flex-1" onPress={() => setOpen(false)}>
           {pos ? (
             <View
-              className="absolute min-w-[120px] rounded-lg border border-zinc-200 bg-white py-1"
+              className="absolute min-w-[120px] max-w-[220px] rounded-lg border border-zinc-200 bg-white py-1"
               style={{
                 top: pos.top,
-                right: pos.right,
+                ...(pos.left !== undefined ? { left: pos.left } : { right: pos.right }),
                 shadowColor: '#000',
                 shadowOpacity: 0.1,
                 shadowRadius: 8,
