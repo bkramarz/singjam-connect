@@ -265,6 +265,9 @@ export default function JamDetailScreen() {
   const [myRsvpStatus, setMyRsvpStatus] = useState<string | null>(null);
   const [myInviteStatus, setMyInviteStatus] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  // Kept so an optimistic RSVP can put you in the attendee list straight away
+  // instead of waiting for a reload to learn your own name and avatar.
+  const [me, setMe] = useState<Omit<Attendee, 'status'> | null>(null);
   const [jamSets, setJamSets] = useState<JamSet[]>([]);
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -280,7 +283,7 @@ export default function JamDetailScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     setMyUserId(user?.id ?? null);
 
-    const [jamResult, rsvpsResult, inviteResult, setsResult] = await Promise.all([
+    const [jamResult, rsvpsResult, inviteResult, setsResult, meResult] = await Promise.all([
       supabase
         .from('jams')
         .select(`
@@ -308,6 +311,9 @@ export default function JamDetailScreen() {
         .select('id, name')
         .eq('jam_id', id)
         .limit(10),
+      user
+        ? supabase.from('profiles').select('display_name, username, avatar_url').eq('id', user.id).single()
+        : Promise.resolve({ data: null }),
     ]);
 
     if (!jamResult.data) {
@@ -348,6 +354,15 @@ export default function JamDetailScreen() {
     setAttendees(rawRsvps.filter(r => r.status === 'attending'));
     const myRsvp = user ? rawRsvps.find(r => r.user_id === user.id) : undefined;
     setMyRsvpStatus(myRsvp?.status ?? null);
+    if (user) {
+      const p = meResult.data as any;
+      setMe({
+        user_id: user.id,
+        display_name: p?.display_name ?? null,
+        username: p?.username ?? null,
+        avatar_url: p?.avatar_url ?? null,
+      });
+    }
     setMyInviteStatus(inviteResult.data?.status ?? null);
     setJamSets((setsResult.data ?? []).map((s: any) => ({ id: s.id, name: s.name })));
     setLoading(false);
@@ -370,6 +385,19 @@ export default function JamDetailScreen() {
     });
   }
 
+  // These three used to block on the write and then on a full reload before
+  // anything moved — two round-trips of dead button on the most-tapped control
+  // in the app. They now paint the expected outcome first and reconcile after.
+  //
+  // The server owns the capacity rule, so the optimistic status is a prediction
+  // using the same test it applies; the response carries the authoritative
+  // status and corrects it. The reload still runs, but in the background, since
+  // a cancel can promote someone off the waitlist and only the server knows who.
+  function predictedRsvpStatus(): 'attending' | 'waitlist' {
+    if (!jam) return 'attending';
+    return jam.capacity !== null && attendees.length >= jam.capacity ? 'waitlist' : 'attending';
+  }
+
   async function handleRsvp() {
     if (!jam) return;
     if (!myUserId) { router.push('/(auth)/sign-in' as any); return; }
@@ -377,16 +405,31 @@ export default function JamDetailScreen() {
       Alert.alert('External ticketing', 'Official SingJam events use external ticketing.');
       return;
     }
+
+    const previousStatus = myRsvpStatus;
+    const previousAttendees = attendees;
+    const predicted = predictedRsvpStatus();
+
     setRsvpLoading(true);
+    setMyRsvpStatus(predicted);
+    if (predicted === 'attending' && me && !attendees.some(a => a.user_id === me.user_id)) {
+      setAttendees(prev => [...prev, { ...me, status: 'attending' }]);
+    }
+
     const res = await jamApiFetch(`/api/jam/${jam.id}/rsvp`, 'POST');
     if (!res?.ok) {
       const msg = res ? (await res.json().catch(() => null))?.error : null;
       Alert.alert('Error', msg ?? 'Something went wrong.');
+      setMyRsvpStatus(previousStatus);
+      setAttendees(previousAttendees);
       setRsvpLoading(false);
       return;
     }
-    await load();
+
+    const confirmed = (await res.json().catch(() => null))?.status;
+    if (confirmed && confirmed !== predicted) setMyRsvpStatus(confirmed);
     setRsvpLoading(false);
+    load();
   }
 
   async function handleCancelRsvp() {
@@ -396,15 +439,23 @@ export default function JamDetailScreen() {
         text: 'Cancel RSVP',
         style: 'destructive',
         onPress: async () => {
+          const previousStatus = myRsvpStatus;
+          const previousAttendees = attendees;
+
           setRsvpLoading(true);
+          setMyRsvpStatus(null);
+          setAttendees(prev => prev.filter(a => a.user_id !== myUserId));
+
           const res = await jamApiFetch(`/api/jam/${jam.id}/rsvp`, 'DELETE');
           if (!res?.ok) {
             Alert.alert('Error', 'Something went wrong.');
+            setMyRsvpStatus(previousStatus);
+            setAttendees(previousAttendees);
             setRsvpLoading(false);
             return;
           }
-          await load();
           setRsvpLoading(false);
+          load();
         },
       },
       { text: 'Keep RSVP', style: 'cancel' },
@@ -413,15 +464,26 @@ export default function JamDetailScreen() {
 
   async function handleInviteResponse(response: 'accepted' | 'declined') {
     if (!myUserId || !jam) return;
+
+    const previousInvite = myInviteStatus;
+    const previousAttendees = attendees;
+
     setRsvpLoading(true);
+    setMyInviteStatus(response);
+    if (response === 'accepted' && me && !attendees.some(a => a.user_id === me.user_id)) {
+      setAttendees(prev => [...prev, { ...me, status: 'attending' }]);
+    }
+
     const res = await jamApiFetch(`/api/jam/${jam.id}/invite/respond`, 'POST', { response });
     if (!res?.ok) {
       Alert.alert('Error', 'Something went wrong.');
+      setMyInviteStatus(previousInvite);
+      setAttendees(previousAttendees);
       setRsvpLoading(false);
       return;
     }
-    await load();
     setRsvpLoading(false);
+    load();
   }
 
   if (loading) {

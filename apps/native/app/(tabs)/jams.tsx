@@ -220,12 +220,23 @@ export default function JamsScreen() {
         onPress: async () => {
           const { data: { session } } = await supabase.auth.getSession();
           if (!session) return;
+
+          // Drop the row now and put it back if the call fails, rather than
+          // leaving it on screen for a round-trip plus a full list refetch.
+          const previous = sections;
+          setSections(prev => prev
+            .map(s => ({ ...s, data: s.data.filter(j => j.id !== jam.id) }))
+            .filter(s => s.data.length > 0));
+
           const res = await fetch(`${WEB_URL}/api/jam/${jam.id}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${session.access_token}` },
           });
           if (res.ok) load();
-          else Alert.alert('Cancel failed', 'Something went wrong cancelling this jam.');
+          else {
+            setSections(previous);
+            Alert.alert('Cancel failed', 'Something went wrong cancelling this jam.');
+          }
         },
       },
     ]);
