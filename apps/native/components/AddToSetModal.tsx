@@ -3,6 +3,8 @@ import {
   View, Text, Modal, TouchableOpacity, FlatList, ActivityIndicator, Alert,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { setApi } from '@/lib/setApi';
+import { canContributeToSet } from '@singjam/core';
 
 type UserSet = {
   id: string;
@@ -50,7 +52,7 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
         .order('created_at', { ascending: false }),
       supabase
         .from('set_collaborators')
-        .select('sets(id, name, owner_user_id, profiles!owner_user_id(display_name, last_name, username))')
+        .select('role, sets(id, name, owner_user_id, profiles!owner_user_id(display_name, last_name, username))')
         .eq('user_id', user.id)
         .eq('status', 'accepted'),
       supabase
@@ -65,8 +67,11 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
       ownerName: null,
     }));
 
+    // Viewers are dropped: they can open the set but not add to it, and the API
+    // would 403 the attempt. Same list web's Add-to-Set pickers show.
     const ownedIds = new Set(owned.map((s) => s.id));
     const collaborating: UserSet[] = ((collabRes.data ?? []) as any[])
+      .filter((r) => canContributeToSet(r.role))
       .map((r) => r.sets)
       .filter(Boolean)
       .filter((s: any) => s.owner_user_id !== user.id && !ownedIds.has(s.id))
@@ -102,34 +107,18 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
     setPending(setId);
     setAdded(prev => new Set([...prev, setId]));
 
-    const { data: existing } = await supabase
-      .from('set_songs')
-      .select('position')
-      .eq('set_id', setId)
-      .order('position', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const startPosition = (existing?.position ?? 0) + 1;
-
-    // One round-trip for the whole selection rather than a serial insert each.
-    // upsert/ignoreDuplicates rather than insert: the old loop tolerated a
-    // duplicate per song and carried on, but a plain batch insert fails as a
-    // unit, so one song already in the set would silently drop all the others.
-    // Leans on set_songs' unique(set_id, song_id) — migration 079.
-    const { error } = await supabase.from('set_songs').upsert(
-      songs.map((song, i) => ({
-        set_id: setId,
-        song_id: song.id,
-        position: startPosition + i,
-        leader_user_ids: [],
-      })),
-      { onConflict: 'set_id,song_id', ignoreDuplicates: true }
-    );
+    // Through the web API, not a direct insert: set_songs' RLS only knows
+    // owner/editor, so a co-owner writing straight to the table is rejected even
+    // though they may add songs. The API is the one place that understands the
+    // co-owner role, and it stamps added_by_user_id. Still one round-trip —
+    // songIds adds the whole selection in a single request.
+    const { ok, json } = await setApi(`/api/sets/${setId}/songs`, 'POST', {
+      songIds: songs.map(s => s.id),
+    });
 
     setPending(null);
-    if (error) {
-      Alert.alert('Error', error.message);
+    if (!ok) {
+      Alert.alert('Error', json?.error ?? 'Could not add to that set.');
       setAdded(prev => {
         const next = new Set(prev);
         next.delete(setId);

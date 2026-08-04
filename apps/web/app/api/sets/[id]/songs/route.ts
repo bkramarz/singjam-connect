@@ -53,14 +53,30 @@ export async function POST(
   const user = await resolveApiUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { songId, confidence } = await req.json();
-  if (!songId) return NextResponse.json({ error: "songId is required" }, { status: 400 });
+  const { songId, songIds, confidence } = await req.json();
+
+  // Two shapes: `songId` adds one song (web's per-song and bulk callers), while
+  // `songIds` adds a whole selection in one request. Native's Add-to-Set can
+  // carry an arbitrarily large multi-select, and firing one request per song
+  // from a phone is both slow and racy — every concurrent handler would read
+  // the same max position and write songs on top of each other.
+  const ids: string[] = Array.isArray(songIds)
+    ? songIds.filter((s): s is string => typeof s === "string" && s.length > 0)
+    : songId
+    ? [songId]
+    : [];
+  if (ids.length === 0) {
+    return NextResponse.json({ error: "songId or songIds is required" }, { status: 400 });
+  }
 
   const admin = supabaseAdmin();
 
+  // Viewers may read a set but not change it — same bar as DELETE and PATCH on
+  // this resource. Adding used to accept any accepted collaborator, which let a
+  // viewer put songs into a set they then couldn't remove.
   const [ownerRes, collabRes] = await Promise.all([
     admin.from("sets").select("id").eq("id", setId).eq("owner_user_id", user.id).maybeSingle(),
-    admin.from("set_collaborators").select("id").eq("set_id", setId).eq("user_id", user.id).eq("status", "accepted").maybeSingle(),
+    admin.from("set_collaborators").select("id").eq("set_id", setId).eq("user_id", user.id).eq("status", "accepted").in("role", ["editor", "co-owner"]).maybeSingle(),
   ]);
   if (!ownerRes.data && !collabRes.data) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -69,7 +85,10 @@ export async function POST(
   if (confidence && ["lead", "support", "learn"].includes(confidence)) {
     await admin
       .from("user_songs")
-      .upsert({ user_id: user.id, song_id: songId, confidence }, { onConflict: "user_id,song_id" });
+      .upsert(
+        ids.map((song_id) => ({ user_id: user.id, song_id, confidence })),
+        { onConflict: "user_id,song_id" }
+      );
   }
 
   const { data: maxRow } = await admin
@@ -80,23 +99,51 @@ export async function POST(
     .limit(1)
     .maybeSingle();
 
-  const position = maxRow ? (maxRow as any).position + 1 : 0;
+  const startPosition = maxRow ? (maxRow as any).position + 1 : 0;
+  const rows = ids.map((song_id, i) => ({
+    set_id: setId,
+    song_id,
+    position: startPosition + i,
+    added_by_user_id: user.id,
+  }));
+  const columns =
+    "id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, song_recording_artists(position, youtube_url, spotify_url))";
+
+  // Single-song adds keep reporting a duplicate as 409 — web surfaces it as
+  // "Already in that set". A batch can't: one song the caller already has would
+  // fail the insert as a unit and silently drop the rest, so it skips conflicts
+  // (unique(set_id, song_id), migration 079) and reports what actually landed.
+  if (!Array.isArray(songIds)) {
+    const { data, error } = await admin
+      .from("set_songs")
+      .insert(rows[0])
+      .select(columns)
+      .single();
+
+    if (error) {
+      if (error.code === "23505") return NextResponse.json({ error: "Song already in set" }, { status: 409 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const { data: knowledge } = await admin
+      .from("user_songs")
+      .select("user_id, song_id, confidence")
+      .eq("song_id", ids[0]);
+
+    return NextResponse.json({ song: data, knowledge: knowledge ?? [] });
+  }
 
   const { data, error } = await admin
     .from("set_songs")
-    .insert({ set_id: setId, song_id: songId, position, added_by_user_id: user.id })
-    .select("id, song_id, position, key_note, played, leader_user_ids, songs(title, display_artist, slug, chord_chart_url, youtube_url, tonality, song_recording_artists(position, youtube_url, spotify_url))")
-    .single();
+    .upsert(rows, { onConflict: "set_id,song_id", ignoreDuplicates: true })
+    .select(columns);
 
-  if (error) {
-    if (error.code === "23505") return NextResponse.json({ error: "Song already in set" }, { status: 409 });
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const { data: knowledge } = await admin
     .from("user_songs")
     .select("user_id, song_id, confidence")
-    .eq("song_id", songId);
+    .in("song_id", ids);
 
-  return NextResponse.json({ song: data, knowledge: knowledge ?? [] });
+  return NextResponse.json({ songs: data ?? [], added: (data ?? []).length, knowledge: knowledge ?? [] });
 }

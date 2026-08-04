@@ -15,6 +15,7 @@ import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 import SongCard from "@/components/SongCard";
 import AddToSetPanel from "@/components/AddToSetPanel";
+import { setsAcceptingSongs } from "@singjam/core";
 import SearchInput from "@/components/SearchInput";
 
 const CONFIDENCE_LEVELS = [
@@ -290,7 +291,7 @@ export default function RepertoirePage() {
         if (repertoireRes.error) throw repertoireRes.error;
 
         setSingingVoice((p as any)?.singing_voice ?? null);
-        setUserSets([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]);
+        setUserSets(setsAcceptingSongs([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]));
         const initialSuggestions = (suggestionsRes.data ?? []) as SuggestionResult[];
         setSuggestions(initialSuggestions);
         setSuggestionsOffset(initialSuggestions.length);

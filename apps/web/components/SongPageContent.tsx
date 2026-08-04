@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { formatComposersLong, sortByLastName } from "@singjam/core";
+import { formatComposersLong, sortByLastName, setsAcceptingSongs } from "@singjam/core";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import RepertoireButton from "@/components/RepertoireButton";
 import AddToSetPanel from "@/components/AddToSetPanel";
@@ -210,7 +210,7 @@ export default function SongPageContent() {
         : null,
       songId ? supabase.from("set_songs").select("set_id").eq("song_id", songId) : null,
     ]);
-    if (setsJson) setUserSets([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]);
+    if (setsJson) setUserSets(setsAcceptingSongs([...(setsJson.owned ?? []), ...(setsJson.collaborating ?? [])]));
     if (membership?.data) setSongInSets(new Set(membership.data.map((r: any) => r.set_id)));
   }
 
