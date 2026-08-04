@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { setApi } from '@/lib/setApi';
+import { canContributeToSet } from '@singjam/core';
 
 type UserSet = {
   id: string;
@@ -51,7 +52,7 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
         .order('created_at', { ascending: false }),
       supabase
         .from('set_collaborators')
-        .select('sets(id, name, owner_user_id, profiles!owner_user_id(display_name, last_name, username))')
+        .select('role, sets(id, name, owner_user_id, profiles!owner_user_id(display_name, last_name, username))')
         .eq('user_id', user.id)
         .eq('status', 'accepted'),
       supabase
@@ -66,8 +67,11 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
       ownerName: null,
     }));
 
+    // Viewers are dropped: they can open the set but not add to it, and the API
+    // would 403 the attempt. Same list web's Add-to-Set pickers show.
     const ownedIds = new Set(owned.map((s) => s.id));
     const collaborating: UserSet[] = ((collabRes.data ?? []) as any[])
+      .filter((r) => canContributeToSet(r.role))
       .map((r) => r.sets)
       .filter(Boolean)
       .filter((s: any) => s.owner_user_id !== user.id && !ownedIds.has(s.id))

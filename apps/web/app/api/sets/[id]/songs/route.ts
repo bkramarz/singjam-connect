@@ -71,9 +71,12 @@ export async function POST(
 
   const admin = supabaseAdmin();
 
+  // Viewers may read a set but not change it — same bar as DELETE and PATCH on
+  // this resource. Adding used to accept any accepted collaborator, which let a
+  // viewer put songs into a set they then couldn't remove.
   const [ownerRes, collabRes] = await Promise.all([
     admin.from("sets").select("id").eq("id", setId).eq("owner_user_id", user.id).maybeSingle(),
-    admin.from("set_collaborators").select("id").eq("set_id", setId).eq("user_id", user.id).eq("status", "accepted").maybeSingle(),
+    admin.from("set_collaborators").select("id").eq("set_id", setId).eq("user_id", user.id).eq("status", "accepted").in("role", ["editor", "co-owner"]).maybeSingle(),
   ]);
   if (!ownerRes.data && !collabRes.data) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

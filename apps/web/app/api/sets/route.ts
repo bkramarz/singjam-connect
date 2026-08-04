@@ -33,7 +33,7 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false }),
     supabase
       .from("set_collaborators")
-      .select("set_id, sets(id, name, description, created_at, owner_user_id, link_sharing, profiles!owner_user_id(display_name, last_name, username))")
+      .select("set_id, role, sets(id, name, description, created_at, owner_user_id, link_sharing, profiles!owner_user_id(display_name, last_name, username))")
       .eq("user_id", user.id)
       .eq("status", "accepted"),
     supabase
@@ -47,8 +47,10 @@ export async function GET(req: Request) {
 
   const owned = (ownedRes.data ?? []) as any[];
   const ownedIds = new Set(owned.map((s: any) => s.id));
+  // `role` rides along so callers can tell a set the user may only read from one
+  // they may add songs to. Viewers still appear here — they can open the set.
   const collaborating = ((collabRes.data ?? []) as any[])
-    .map((r) => r.sets)
+    .map((r) => (r.sets ? { ...r.sets, role: r.role } : null))
     .filter(Boolean)
     .filter((s: any) => s.owner_user_id !== user.id && !ownedIds.has(s.id))
     .map((s: any) => ({
@@ -58,6 +60,7 @@ export async function GET(req: Request) {
       created_at: s.created_at,
       owner_user_id: s.owner_user_id,
       link_sharing: s.link_sharing,
+      role: s.role,
       ownerUserId: s.owner_user_id,
       ownerName: [s.profiles?.display_name, s.profiles?.last_name].filter(Boolean).join(" ") || s.profiles?.username || null,
       ownerUsername: s.profiles?.username ?? null,

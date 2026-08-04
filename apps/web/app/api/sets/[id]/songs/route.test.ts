@@ -102,6 +102,18 @@ describe("POST /api/sets/[id]/songs", () => {
     expect(upsert.calls.upsert[0]).toHaveLength(1);
   });
 
+  it("only counts editors and co-owners as collaborators, never viewers", async () => {
+    const collab = chain({ data: null });
+    queueAdmin([notOwner(), collab]);
+
+    const res = await POST(req({ songIds: ["song-1"] }), params);
+
+    // A viewer's row exists but is filtered out by the role predicate, so the
+    // lookup comes back empty and the add is refused — same bar as DELETE.
+    expect(collab.calls.in).toEqual(["role", ["editor", "co-owner"]]);
+    expect(res.status).toBe(403);
+  });
+
   it("returns 400 when the body carries neither songId nor songIds", async () => {
     const res = await POST(req({}), params);
     expect(res.status).toBe(400);

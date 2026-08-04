@@ -9,6 +9,7 @@ export * from './utils/normalizeSearch';
 export * from './utils/optionSheet';
 export * from './utils/reorderSongsForPlayed';
 export * from './utils/setDisplayedSongs';
+export * from './utils/setRoles';
 export * from './utils/singingVoice';
 export * from './utils/songFilters';
 export * from './utils/songJammers';
