@@ -97,7 +97,10 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
   }
 
   async function handleAdd(setId: string) {
+    // Mark the row added straight away — the common case is that it succeeds,
+    // and a spinner per tap made adding to several sets feel like queuing.
     setPending(setId);
+    setAdded(prev => new Set([...prev, setId]));
 
     const { data: existing } = await supabase
       .from('set_songs')
@@ -107,22 +110,32 @@ export default function AddToSetModal({ visible, songs, onClose }: Props) {
       .limit(1)
       .maybeSingle();
 
-    let nextPosition = (existing?.position ?? 0) + 1;
+    const startPosition = (existing?.position ?? 0) + 1;
 
-    for (const song of songs) {
-      const { error } = await supabase
-        .from('set_songs')
-        .insert({ set_id: setId, song_id: song.id, position: nextPosition, leader_user_ids: [] });
-      if (error && !error.message.includes('duplicate')) {
-        Alert.alert('Error', error.message);
-        setPending(null);
-        return;
-      }
-      nextPosition++;
-    }
+    // One round-trip for the whole selection rather than a serial insert each.
+    // upsert/ignoreDuplicates rather than insert: the old loop tolerated a
+    // duplicate per song and carried on, but a plain batch insert fails as a
+    // unit, so one song already in the set would silently drop all the others.
+    // Leans on set_songs' unique(set_id, song_id) — migration 079.
+    const { error } = await supabase.from('set_songs').upsert(
+      songs.map((song, i) => ({
+        set_id: setId,
+        song_id: song.id,
+        position: startPosition + i,
+        leader_user_ids: [],
+      })),
+      { onConflict: 'set_id,song_id', ignoreDuplicates: true }
+    );
 
     setPending(null);
-    setAdded(prev => new Set([...prev, setId]));
+    if (error) {
+      Alert.alert('Error', error.message);
+      setAdded(prev => {
+        const next = new Set(prev);
+        next.delete(setId);
+        return next;
+      });
+    }
   }
 
   return (
