@@ -12,7 +12,7 @@ import ContentContainer from '@/components/ContentContainer';
 import SubmitMissingSong from '@/components/SubmitMissingSong';
 import SuggestionCard from '@/components/SuggestionCard';
 import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
-import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
+import InlineDropdown from '@/components/InlineDropdown';
 
 // A superset of SuggestionCard's `Suggestion`, so catalog rows render in the
 // same card web uses while still carrying the fields the filters need.
@@ -290,7 +290,6 @@ export default function SongLibraryScreen() {
   ), [myConfidence, canLead, addSong, viewSong]);
 
   const activeFilterCount = countActiveFilters(filters);
-  const sortLabel = SORT_OPTIONS.find(o => o.key === filters.sortBy)?.label ?? 'Popular';
   const searching = query.trim().length > 0;
 
   const listHeader = (
@@ -323,20 +322,12 @@ export default function SongLibraryScreen() {
 
       {/* Sort / filters / hide-my-songs, then the catalog total — web's order */}
       <View className="mx-4 mt-3 flex-row items-center px-1" style={{ gap: 8 }}>
-        <TouchableOpacity
-          onPress={(e) => showOptionsSheet({
-            title: 'Sort',
-            anchor: anchorFrom(e),
-            options: SORT_OPTIONS.map(o => ({
-              label: o.label,
-              onPress: () => setFilters(f => ({ ...f, sortBy: o.key })),
-            })),
-          })}
-          className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
-        >
-          <Ionicons name="chevron-down" size={11} color="#71717a" />
-          <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
-        </TouchableOpacity>
+        <InlineDropdown
+          value={filters.sortBy}
+          options={SORT_OPTIONS}
+          onChange={(sortBy) => setFilters(f => ({ ...f, sortBy }))}
+          accessibilityLabel="Sort"
+        />
         <TouchableOpacity
           onPress={() => setFilterModalVisible(true)}
           className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${

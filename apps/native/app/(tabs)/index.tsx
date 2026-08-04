@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { readCache, writeCache } from '@/lib/cache';
 import { useAuth } from '@/lib/auth-context';
 import SongFilterSheet, { emptyFilterDimensions } from '@/components/SongFilterSheet';
+import InlineDropdown from '@/components/InlineDropdown';
 import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import RepertoireCard from '@/components/RepertoireCard';
 import SuggestionCard, { type Suggestion } from '@/components/SuggestionCard';
@@ -422,10 +423,6 @@ export default function RepertoireScreen() {
      handleConfidenceChange, addOneToSet, viewSong, handleRemove, addFromSuggestion]
   );
 
-  const roleLabel = confidenceFilter === 'all'
-    ? 'Any role'
-    : CONFIDENCE_LEVELS.find(l => l.key === confidenceFilter)?.label ?? 'Any role';
-  const sortLabel = SORT_OPTIONS.find(o => o.key === sortBy)?.label ?? 'A → Z';
 
   const listHeader = (
     <View>
@@ -449,20 +446,14 @@ export default function RepertoireScreen() {
           )}
         </View>
         {!searching && (
-          <TouchableOpacity
-            onPress={(e) => showOptionsSheet({
-              title: 'Role',
-              anchor: anchorFrom(e),
-              options: [
-                { label: 'Any role', onPress: () => setConfidenceFilter('all') },
-                ...CONFIDENCE_LEVELS.map(l => ({ label: l.label, onPress: () => setConfidenceFilter(l.key) })),
-              ],
-            })}
-            className="flex-row items-center justify-between rounded-xl border border-zinc-300 px-3 py-2 mt-3"
-          >
-            <Text className="text-sm text-zinc-700">{roleLabel}</Text>
-            <Ionicons name="chevron-down" size={14} color="#71717a" />
-          </TouchableOpacity>
+          <View className="mt-3 flex-row">
+            <InlineDropdown
+              value={confidenceFilter}
+              options={[{ key: 'all' as const, label: 'Any role' }, ...CONFIDENCE_LEVELS]}
+              onChange={setConfidenceFilter}
+              accessibilityLabel="Filter by role"
+            />
+          </View>
         )}
       </View>
 
@@ -481,17 +472,12 @@ export default function RepertoireScreen() {
           {filtered.length} of {songs.length}
         </Text>
         <View className="flex-row items-center gap-2">
-          <TouchableOpacity
-            onPress={(e) => showOptionsSheet({
-              title: 'Sort',
-              anchor: anchorFrom(e),
-              options: SORT_OPTIONS.map(o => ({ label: o.label, onPress: () => setSortBy(o.key) })),
-            })}
-            className="h-7 flex-row items-center gap-1 rounded-lg border border-zinc-200 px-3"
-          >
-            <Text className="text-xs font-medium text-zinc-500">{sortLabel}</Text>
-            <Ionicons name="chevron-down" size={11} color="#71717a" />
-          </TouchableOpacity>
+          <InlineDropdown
+            value={sortBy}
+            options={SORT_OPTIONS}
+            onChange={setSortBy}
+            accessibilityLabel="Sort"
+          />
           <TouchableOpacity
             onPress={() => setFilterModalVisible(true)}
             className={`h-7 flex-row items-center gap-1.5 rounded-lg border px-3 ${
