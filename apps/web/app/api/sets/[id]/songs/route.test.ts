@@ -150,6 +150,43 @@ describe("POST /api/sets/[id]/songs", () => {
       expect(insert.calls.insert[0]).toMatchObject({ position: 0 });
     });
 
+    // The set detail page's "Add songs" panel sends this exact shape and reads
+    // { song, knowledge } back off it — the most-used add path on web.
+    it("records the confidence level and returns song + knowledge", async () => {
+      const knowledgeUpsert = chain({ data: null });
+      const insert = chain({ data: { id: "ss-1", song_id: "song-1" } });
+      queueAdmin([
+        isOwner(),
+        notOwner(),
+        knowledgeUpsert,
+        chain({ data: null }),
+        insert,
+        chain({ data: [{ user_id: OWNER_ID, song_id: "song-1", confidence: "lead" }] }),
+      ]);
+
+      const res = await POST(req({ songId: "song-1", confidence: "lead" }), params);
+
+      expect(knowledgeUpsert.calls.upsert[0]).toEqual([
+        { user_id: OWNER_ID, song_id: "song-1", confidence: "lead" },
+      ]);
+      expect(await res.json()).toEqual({
+        song: { id: "ss-1", song_id: "song-1" },
+        knowledge: [{ user_id: OWNER_ID, song_id: "song-1", confidence: "lead" }],
+      });
+    });
+
+    it("ignores a confidence value that isn't a real level", async () => {
+      const insert = chain({ data: { id: "ss-1" } });
+      queueAdmin([isOwner(), notOwner(), chain({ data: null }), insert, chain({ data: [] })]);
+
+      const res = await POST(req({ songId: "song-1", confidence: "expert" }), params);
+
+      // owner, collaborator, max position, insert, knowledge — and crucially no
+      // sixth call writing "expert" into user_songs.
+      expect(mockAdminFrom).toHaveBeenCalledTimes(5);
+      expect(res.status).toBe(200);
+    });
+
     it("still reports a duplicate as 409", async () => {
       queueAdmin([
         isOwner(),
