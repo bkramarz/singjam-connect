@@ -15,6 +15,7 @@ import { SortDropdown } from "@/components/SortDropdown";
 import { FilterPanel } from "@/components/FilterPanel";
 import SongCard from "@/components/SongCard";
 import AddToSetPanel from "@/components/AddToSetPanel";
+import { bulkAddStatus, type BulkStatus } from "@/lib/bulkAddStatus";
 import { setsAcceptingSongs } from "@singjam/core";
 import SearchInput from "@/components/SearchInput";
 
@@ -199,7 +200,7 @@ export default function RepertoirePage() {
   const [userSets, setUserSets] = useState<{ id: string; name: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRemoveConfirm, setBulkRemoveConfirm] = useState(false);
-  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<BulkStatus | null>(null);
   const [bulkSetId, setBulkSetId] = useState("");
   const [bulkConfidenceLevel, setBulkConfidenceLevel] = useState("");
   const [newSetName, setNewSetName] = useState("");
@@ -421,21 +422,33 @@ export default function RepertoirePage() {
     }
   }
 
+  // One request for the whole selection. Select-all is unbounded — it takes the
+  // entire filtered repertoire — so a request per song meant hundreds of
+  // concurrent calls from one click. They also each read the same max(position)
+  // before any of them inserted, so the songs could land on duplicate positions;
+  // every read orders by position with no tiebreaker, which would have made
+  // their order arbitrary. The endpoint numbers a batch server-side in one pass.
   async function bulkAddToSet(setId: string) {
     const ids = Array.from(selectedIds);
-    const set = userSets.find((s) => s.id === setId);
+    const name = userSets.find((s) => s.id === setId)?.name ?? "set";
     setBulkSetId("");
-    await Promise.all(
-      ids.map((songId) =>
-        fetch(`/api/sets/${setId}/songs`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ songId }),
-        })
-      )
-    );
-    setBulkStatus(`Added to ${set?.name ?? "set"}`);
-    setTimeout(() => setBulkStatus(null), 2500);
+
+    // The whole selection now lands or doesn't, so a false "Added" would claim
+    // every song made it when none did.
+    let status: BulkStatus;
+    try {
+      const res = await fetch(`/api/sets/${setId}/songs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ songIds: ids }),
+      });
+      status = bulkAddStatus(name, res);
+    } catch {
+      status = bulkAddStatus(name, null);
+    }
+
+    setBulkStatus(status);
+    setTimeout(() => setBulkStatus(null), status.ok ? 2500 : 5000);
   }
 
   function bulkUpdateConfidence(level: string) {
@@ -899,7 +912,12 @@ export default function RepertoirePage() {
               </button>
               <div className="ml-auto flex flex-wrap items-center gap-2">
                 {bulkStatus ? (
-                  <span className="text-xs text-green-700">{bulkStatus}</span>
+                  <span
+                    role={bulkStatus.ok ? undefined : "alert"}
+                    className={`text-xs ${bulkStatus.ok ? "text-green-700" : "text-red-600"}`}
+                  >
+                    {bulkStatus.text}
+                  </span>
                 ) : null}
                 {userSets.length > 0 && (
                   bulkCreatingSet ? (
