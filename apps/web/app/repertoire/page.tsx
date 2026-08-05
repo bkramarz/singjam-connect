@@ -421,19 +421,21 @@ export default function RepertoirePage() {
     }
   }
 
+  // One request for the whole selection. Select-all is unbounded — it takes the
+  // entire filtered repertoire — so a request per song meant hundreds of
+  // concurrent calls from one click. They also each read the same max(position)
+  // before any of them inserted, so the songs could land on duplicate positions;
+  // every read orders by position with no tiebreaker, which would have made
+  // their order arbitrary. The endpoint numbers a batch server-side in one pass.
   async function bulkAddToSet(setId: string) {
     const ids = Array.from(selectedIds);
     const set = userSets.find((s) => s.id === setId);
     setBulkSetId("");
-    await Promise.all(
-      ids.map((songId) =>
-        fetch(`/api/sets/${setId}/songs`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ songId }),
-        })
-      )
-    );
+    await fetch(`/api/sets/${setId}/songs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ songIds: ids }),
+    });
     setBulkStatus(`Added to ${set?.name ?? "set"}`);
     setTimeout(() => setBulkStatus(null), 2500);
   }

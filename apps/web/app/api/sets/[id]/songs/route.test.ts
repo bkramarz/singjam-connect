@@ -202,7 +202,30 @@ describe("POST /api/sets/[id]/songs", () => {
     });
   });
 
-  describe("batch adds (native multi-select)", () => {
+  describe("batch adds (multi-select on both apps)", () => {
+    // Select-all on web's repertoire is unbounded — it takes the whole filtered
+    // list, which on a large account is many hundreds of songs in one request.
+    it("keeps positions contiguous and unique across a very large selection", async () => {
+      const ids = Array.from({ length: 918 }, (_, i) => `song-${i}`);
+      const upsert = chain({ data: ids.map((_, i) => ({ id: `ss-${i}` })) });
+      queueAdmin([isOwner(), notOwner(), chain({ data: { position: 41 } }), upsert, chain({ data: [] })]);
+
+      const res = await POST(req({ songIds: ids }), params);
+
+      expect(res.status).toBe(200);
+      // One insert for the whole selection, not one per song.
+      expect(mockAdminFrom).toHaveBeenCalledTimes(5);
+
+      const rows = upsert.calls.upsert[0];
+      const positions = rows.map((r: any) => r.position);
+      expect(rows).toHaveLength(918);
+      expect(new Set(positions).size).toBe(918);
+      expect(positions[0]).toBe(42);
+      expect(positions[917]).toBe(959);
+      expect(positions).toEqual(positions.map((_: number, i: number) => 42 + i));
+      expect(rows.map((r: any) => r.song_id)).toEqual(ids);
+    });
+
     it("writes the whole selection in one call, numbered contiguously from the end", async () => {
       const upsert = chain({ data: [{ id: "ss-1" }, { id: "ss-2" }, { id: "ss-3" }] });
       queueAdmin([isOwner(), notOwner(), chain({ data: { position: 4 } }), upsert, chain({ data: [] })]);
