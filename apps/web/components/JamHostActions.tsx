@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import JamMessageAttendeesModal from "@/components/JamMessageAttendeesModal";
 
-export default function JamHostActions({ jamId, isHost, attendingCount, pendingInviteCount }: { jamId: string; isHost: boolean; attendingCount: number; pendingInviteCount: number }) {
+export default function JamHostActions({ jamId, isHost, isOfficial, attendingCount, pendingInviteCount }: { jamId: string; isHost: boolean; isOfficial: boolean; attendingCount: number; pendingInviteCount: number }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -83,6 +83,17 @@ export default function JamHostActions({ jamId, isHost, attendingCount, pendingI
             </div>
           )}
         </div>
+
+        {/* In the card body rather than the host-only dropdown, so co-hosts can
+            reach it too — matching who the tickets API and manage page allow. */}
+        {isOfficial && (
+          <Link
+            href={`/jam/${jamId}/tickets/manage`}
+            className="block w-full rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors text-left"
+          >
+            Tickets &amp; guest list
+          </Link>
+        )}
 
         <button
           onClick={() => setShowMessageModal(true)}

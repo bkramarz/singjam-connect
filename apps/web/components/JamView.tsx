@@ -10,6 +10,7 @@ import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
 import JamAttendeeList from "@/components/JamAttendeeList";
 import JamSetList from "@/components/JamSetList";
+import TicketPurchasePanel from "@/components/TicketPurchasePanel";
 
 export type InviteEntry = {
   id: string;
@@ -105,6 +106,10 @@ export default function JamView({
           </>
         }
       />
+      {/* Official events sell tickets instead of taking RSVPs — showRsvp is false
+          for them. The panel renders nothing when the event has no tiers, so an
+          official event using an external tickets_url is unaffected. */}
+      {isOfficial && <TicketPurchasePanel jamId={jamId} isSignedIn={!!userId} />}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
       {!isOfficial && <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />}
       {canInvite && invitesEnabled && (
@@ -117,7 +122,7 @@ export default function JamView({
         />
       )}
       {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
-      {canManage && <JamHostActions jamId={jamId} isHost={isHost} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
+      {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
   );
 }
