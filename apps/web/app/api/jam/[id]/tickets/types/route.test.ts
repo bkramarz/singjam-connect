@@ -69,12 +69,16 @@ describe("GET /api/jam/[id]/tickets/types", () => {
         ],
       })
     );
-    mockRpc.mockResolvedValue({ data: 4 });
+    // First call is sold_count (counts live holds), second is paid_count.
+    mockRpc.mockImplementation((fn: string) =>
+      Promise.resolve({ data: fn === "ticket_type_paid_count" ? 3 : 4 })
+    );
 
     const res = await GET(req("GET"), params);
     const json = await res.json();
     expect(res.status).toBe(200);
-    expect(json.ticket_types[0]).toMatchObject({ sold: 4, remaining: 6, on_sale: true });
+    // 4 against stock, 3 of them paid → 1 merely held, 6 left.
+    expect(json.ticket_types[0]).toMatchObject({ sold: 3, held: 1, remaining: 6, on_sale: true });
   });
 
   it("marks a tier sold out rather than reporting negative stock", async () => {
@@ -220,5 +224,27 @@ describe("DELETE /api/jam/[id]/tickets/types", () => {
       params
     );
     expect(res.status).toBe(200);
+  });
+  it("reports a hold as held, not sold — an abandoned checkout is not revenue", async () => {
+    mockServerFrom.mockReturnValueOnce(chain({ data: { id: JAM_ID } }));
+    mockAdminFrom.mockReturnValueOnce(
+      chain({
+        data: [
+          { id: TYPE_ID, name: "General", price_cents: 1500, currency: "usd", quantity: 20,
+            sales_start_at: null, sales_end_at: null, sort_order: 0, description: null },
+        ],
+      })
+    );
+    // 4 tickets holding stock, none paid for.
+    mockRpc.mockImplementation((fn: string) =>
+      Promise.resolve({ data: fn === "ticket_type_paid_count" ? 0 : 4 })
+    );
+
+    const json = await (await GET(req("GET"), params)).json();
+    const tier = json.ticket_types[0];
+    expect(tier.sold).toBe(0);
+    expect(tier.held).toBe(4);
+    // Availability still subtracts the holds, or two buyers could take one seat.
+    expect(tier.remaining).toBe(16);
   });
 });

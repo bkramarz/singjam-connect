@@ -10,6 +10,7 @@ type Tier = {
   currency: string;
   quantity: number | null;
   sold: number;
+  held: number;
   remaining: number | null;
   on_sale: boolean;
 };
@@ -211,11 +212,24 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
                 {t.quantity !== null ? ` of ${t.quantity}` : " · unlimited"}
                 {t.remaining === 0 ? " · sold out" : ""}
               </p>
+              {/* A hold is a checkout in progress, not a sale. Shown separately
+                  so an abandoned cart doesn't read as revenue. */}
+              {t.held > 0 && (
+                <p className="text-xs text-amber-600">
+                  {t.held} held in checkout · frees up if unpaid
+                </p>
+              )}
             </div>
             <button
               onClick={() => send("DELETE", undefined, `?type_id=${t.id}`)}
               disabled={busy || t.sold > 0}
-              title={t.sold > 0 ? "Tiers with sales can't be deleted" : "Delete tier"}
+              title={
+                t.sold > 0
+                  ? "Tiers with sales can't be deleted"
+                  : t.held > 0
+                  ? "Someone is checking out — this may fail until their hold clears"
+                  : "Delete tier"
+              }
               className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 transition-colors"
             >
               Delete
