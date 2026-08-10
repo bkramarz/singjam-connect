@@ -49,26 +49,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     currency = tier.currency;
   }
 
-  let promo: any;
-  try {
-    const found = await stripe().promotionCodes.list({
-      code,
-      active: true,
-      limit: 1,
-      // Saves a second call, and avoids needing a separate coupon read.
-      expand: ["data.promotion.coupon"],
-    });
-    promo = found.data[0];
-  } catch {
-    return NextResponse.json({ error: "Could not check that code" }, { status: 502 });
-  }
+  // Resolve through OUR table, scoped to this jam. Looking the code up in Stripe
+  // by name would honour any active code on the account, so a discount created
+  // for one event would work on every other event's checkout.
+  const { data: registered } = await admin
+    .from("ticket_promo_codes")
+    .select("stripe_promotion_code_id")
+    .eq("jam_id", jamId)
+    .ilike("code", code)
+    .maybeSingle();
 
-  // A rejected code is a successful answer of "no", not a request failure — the
-  // UI shows it inline rather than treating it as an error state.
   const reject = (reason: string) =>
     NextResponse.json({ valid: false, reason, subtotal_cents: subtotal, currency });
 
-  if (!promo) return reject("That code isn't valid");
+  if (!registered) return reject("That code isn't valid for this event");
+
+  let promo: any;
+  try {
+    promo = await stripe().promotionCodes.retrieve(registered.stripe_promotion_code_id, {
+      expand: ["promotion.coupon"],
+    });
+  } catch {
+    return NextResponse.json({ error: "Could not check that code" }, { status: 502 });
+  }
+  if (promo?.active === false) return reject("That code is no longer active");
 
   const coupon = promo.promotion?.coupon;
   if (!coupon || coupon.valid === false) return reject("That code has expired");

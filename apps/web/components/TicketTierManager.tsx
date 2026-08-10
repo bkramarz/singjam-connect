@@ -25,6 +25,8 @@ type Guest = {
   checked_in_at: string | null;
 };
 
+type PromoCode = { id: string; code: string; label: string; redeemed: number | null };
+
 type Summary = {
   tickets_sold: number;
   orders: number;
@@ -65,6 +67,11 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [promos, setPromos] = useState<PromoCode[]>([]);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoKind, setPromoKind] = useState<"percent" | "amount">("percent");
+  const [promoValue, setPromoValue] = useState("");
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   // Draft state for the add form
   const [name, setName] = useState("");
@@ -72,13 +79,15 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
   const [quantity, setQuantity] = useState("");
 
   const load = useCallback(async () => {
-    const [tRes, oRes] = await Promise.all([
+    const [tRes, oRes, pRes] = await Promise.all([
       fetch(`/api/jam/${jamId}/tickets/types`).then((r) => r.json()),
       fetch(`/api/jam/${jamId}/tickets/orders`).then((r) => r.json()),
+      fetch(`/api/jam/${jamId}/tickets/promos`).then((r) => r.json()),
     ]);
     setTiers(tRes.ticket_types ?? []);
     setGuests(oRes.guests ?? []);
     setSummary(oRes.summary ?? null);
+    setPromos(pRes.promo_codes ?? []);
   }, [jamId]);
 
   useEffect(() => {
@@ -115,6 +124,42 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
       setPrice("");
       setQuantity("");
     }
+  }
+
+  async function addPromo(e: React.FormEvent) {
+    e.preventDefault();
+    setPromoError(null);
+    setBusy(true);
+    const res = await fetch(`/api/jam/${jamId}/tickets/promos`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        code: promoCode.trim(),
+        ...(promoKind === "percent"
+          ? { percent_off: Number(promoValue) }
+          : { amount_off_cents: toCents(promoValue) }),
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setPromoError((await res.json()).error ?? "Could not create that code");
+      return;
+    }
+    setPromoCode("");
+    setPromoValue("");
+    await load();
+  }
+
+  async function removePromo(id: string) {
+    setPromoError(null);
+    setBusy(true);
+    const res = await fetch(`/api/jam/${jamId}/tickets/promos?id=${id}`, { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) {
+      setPromoError((await res.json()).error ?? "Could not remove that code");
+      return;
+    }
+    await load();
   }
 
   async function toggleCheckIn(g: Guest) {
@@ -279,6 +324,79 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
             {error}
           </p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold tracking-wide text-zinc-700">Promo codes</h2>
+
+        {promos.length === 0 && (
+          <p className="text-sm text-zinc-500">
+            No codes yet. Codes you add here work only on this event.
+          </p>
+        )}
+
+        {promos.map((p) => (
+          <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-sm font-medium tracking-wider text-zinc-900">{p.code}</p>
+              <p className="text-xs text-zinc-500">
+                {p.label}
+                {p.redeemed !== null ? ` · used ${p.redeemed}\u00d7` : ""}
+              </p>
+            </div>
+            <button
+              onClick={() => removePromo(p.id)}
+              disabled={busy}
+              title="Stops new redemptions. Existing orders keep their discount."
+              className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+
+        <form onSubmit={addPromo} className="space-y-2 rounded-xl border border-dashed border-zinc-300 p-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <input
+              aria-label="Promo code"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              placeholder="EARLYBIRD"
+              required
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-wider focus:border-amber-400 focus:outline-none"
+            />
+            <select
+              aria-label="Discount type"
+              value={promoKind}
+              onChange={(e) => setPromoKind(e.target.value as "percent" | "amount")}
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+            >
+              <option value="percent">% off</option>
+              <option value="amount">$ off</option>
+            </select>
+            <input
+              aria-label={promoKind === "percent" ? "Percent off" : "Amount off in dollars"}
+              value={promoValue}
+              onChange={(e) => setPromoValue(e.target.value)}
+              placeholder={promoKind === "percent" ? "25" : "5.00"}
+              inputMode="decimal"
+              required
+              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy || !promoCode.trim() || promoValue.trim() === ""}
+            className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+          >
+            Add code
+          </button>
+          {promoError && (
+            <p role="alert" className="text-sm text-red-600">
+              {promoError}
+            </p>
+          )}
+        </form>
       </section>
 
       <section className="space-y-3">
