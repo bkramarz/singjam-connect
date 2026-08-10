@@ -99,6 +99,16 @@ export default function TicketPurchasePanel({
   const [guestName, setGuestName] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [showPromo, setShowPromo] = useState(false);
+  const [promoBusy, setPromoBusy] = useState(false);
+  // The applied discount, as previewed by the server. Cleared whenever the
+  // selection changes, because the preview is computed against those items.
+  const [applied, setApplied] = useState<{
+    code: string;
+    label: string;
+    discount_cents: number;
+    total_cents: number;
+  } | null>(null);
+  const [promoReason, setPromoReason] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +153,9 @@ export default function TicketPurchasePanel({
       body: JSON.stringify({
         items,
         ...(isSignedIn ? {} : { email: guestEmail.trim(), name: guestName.trim() }),
-        ...(promoCode.trim() ? { promo_code: promoCode.trim() } : {}),
+        // Only an applied (server-validated) code is sent, so checkout can't
+        // fail on a code the buyer never successfully applied.
+        ...(applied ? { promo_code: applied.code } : {}),
       }),
     });
     const json = await res.json();
@@ -159,6 +171,40 @@ export default function TicketPurchasePanel({
       return;
     }
     setClientSecret(json.client_secret);
+  }
+
+  async function applyPromo() {
+    const code = promoCode.trim();
+    if (!code) return;
+    setPromoBusy(true);
+    setPromoReason(null);
+    const items = Object.entries(qty)
+      .filter(([, n]) => n > 0)
+      .map(([ticket_type_id, quantity]) => ({ ticket_type_id, quantity }));
+
+    const res = await fetch(`/api/jam/${jamId}/tickets/promo`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code, items }),
+    });
+    const json = await res.json();
+    setPromoBusy(false);
+
+    if (!res.ok) {
+      setPromoReason(json.error ?? "Could not check that code");
+      return;
+    }
+    if (!json.valid) {
+      setApplied(null);
+      setPromoReason(json.reason ?? "That code isn't valid");
+      return;
+    }
+    setApplied({
+      code: json.code,
+      label: json.label,
+      discount_cents: json.discount_cents,
+      total_cents: json.total_cents,
+    });
   }
 
   // Mirrors the server's check so the button state matches what the API accepts.
@@ -216,7 +262,12 @@ export default function TicketPurchasePanel({
                 label={t.name}
                 value={qty[t.id] ?? 0}
                 max={max}
-                onChange={(n) => setQty((q) => ({ ...q, [t.id]: n }))}
+                onChange={(n) => {
+                  setQty((q) => ({ ...q, [t.id]: n }));
+                  // The previewed total was for the old selection.
+                  setApplied(null);
+                  setPromoReason(null);
+                }}
               />
             ) : (
               <span className="shrink-0 rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-500">
@@ -273,20 +324,64 @@ export default function TicketPurchasePanel({
       )}
 
       {/* Sits directly above the Buy button, where the total is and where people
-          look for a discount. Still a toggle rather than an always-open box — an
-          empty code field makes buyers feel they're missing a deal — but styled
-          in the accent colour so it reads as tappable instead of disappearing. */}
+          look for a discount. Applying is a separate step from paying so the
+          buyer sees success or failure and their real total before committing —
+          and an invalid code costs nothing, since the preview reserves no stock. */}
       {count > 0 && (
-        showPromo ? (
-          <input
-            type="text"
-            autoFocus
-            value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value)}
-            placeholder="Promo code"
-            autoCapitalize="characters"
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-wider focus:border-amber-400 focus:outline-none"
-          />
+        applied ? (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+            <p className="text-xs text-green-800">
+              <span className="font-mono font-medium tracking-wider">{applied.code}</span> applied ·{" "}
+              {applied.label} · −{money(applied.discount_cents, currency)}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setApplied(null);
+                setPromoCode("");
+                setPromoReason(null);
+              }}
+              className="shrink-0 text-xs text-green-700 underline hover:text-green-900"
+            >
+              Remove
+            </button>
+          </div>
+        ) : showPromo ? (
+          <div className="space-y-1.5">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                autoFocus
+                value={promoCode}
+                onChange={(e) => {
+                  setPromoCode(e.target.value);
+                  setPromoReason(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyPromo();
+                  }
+                }}
+                placeholder="Promo code"
+                autoCapitalize="characters"
+                className="min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-wider focus:border-amber-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={applyPromo}
+                disabled={promoBusy || !promoCode.trim()}
+                className="shrink-0 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 transition-colors"
+              >
+                {promoBusy ? "Checking…" : "Apply"}
+              </button>
+            </div>
+            {promoReason && (
+              <p role="alert" className="text-xs text-red-600">
+                {promoReason}
+              </p>
+            )}
+          </div>
         ) : (
           <button
             type="button"
@@ -311,7 +406,10 @@ export default function TicketPurchasePanel({
           ? "Select tickets"
           : !isSignedIn && !emailLooksValid
           ? "Enter your email"
-          : `Buy ${count} ticket${count === 1 ? "" : "s"} · ${money(total, currency)}`}
+          : `Buy ${count} ticket${count === 1 ? "" : "s"} · ${money(
+              applied ? applied.total_cents : total,
+              currency
+            )}`}
       </button>
     </div>
   );
