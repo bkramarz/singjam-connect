@@ -227,29 +227,6 @@ export default function TicketPurchasePanel({
         );
       })}
 
-      {/* Hidden behind a toggle: a visible empty code box makes buyers feel
-          they're missing a deal and go hunting for one instead of paying. */}
-      {count > 0 && (
-        showPromo ? (
-          <input
-            type="text"
-            value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value)}
-            placeholder="Promo code"
-            autoCapitalize="characters"
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-wider focus:border-amber-400 focus:outline-none"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowPromo(true)}
-            className="text-xs text-zinc-500 underline hover:text-zinc-700"
-          >
-            Have a promo code?
-          </button>
-        )
-      )}
-
       {error && (
         <p role="alert" className="text-sm text-red-600">
           {error}
@@ -293,6 +270,32 @@ export default function TicketPurchasePanel({
             .
           </p>
         </div>
+      )}
+
+      {/* Sits directly above the Buy button, where the total is and where people
+          look for a discount. Still a toggle rather than an always-open box — an
+          empty code field makes buyers feel they're missing a deal — but styled
+          in the accent colour so it reads as tappable instead of disappearing. */}
+      {count > 0 && (
+        showPromo ? (
+          <input
+            type="text"
+            autoFocus
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value)}
+            placeholder="Promo code"
+            autoCapitalize="characters"
+            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-wider focus:border-amber-400 focus:outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowPromo(true)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium text-amber-600 hover:border-amber-300 hover:bg-amber-50 transition-colors"
+          >
+            <span aria-hidden="true">＋</span> Add a promo code
+          </button>
+        )
       )}
 
       <button
