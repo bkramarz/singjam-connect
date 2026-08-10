@@ -1,22 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockAdminFrom, mockPromoList } = vi.hoisted(() => ({
+const { mockAdminFrom, mockPromoRetrieve } = vi.hoisted(() => ({
   mockAdminFrom: vi.fn(),
-  mockPromoList: vi.fn(),
+  mockPromoRetrieve: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: vi.fn(() => ({ from: mockAdminFrom })),
 }));
 vi.mock("@/lib/stripe", () => ({
-  stripe: () => ({ promotionCodes: { list: mockPromoList } }),
+  stripe: () => ({ promotionCodes: { retrieve: mockPromoRetrieve } }),
 }));
 
 import { POST } from "./route";
 
 function chain(result: any) {
   const c: any = {};
-  for (const m of ["select", "eq"]) c[m] = vi.fn().mockReturnValue(c);
+  for (const m of ["select", "eq", "ilike"]) c[m] = vi.fn().mockReturnValue(c);
+  c.maybeSingle = vi.fn().mockResolvedValue(result);
   c.then = (resolve: any) => Promise.resolve(result).then(resolve);
   return c;
 }
@@ -35,25 +36,26 @@ const req = (body: any) =>
 
 const TWO_TICKETS = { code: "SAVE", items: [{ ticket_type_id: TYPE, quantity: 2 }] };
 
-function tiers() {
-  mockAdminFrom.mockReturnValueOnce(
-    chain({ data: [{ id: TYPE, price_cents: 1500, currency: "usd" }] })
-  );
+function tiers(registered = true) {
+  mockAdminFrom
+    .mockReturnValueOnce(chain({ data: [{ id: TYPE, price_cents: 1500, currency: "usd" }] }))
+    .mockReturnValueOnce(
+      chain({ data: registered ? { stripe_promotion_code_id: "promo_1" } : null })
+    );
 }
 function promo(over: any = {}) {
-  mockPromoList.mockResolvedValue({
-    data: [
+  mockPromoRetrieve.mockResolvedValue(
       {
         code: "SAVE",
+        active: true,
         expires_at: null,
         max_redemptions: null,
         times_redeemed: 0,
         restrictions: {},
         promotion: { coupon: { valid: true, percent_off: 25 } },
         ...over,
-      },
-    ],
-  });
+      }
+  );
 }
 
 beforeEach(() => {
@@ -90,13 +92,30 @@ describe("POST /api/jam/[id]/tickets/promo", () => {
     expect(json.total_cents).toBe(0);
   });
 
-  it("reports an unknown code as invalid, not as an error", async () => {
-    tiers();
-    mockPromoList.mockResolvedValue({ data: [] });
+  it("reports a code not registered for this event as invalid, not an error", async () => {
+    tiers(false);
     const res = await POST(req(TWO_TICKETS), params);
     // A rejected code is a successful answer of "no" — the UI shows it inline.
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ valid: false, reason: expect.stringMatching(/valid/i) });
+    expect(await res.json()).toMatchObject({ valid: false, reason: expect.stringMatching(/this event/i) });
+    // Never reaches Stripe — the code simply isn't ours to honour here.
+    expect(mockPromoRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("refuses another event's code — codes must not leak across events", async () => {
+    // The code exists and is active in Stripe, but has no row for this jam.
+    tiers(false);
+    mockPromoRetrieve.mockResolvedValue({ code: "SAVE", active: true, promotion: { coupon: { valid: true, percent_off: 90 } } });
+    const json = await (await POST(req(TWO_TICKETS), params)).json();
+    expect(json.valid).toBe(false);
+    expect(mockPromoRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("rejects a code that has been deactivated", async () => {
+    tiers();
+    promo({ active: false });
+    const json = await (await POST(req(TWO_TICKETS), params)).json();
+    expect(json).toMatchObject({ valid: false, reason: expect.stringMatching(/no longer active/i) });
   });
 
   it("rejects a code below its minimum order, quoting the minimum", async () => {
@@ -151,7 +170,7 @@ describe("POST /api/jam/[id]/tickets/promo", () => {
     tiers();
     const res = await POST(req({ code: "SAVE", items: [{ ticket_type_id: "other", quantity: 1 }] }), params);
     expect(res.status).toBe(400);
-    expect(mockPromoList).not.toHaveBeenCalled();
+    expect(mockPromoRetrieve).not.toHaveBeenCalled();
   });
 
   it("requires a code and a selection", async () => {

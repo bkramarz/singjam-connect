@@ -122,18 +122,33 @@ async function seed() {
   }
 
   // 4. Stripe promo code (test mode)
+  // Codes are only honoured on the jam they're registered against (migration 159),
+  // so the Stripe objects and the local row have to be created together.
   const found = await stripe.promotionCodes.list({ code: PROMO_CODE, active: true, limit: 1 });
-  if (found.data.length) {
-    console.log(`\n  promo code exists: ${PROMO_CODE}`);
-  } else {
+  let promoId = found.data[0]?.id ?? null;
+  let couponId = found.data[0]?.promotion?.coupon ?? null;
+  if (!promoId) {
     const coupon = await stripe.coupons.create({
       percent_off: 25, duration: "once", name: `${MARK} 25% off`,
     });
-    await stripe.promotionCodes.create({
+    const promo = await stripe.promotionCodes.create({
       promotion: { type: "coupon", coupon: coupon.id },   // bare `coupon` is rejected
       code: PROMO_CODE,
     });
+    promoId = promo.id; couponId = coupon.id;
     console.log(`\n  promo code created: ${PROMO_CODE} (25% off)`);
+  } else {
+    console.log(`\n  promo code exists: ${PROMO_CODE}`);
+  }
+
+  const { data: existingRow } = await db.from("ticket_promo_codes")
+    .select("id").eq("jam_id", jam.id).ilike("code", PROMO_CODE).maybeSingle();
+  if (!existingRow) {
+    await db.from("ticket_promo_codes").insert({
+      jam_id: jam.id, code: PROMO_CODE, stripe_promotion_code_id: promoId,
+      stripe_coupon_id: couponId, label: "25% off", created_by: users.host.id,
+    });
+    console.log(`  registered ${PROMO_CODE} against the test event`);
   }
 
   console.log(`\n${"─".repeat(64)}`);
@@ -168,6 +183,7 @@ async function teardown() {
     }
   }
 
+  await db.from("ticket_promo_codes").delete().ilike("code", PROMO_CODE);
   const found = await stripe.promotionCodes.list({ code: PROMO_CODE, active: true, limit: 1 });
   for (const p of found.data) {
     await stripe.promotionCodes.update(p.id, { active: false });

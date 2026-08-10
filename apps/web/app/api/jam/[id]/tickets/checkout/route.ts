@@ -127,18 +127,21 @@ export async function POST(
   // session; allow_promotion_codes only applies to Stripe-rendered checkout.
   let discounts: { promotion_code: string }[] | undefined;
   if (promoCode) {
-    try {
-      const found = await stripe().promotionCodes.list({ code: promoCode, active: true, limit: 1 });
-      const promo = found.data[0];
-      if (!promo) {
-        await releaseHold(admin, order!.id);
-        return NextResponse.json({ error: "That promo code isn't valid" }, { status: 400 });
-      }
-      discounts = [{ promotion_code: promo.id }];
-    } catch {
+    // Resolved through ticket_promo_codes, scoped to this jam. A Stripe lookup by
+    // code name would honour any active code on the account, letting a discount
+    // made for one event be redeemed on every other event.
+    const { data: registered } = await admin
+      .from("ticket_promo_codes")
+      .select("stripe_promotion_code_id")
+      .eq("jam_id", jamId)
+      .ilike("code", promoCode)
+      .maybeSingle();
+
+    if (!registered) {
       await releaseHold(admin, order!.id);
-      return NextResponse.json({ error: "Could not check that promo code" }, { status: 502 });
+      return NextResponse.json({ error: "That promo code isn't valid for this event" }, { status: 400 });
     }
+    discounts = [{ promotion_code: registered.stripe_promotion_code_id }];
   }
 
   try {
