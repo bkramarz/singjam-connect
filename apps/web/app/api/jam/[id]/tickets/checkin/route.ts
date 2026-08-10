@@ -5,18 +5,22 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 // Door check-in. Host or co-host only, same as the guest list it's driven from.
 
-async function authorize(req: Request, jamId: string) {
+type AuthResult =
+  | { ok: true; user: { id: string }; admin: ReturnType<typeof supabaseAdmin> }
+  | { ok: false; response: NextResponse };
+
+async function authorize(req: Request, jamId: string): Promise<AuthResult> {
   const supabase = await supabaseServer();
   let user = (await supabase.auth.getUser()).data.user ?? null;
   if (!user) {
     const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
     if (bearer) user = (await supabaseFromBearer(bearer).auth.getUser()).data.user ?? null;
   }
-  if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  if (!user) return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 
   const admin = supabaseAdmin();
   const { data: jam } = await admin.from("jams").select("host_user_id").eq("id", jamId).maybeSingle();
-  if (!jam) return { error: NextResponse.json({ error: "Jam not found" }, { status: 404 }) };
+  if (!jam) return { ok: false, response: NextResponse.json({ error: "Jam not found" }, { status: 404 }) };
 
   if (jam.host_user_id !== user.id) {
     const { data: cohost } = await admin
@@ -26,16 +30,19 @@ async function authorize(req: Request, jamId: string) {
       .eq("user_id", user.id)
       .maybeSingle();
     if (!cohost) {
-      return { error: NextResponse.json({ error: "Only the host can check guests in" }, { status: 403 }) };
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Only the host can check guests in" }, { status: 403 }),
+      };
     }
   }
-  return { user, admin };
+  return { ok: true, user, admin };
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: jamId } = await params;
   const auth = await authorize(req, jamId);
-  if ("error" in auth) return auth.error;
+  if (!auth.ok) return auth.response;
   const { user, admin } = auth;
 
   let ticketId: string;
@@ -78,7 +85,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: jamId } = await params;
   const auth = await authorize(req, jamId);
-  if ("error" in auth) return auth.error;
+  if (!auth.ok) return auth.response;
   const { admin } = auth;
 
   const ticketId = new URL(req.url).searchParams.get("ticket_id");
