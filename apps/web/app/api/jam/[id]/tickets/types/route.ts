@@ -33,8 +33,12 @@ async function canManage(jamId: string, userId: string) {
   return cohost ? { ok: true as const } : { ok: false as const, status: 403 };
 }
 
-// Sold counts come from the same function the reservation path uses, so the
-// number a buyer sees is the number the oversell guard enforces.
+// Availability uses the same function the reservation path uses, so what a buyer
+// is offered matches what the oversell guard will actually allow.
+//
+// "sold" and "held" are reported separately. The availability count includes
+// live holds — a checkout in progress must reserve its stock — but a hold is not
+// a sale, and labelling it as one showed hosts revenue they hadn't earned.
 async function withAvailability(jamId: string) {
   const admin = supabaseAdmin();
   const { data: types } = await admin
@@ -45,19 +49,23 @@ async function withAvailability(jamId: string) {
     .order("id", { ascending: true });
 
   const rows = types ?? [];
-  const sold = await Promise.all(
-    rows.map((t) => admin.rpc("ticket_type_sold_count", { type_id: t.id }))
-  );
+  const [counted, paid] = await Promise.all([
+    Promise.all(rows.map((t) => admin.rpc("ticket_type_sold_count", { type_id: t.id }))),
+    Promise.all(rows.map((t) => admin.rpc("ticket_type_paid_count", { type_id: t.id }))),
+  ]);
 
   const now = Date.now();
   return rows.map((t, i) => {
-    const soldCount = (sold[i].data as number) ?? 0;
-    const remaining = t.quantity === null ? null : Math.max(0, t.quantity - soldCount);
+    const againstStock = (counted[i].data as number) ?? 0;
+    const soldCount = (paid[i].data as number) ?? 0;
+    const heldCount = Math.max(0, againstStock - soldCount);
+    const remaining = t.quantity === null ? null : Math.max(0, t.quantity - againstStock);
     const notYetOpen = t.sales_start_at ? now < new Date(t.sales_start_at).getTime() : false;
     const closed = t.sales_end_at ? now > new Date(t.sales_end_at).getTime() : false;
     return {
       ...t,
       sold: soldCount,
+      held: heldCount,
       remaining,
       on_sale: !notYetOpen && !closed && remaining !== 0,
       not_yet_open: notYetOpen,
