@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockBearerGetUser, mockAdminFrom, mockRpc, mockSessionsCreate } = vi.hoisted(() => ({
-  mockGetUser: vi.fn(),
-  mockBearerGetUser: vi.fn(),
-  mockAdminFrom: vi.fn(),
-  mockRpc: vi.fn(),
-  mockSessionsCreate: vi.fn(),
-}));
+const { mockGetUser, mockBearerGetUser, mockAdminFrom, mockRpc, mockSessionsCreate, mockPromoList } =
+  vi.hoisted(() => ({
+    mockGetUser: vi.fn(),
+    mockBearerGetUser: vi.fn(),
+    mockAdminFrom: vi.fn(),
+    mockRpc: vi.fn(),
+    mockSessionsCreate: vi.fn(),
+    mockPromoList: vi.fn(),
+  }));
 
 vi.mock("@/lib/supabase/server", () => ({
   supabaseServer: vi.fn().mockResolvedValue({ auth: { getUser: mockGetUser } }),
@@ -19,7 +21,10 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/stripe", () => ({
   // A factory, matching the lazy client in lib/stripe.ts.
-  stripe: () => ({ checkout: { sessions: { create: mockSessionsCreate } } }),
+  stripe: () => ({
+    checkout: { sessions: { create: mockSessionsCreate } },
+    promotionCodes: { list: mockPromoList },
+  }),
   SITE_URL: "https://singjam.org",
   TICKET_INTEGRATION_ID: "singjam_tickets_qxwmvpht",
   SESSION_EXPIRY_MINUTES: 30,
@@ -276,6 +281,44 @@ describe("POST /api/jam/[id]/tickets/checkout", () => {
     expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({ stripe_checkout_session_id: "cs_abc" })
     );
+  });
+
+  it("applies a valid promo code as a Stripe discount", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    happyPathDb();
+    mockPromoList.mockResolvedValue({ data: [{ id: "promo_123" }] });
+    mockSessionsCreate.mockResolvedValue({ id: "cs_1", client_secret: "cs_secret" });
+
+    const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "EARLYBIRD" }), params);
+    expect(res.status).toBe(200);
+    expect(mockPromoList).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "EARLYBIRD", active: true })
+    );
+    // Stripe applies the discount and its amount_total becomes authoritative.
+    expect(mockSessionsCreate.mock.calls[0][0].discounts).toEqual([{ promotion_code: "promo_123" }]);
+  });
+
+  it("rejects an unknown promo code and releases the reserved stock", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    happyPathDb();
+    mockPromoList.mockResolvedValue({ data: [] });
+
+    const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "NOPE" }), params);
+    expect(res.status).toBe(400);
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
+    // Otherwise the tickets sit reserved for the full hold window for nothing.
+    const releaseChain = mockAdminFrom.mock.results[3].value;
+    expect(releaseChain.update).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
+  });
+
+  it("does not look up a promo code when none is supplied", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    happyPathDb();
+    mockSessionsCreate.mockResolvedValue({ id: "cs_1", client_secret: "cs_secret" });
+
+    await POST(makeReq(ONE_TICKET), params);
+    expect(mockPromoList).not.toHaveBeenCalled();
+    expect(mockSessionsCreate.mock.calls[0][0]).not.toHaveProperty("discounts");
   });
 
   it("releases the hold when Stripe rejects the session", async () => {

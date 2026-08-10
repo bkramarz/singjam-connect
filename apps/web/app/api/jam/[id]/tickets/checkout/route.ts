@@ -17,6 +17,15 @@ type Item = { ticket_type_id: string; quantity: number };
 // session is completed; this only catches obvious typos before we reserve stock.
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
+// Frees reserved stock straight away instead of making the buyer wait out the
+// hold window for tickets they never got a chance to pay for.
+async function releaseHold(admin: ReturnType<typeof supabaseAdmin>, orderId: string) {
+  await admin
+    .from("ticket_orders")
+    .update({ status: "failed", updated_at: new Date().toISOString() })
+    .eq("id", orderId);
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -34,11 +43,13 @@ export async function POST(
   let items: Item[];
   let guestEmail = "";
   let guestName = "";
+  let promoCode = "";
   try {
     const body = await req.json();
     items = Array.isArray(body?.items) ? body.items : [];
     guestEmail = typeof body?.email === "string" ? body.email.trim() : "";
     guestName = typeof body?.name === "string" ? body.name.trim() : "";
+    promoCode = typeof body?.promo_code === "string" ? body.promo_code.trim() : "";
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
@@ -110,6 +121,26 @@ export async function POST(
     else byType.set(key, { name: t.name, price_cents: t.price_cents, currency: t.currency, qty: 1 });
   }
 
+  // Promotion codes live in Stripe, not in our schema — Stripe applies the
+  // discount and its amount_total is authoritative. ui_mode 'elements' has no
+  // built-in code field, so the code is resolved here and attached to the
+  // session; allow_promotion_codes only applies to Stripe-rendered checkout.
+  let discounts: { promotion_code: string }[] | undefined;
+  if (promoCode) {
+    try {
+      const found = await stripe().promotionCodes.list({ code: promoCode, active: true, limit: 1 });
+      const promo = found.data[0];
+      if (!promo) {
+        await releaseHold(admin, order!.id);
+        return NextResponse.json({ error: "That promo code isn't valid" }, { status: 400 });
+      }
+      discounts = [{ promotion_code: promo.id }];
+    } catch {
+      await releaseHold(admin, order!.id);
+      return NextResponse.json({ error: "Could not check that promo code" }, { status: 502 });
+    }
+  }
+
   try {
     const session = await stripe().checkout.sessions.create({
       // 'elements' backs the embedded Payment Element with a Checkout Session
@@ -125,6 +156,7 @@ export async function POST(
       // Hardcoding ['card'] would suppress wallets and hurt conversion.
       // Narrowing happens through exclusion instead, which keeps the rest dynamic.
       excluded_payment_method_types: [...EXCLUDED_PAYMENT_METHODS],
+      ...(discounts ? { discounts } : {}),
       integration_identifier: TICKET_INTEGRATION_ID,
       client_reference_id: order!.id,
       metadata: { order_id: order!.id, jam_id: jamId, buyer_user_id: user?.id ?? "" },
