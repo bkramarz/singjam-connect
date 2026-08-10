@@ -116,6 +116,42 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
     }
   }
 
+  async function toggleCheckIn(g: Guest) {
+    setError(null);
+    const checkingIn = !g.checked_in_at;
+
+    // Optimistic: at a door the feedback needs to be instant, and the request is
+    // idempotent either way.
+    setGuests((prev) =>
+      prev.map((x) =>
+        x.ticket_id === g.ticket_id
+          ? { ...x, checked_in_at: checkingIn ? new Date().toISOString() : null }
+          : x
+      )
+    );
+    setSummary((s) => (s ? { ...s, checked_in: s.checked_in + (checkingIn ? 1 : -1) } : s));
+
+    const res = checkingIn
+      ? await fetch(`/api/jam/${jamId}/tickets/checkin`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ticket_id: g.ticket_id }),
+        })
+      : await fetch(`/api/jam/${jamId}/tickets/checkin?ticket_id=${g.ticket_id}`, { method: "DELETE" });
+
+    if (!res.ok) {
+      setError((await res.json()).error ?? "Check-in failed");
+      await load(); // roll back to whatever the server actually thinks
+      return;
+    }
+    const json = await res.json();
+    if (json.already_checked_in) {
+      setGuests((prev) =>
+        prev.map((x) => (x.ticket_id === g.ticket_id ? { ...x, checked_in_at: json.checked_in_at } : x))
+      );
+    }
+  }
+
   const filtered = guests.filter((g) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -255,6 +291,7 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
                     <th className="py-2 pr-3 font-medium">Name</th>
                     <th className="py-2 pr-3 font-medium">Tier</th>
                     <th className="py-2 pr-3 font-medium">Code</th>
+                    <th className="py-2 font-medium text-right">Door</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -271,6 +308,19 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
                       </td>
                       <td className="py-2 pr-3 text-zinc-600">{g.tier}</td>
                       <td className="py-2 pr-3 font-mono text-xs tracking-wider text-zinc-500">{g.code}</td>
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => toggleCheckIn(g)}
+                          className={
+                            g.checked_in_at
+                              ? "rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors"
+                              : "rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+                          }
+                          title={g.checked_in_at ? "Tap to undo" : "Check in"}
+                        >
+                          {g.checked_in_at ? "✓ In" : "Check in"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

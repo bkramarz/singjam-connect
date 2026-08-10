@@ -154,6 +154,43 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockAdminFrom).toHaveBeenCalledTimes(4);
   });
 
+  it("records what Stripe charged, not our pre-discount total", async () => {
+    // A promo code means amount_total < the tier total we computed at checkout.
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          payment_status: "paid",
+          payment_intent: "pi_1",
+          amount_total: 2400, // $30 order with 20% off
+          metadata: { order_id: ORDER_ID },
+        },
+      },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder({ buyer_user_id: null }) }));
+    emailChains();
+
+    await POST(makeReq());
+    expect(mockAdminFrom.mock.results[0].value.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "paid", amount_cents: 2400 })
+    );
+  });
+
+  it("leaves the amount alone when Stripe sends no total", async () => {
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder({ buyer_user_id: null }) }));
+    emailChains();
+
+    await POST(makeReq());
+    // Better to keep our computed figure than overwrite it with undefined.
+    expect(mockAdminFrom.mock.results[0].value.update).toHaveBeenCalledWith(
+      expect.not.objectContaining({ amount_cents: expect.anything() })
+    );
+  });
+
   it("does not re-send the ticket when Stripe redelivers", async () => {
     mockConstructEvent.mockReturnValue({
       type: "checkout.session.completed",

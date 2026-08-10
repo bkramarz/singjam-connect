@@ -97,6 +97,8 @@ export default function TicketPurchasePanel({
   const [error, setError] = useState<string | null>(null);
   const [guestEmail, setGuestEmail] = useState("");
   const [guestName, setGuestName] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [showPromo, setShowPromo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,9 +140,11 @@ export default function TicketPurchasePanel({
     const res = await fetch(`/api/jam/${jamId}/tickets/checkout`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(
-        isSignedIn ? { items } : { items, email: guestEmail.trim(), name: guestName.trim() }
-      ),
+      body: JSON.stringify({
+        items,
+        ...(isSignedIn ? {} : { email: guestEmail.trim(), name: guestName.trim() }),
+        ...(promoCode.trim() ? { promo_code: promoCode.trim() } : {}),
+      }),
     });
     const json = await res.json();
     setBusy(false);
@@ -222,6 +226,29 @@ export default function TicketPurchasePanel({
           </div>
         );
       })}
+
+      {/* Hidden behind a toggle: a visible empty code box makes buyers feel
+          they're missing a deal and go hunting for one instead of paying. */}
+      {count > 0 && (
+        showPromo ? (
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value)}
+            placeholder="Promo code"
+            autoCapitalize="characters"
+            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm uppercase tracking-wider focus:border-amber-400 focus:outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowPromo(true)}
+            className="text-xs text-zinc-500 underline hover:text-zinc-700"
+          >
+            Have a promo code?
+          </button>
+        )
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-red-600">

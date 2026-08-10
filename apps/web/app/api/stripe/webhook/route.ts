@@ -110,6 +110,13 @@ export async function POST(req: Request) {
           updated_at: now,
           stripe_payment_intent_id:
             typeof session.payment_intent === "string" ? session.payment_intent : null,
+          // Reconcile to what Stripe actually charged. Our amount_cents was
+          // computed from tier prices before checkout; a promotion code (or any
+          // Stripe-side adjustment) makes it stale, and reporting the
+          // pre-discount figure would overstate revenue.
+          ...(typeof session.amount_total === "number"
+            ? { amount_cents: session.amount_total }
+            : {}),
         })
         .eq("id", orderId)
         .eq("status", "pending")
