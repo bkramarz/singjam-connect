@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense, cache } from "react";
 import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { formatJamDate } from "@/lib/formatJamTime";
 import JamContent from "@/components/JamContent";
 import JamView, { type InviteEntry } from "@/components/JamView";
 import { type JamCardData } from "@/components/JamCard";
@@ -31,7 +32,7 @@ async function getJamViaInviteToken(jamId: string, token: string) {
   if (!invite) return null;
   const { data } = await admin
     .from("jams")
-    .select("name, starts_at, neighborhood, profiles(display_name, last_name, username)")
+    .select("name, starts_at, timezone, neighborhood, profiles(display_name, last_name, username)")
     .eq("id", jamId)
     .maybeSingle();
   return data as any;
@@ -50,9 +51,7 @@ export async function generateMetadata({
   if (!jam) return { title: "Jam" };
   const name = jam.name ?? "Jam";
   const host = jam.profiles?.display_name ?? jam.profiles?.username ?? null;
-  const date = jam.starts_at
-    ? new Date(jam.starts_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-    : null;
+  const date = formatJamDate(jam.starts_at, jam.timezone);
   const parts = [date, jam.neighborhood, host ? `Hosted by ${host}` : null].filter(Boolean);
   const description = parts.length
     ? `${parts.join(" · ")}. RSVP and jam together on SingJam.`

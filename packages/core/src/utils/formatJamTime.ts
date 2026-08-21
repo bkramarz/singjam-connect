@@ -16,3 +16,19 @@ export function formatJamTime(startsAt: string | null | undefined, timezone?: st
     minute: "2-digit",
   });
 }
+
+/**
+ * Formats a jam's calendar date for share previews and other server-rendered
+ * text. Pass the jam's stored timezone: it otherwise formats in the runtime's
+ * own zone, which on the server is UTC, pushing an evening jam in the Americas
+ * onto the following day.
+ */
+export function formatJamDate(startsAt: string | null | undefined, timezone?: string | null): string | null {
+  if (!startsAt) return null;
+  return new Date(startsAt).toLocaleDateString("en-US", {
+    timeZone: timezone ?? undefined,
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
