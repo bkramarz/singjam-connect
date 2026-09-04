@@ -18,75 +18,36 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
     (async () => {
       setState({ status: "loading" });
 
-      // Resolve auth state early when there's an invite token so we can decide
-      // which fetch path to take before making any jam queries.
-      let earlyUser: any = null;
-      if (inviteToken) {
-        const { data: { user } } = await supabase.auth.getUser();
-        earlyUser = user;
-      }
+      // An invite token is a bearer credential: anyone holding it may view the
+      // jam. RLS only grants that to the row's invited_user_id, so a signed-in
+      // visitor holding a token bound to someone else (a forwarded link, or a
+      // share link another account already claimed) would fail the jam select.
+      // Both auth states therefore read jam data through the token-gated
+      // service-role endpoint, and per-user state is layered on top below.
+      let inviteJam: any = null;
+      let inviteExtras: any = null;
 
-      if (inviteToken && !earlyUser) {
-        // Unauthenticated visitor with a valid invite link: fetch jam data
-        // server-side (bypasses RLS) so they can view without signing in.
+      if (inviteToken) {
+        const { data: { user: earlyUser } } = await supabase.auth.getUser();
+
+        if (earlyUser) {
+          // Binds the token to this account when it is still unclaimed, so the
+          // host's invite list and the accept/decline flow see them.
+          await fetch("/api/invite/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: inviteToken }),
+          });
+        }
+
         const res = await fetch(`/api/jam/${jamId}/public?invite=${inviteToken}`);
         if (!res.ok) {
           setState({ status: "not_found" });
           return;
         }
         const data = await res.json();
-        const jam = data.jam;
-        const jamCardData: JamCardData = {
-          id: jam.id,
-          name: jam.name,
-          visibility: jam.visibility,
-          starts_at: jam.starts_at,
-          ends_at: jam.ends_at,
-          timezone: jam.timezone,
-          neighborhood: jam.neighborhood,
-          full_address: jam.full_address,
-          notes: jam.notes,
-          tickets_url: jam.tickets_url,
-          image_url: jam.image_url,
-          image_focal_point: jam.image_focal_point,
-          genres: data.genres,
-          themes: data.themes,
-          host: data.host,
-          hostUsername: data.hostUsername,
-          capacity: jam.capacity,
-          hasFullAccess: false,
-        };
-        setState({
-          status: "ready",
-          data: {
-            jam: { name: jam.name, capacity: jam.capacity, host_user_id: jam.host_user_id },
-            jamCardData,
-            userId: null,
-            rsvpStatus: null,
-            waitlistPosition: null,
-            attendingCount: data.attendingCount,
-            pendingInvite: false,
-            isOfficial: false,
-            isHost: false,
-            isCoHost: false,
-            hasFullAccess: false,
-            showRsvp: false,
-            canInvite: false,
-            invitesEnabled: data.invitesEnabled,
-            inviteList: [],
-            alreadyInvitedIds: [],
-          },
-        });
-        return;
-      }
-
-      if (inviteToken && earlyUser) {
-        // Authenticated visitor with token: claim it so RLS allows the jam select.
-        await fetch("/api/invite/claim", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: inviteToken }),
-        });
+        inviteJam = data.jam;
+        inviteExtras = data;
       }
 
       const [
@@ -98,15 +59,25 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
         flagRes,
       ] = await Promise.all([
         supabase.auth.getUser(),
-        supabase
-          .from("jams")
-          .select("id, name, visibility, starts_at, ends_at, timezone, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
-          .eq("id", jamId)
-          .maybeSingle(),
-        supabase.from("jam_genres").select("genres(name)").eq("jam_id", jamId),
-        supabase.from("jam_themes").select("themes(name)").eq("jam_id", jamId),
-        supabase.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", jamId).eq("status", "attending"),
-        supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+        inviteJam
+          ? Promise.resolve({ data: inviteJam })
+          : supabase
+              .from("jams")
+              .select("id, name, visibility, starts_at, ends_at, timezone, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite")
+              .eq("id", jamId)
+              .maybeSingle(),
+        inviteExtras
+          ? Promise.resolve({ data: [] })
+          : supabase.from("jam_genres").select("genres(name)").eq("jam_id", jamId),
+        inviteExtras
+          ? Promise.resolve({ data: [] })
+          : supabase.from("jam_themes").select("themes(name)").eq("jam_id", jamId),
+        inviteExtras
+          ? Promise.resolve({ count: null })
+          : supabase.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", jamId).eq("status", "attending"),
+        inviteExtras
+          ? Promise.resolve({ data: null })
+          : supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
       ]);
 
       const jam = jamRes.data;
@@ -117,13 +88,15 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
       }
 
       const userId = user?.id ?? null;
-      const genres = ((genresRes.data ?? []) as any[]).map((g: any) => g.genres?.name).filter(Boolean) as string[];
-      const themes = ((themesRes.data ?? []) as any[]).map((t: any) => t.themes?.name).filter(Boolean) as string[];
-      const attendingCount = countRes.count ?? 0;
-      const invitesEnabled = flagRes.data?.enabled ?? true;
+      const genres = (inviteExtras?.genres ?? ((genresRes.data ?? []) as any[]).map((g: any) => g.genres?.name).filter(Boolean)) as string[];
+      const themes = (inviteExtras?.themes ?? ((themesRes.data ?? []) as any[]).map((t: any) => t.themes?.name).filter(Boolean)) as string[];
+      const attendingCount = inviteExtras?.attendingCount ?? countRes.count ?? 0;
+      const invitesEnabled = inviteExtras?.invitesEnabled ?? flagRes.data?.enabled ?? true;
 
       const [hostRes, rsvpRes, inviteRes, cohostRes] = await Promise.all([
-        supabase.from("profiles").select("display_name, last_name, username").eq("id", jam.host_user_id).maybeSingle(),
+        inviteExtras
+          ? Promise.resolve({ data: null })
+          : supabase.from("profiles").select("display_name, last_name, username").eq("id", jam.host_user_id).maybeSingle(),
         userId
           ? supabase.from("jam_rsvps").select("status, waitlist_position").eq("jam_id", jamId).eq("user_id", userId).maybeSingle()
           : Promise.resolve({ data: null }),
@@ -135,8 +108,10 @@ export default function JamContent({ jamId, inviteToken }: { jamId: string; invi
           : Promise.resolve({ data: null }),
       ]);
 
-      const hostLabel = [(hostRes.data as any)?.display_name, (hostRes.data as any)?.last_name].filter(Boolean).join(" ") || (hostRes.data as any)?.username || null;
-      const hostUsername = (hostRes.data as any)?.username ?? null;
+      const hostLabel = inviteExtras
+        ? inviteExtras.host
+        : [(hostRes.data as any)?.display_name, (hostRes.data as any)?.last_name].filter(Boolean).join(" ") || (hostRes.data as any)?.username || null;
+      const hostUsername = inviteExtras ? inviteExtras.hostUsername : ((hostRes.data as any)?.username ?? null);
       const rsvpStatus = (rsvpRes.data?.status as any) ?? null;
       const waitlistPosition = rsvpRes.data?.waitlist_position ?? null;
       const pendingInvite = inviteRes.data?.status === "pending";

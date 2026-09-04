@@ -37,7 +37,7 @@ export async function GET(
 
   const hostRes = await admin
     .from("profiles")
-    .select("display_name, username")
+    .select("display_name, last_name, username")
     .eq("id", jamRes.data.host_user_id)
     .maybeSingle();
 
@@ -46,7 +46,10 @@ export async function GET(
     genres: ((genresRes.data ?? []) as any[]).map((g: any) => g.genres?.name).filter(Boolean),
     themes: ((themesRes.data ?? []) as any[]).map((t: any) => t.themes?.name).filter(Boolean),
     attendingCount: countRes.count ?? 0,
-    host: (hostRes.data as any)?.display_name ?? (hostRes.data as any)?.username ?? null,
+    host:
+      [(hostRes.data as any)?.display_name, (hostRes.data as any)?.last_name].filter(Boolean).join(" ") ||
+      (hostRes.data as any)?.username ||
+      null,
     hostUsername: (hostRes.data as any)?.username ?? null,
     invitesEnabled: flagRes.data?.enabled ?? true,
   });
