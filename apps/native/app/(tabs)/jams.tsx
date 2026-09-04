@@ -40,10 +40,13 @@ function buildSections(items: JamItem[], uid: string | null): Section[] {
       )
     : [];
   const privateJams = uid
-    ? items.filter(j =>
-        j.visibility === 'private' && j.host_id !== uid &&
-        (j.invite_status === 'accepted' || j.invite_status === 'declined') && isUpcoming(j)
-      )
+    ? items.filter(j => {
+        if (j.visibility !== 'private' || j.host_id === uid || !isUpcoming(j)) return false;
+        if (j.invite_status === 'accepted' || j.invite_status === 'declined') return true;
+        // A guest who arrived on a link has no invite row — their RSVP is the
+        // only thing tying them to the jam. Mirrors web's JamsContent.
+        return j.rsvp_status === 'attending' || j.rsvp_status === 'waitlist';
+      })
     : [];
   const past = [...items].reverse().filter(j => {
     if (isUpcoming(j)) return false;

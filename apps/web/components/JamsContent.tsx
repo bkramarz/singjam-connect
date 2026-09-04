@@ -436,8 +436,13 @@ export default function JamsContent() {
   const privateJams = userId
     ? allJams.filter((j) => {
         if (j.visibility !== "private" || j.host_user_id === userId) return false;
+        if ((j.ends_at ?? j.starts_at) < now) return false;
         const s = (inviteByJam.get(j.id) as any)?.status;
-        return (s === "accepted" || s === "declined") && (j.ends_at ?? j.starts_at) >= now;
+        if (s === "accepted" || s === "declined") return true;
+        // A guest who arrived on a link has no invite row — their RSVP is the
+        // only thing tying them to the jam.
+        const r = (rsvpByJam.get(j.id) as any)?.status;
+        return r === "attending" || r === "waitlist";
       })
     : [];
   const pastJams = [...allJams]

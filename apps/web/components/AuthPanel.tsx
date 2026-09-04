@@ -46,7 +46,7 @@ export default function AuthPanel({
     if (next) return inviteToken ? `${next}?invite=${inviteToken}` : next;
     if (inviteToken) {
       // No next param — claim the invite now so we have the jam ID to redirect to.
-      // JamContent's own claim path isn't available here since the token won't be in the URL.
+      // The jam page claims on arrival, but the token won't be in the URL there.
       const res = await fetch("/api/invite/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -1,42 +1,24 @@
 import type { Metadata } from "next";
-import { Suspense, cache } from "react";
+import { cache } from "react";
 import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { claimJamInvite } from "@/lib/claimJamInvite";
 import { formatJamDate } from "@/lib/formatJamTime";
-import JamContent from "@/components/JamContent";
 import JamView, { type InviteEntry } from "@/components/JamView";
 import { type JamCardData } from "@/components/JamCard";
-import JamLoading from "./loading";
 
+// Private jams are unlisted, not access-controlled (migration 160): holding
+// the link is what grants a view, so the jam itself is read with the admin
+// client. Listings stay RLS-scoped, which is what keeps them undiscoverable.
 const getJam = cache(async (id: string) => {
-  const supabase = await getServerSupabase();
-  const { data } = await supabase
+  const admin = supabaseAdmin();
+  const { data } = await admin
     .from("jams")
     .select("id, name, visibility, starts_at, ends_at, timezone, neighborhood, full_address, notes, tickets_url, image_url, image_focal_point, capacity, host_user_id, guests_can_invite, profiles(display_name, last_name, username)")
     .eq("id", id)
     .maybeSingle();
   return data as any;
 });
-
-// Invite links point at jams that RLS otherwise hides from anonymous
-// visitors, so the metadata crawler needs the same token-gated admin
-// lookup the client-side invite flow already uses (see /api/jam/[id]/public).
-async function getJamViaInviteToken(jamId: string, token: string) {
-  const admin = supabaseAdmin();
-  const { data: invite } = await admin
-    .from("jam_invites")
-    .select("id")
-    .eq("jam_id", jamId)
-    .eq("token", token)
-    .maybeSingle();
-  if (!invite) return null;
-  const { data } = await admin
-    .from("jams")
-    .select("name, starts_at, timezone, neighborhood, profiles(display_name, last_name, username)")
-    .eq("id", jamId)
-    .maybeSingle();
-  return data as any;
-}
 
 export async function generateMetadata({
   params,
@@ -46,8 +28,7 @@ export async function generateMetadata({
   searchParams: Promise<{ invite?: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const { invite } = await searchParams;
-  const jam = invite ? await getJamViaInviteToken(id, invite) : await getJam(id);
+  const jam = await getJam(id);
   if (!jam) return { title: "Jam" };
   const name = jam.name ?? "Jam";
   const host = jam.profiles?.display_name ?? jam.profiles?.username ?? null;
@@ -73,24 +54,21 @@ export default async function JamPage({
   const { id } = await params;
   const { invite } = await searchParams;
 
-  // Invite-token visits stay client-fetched: anon visitors need the
-  // service-role public endpoint, and signed-in visitors must claim the
-  // token before RLS lets them read the jam.
-  if (invite) {
-    return (
-      <Suspense fallback={<JamLoading />}>
-        <JamContent jamId={id} inviteToken={invite} />
-      </Suspense>
-    );
-  }
-
   const supabase = await getServerSupabase();
-  const [user, jam, genresRes, themesRes, countRes, flagRes] = await Promise.all([
-    getServerUser(),
+  const admin = supabaseAdmin();
+  const user = await getServerUser();
+
+  // Record the guest against the host's invite before reading their own rows
+  // below, so the accept/decline banner is right on the first paint.
+  if (invite && user) await claimJamInvite(invite, user.id);
+
+  // Jam-scoped reads go through the admin client for the same reason getJam
+  // does: the link is the credential. The per-user reads below stay RLS-scoped.
+  const [jam, genresRes, themesRes, countRes, flagRes] = await Promise.all([
     getJam(id),
-    supabase.from("jam_genres").select("genres(name)").eq("jam_id", id),
-    supabase.from("jam_themes").select("themes(name)").eq("jam_id", id),
-    supabase.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", id).eq("status", "attending"),
+    admin.from("jam_genres").select("genres(name)").eq("jam_id", id),
+    admin.from("jam_themes").select("themes(name)").eq("jam_id", id),
+    admin.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", id).eq("status", "attending"),
     supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
   ]);
 
