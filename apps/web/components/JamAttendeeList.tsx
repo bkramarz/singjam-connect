@@ -6,10 +6,13 @@ import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { SINGING_LABEL, voiceBadgeClass } from "@/lib/singingVoice";
 
+type GuestAttendee = { name: string; extra: number };
+
 type AttendeeData = {
   profileMap: Map<string, any>;
   attending: any[];
   waitlist: any[];
+  guests: GuestAttendee[];
   totalGoing: number;
   cohostIds: Set<string>;
 };
@@ -71,7 +74,7 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
 
   useEffect(() => {
     (async () => {
-      const [rsvpsRes, hostRes, cohostsRes] = await Promise.all([
+      const [rsvpsRes, hostRes, cohostsRes, guestsRes] = await Promise.all([
         supabase
           .from("jam_rsvps")
           .select("user_id, waitlist_position, status")
@@ -84,6 +87,11 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
           .eq("id", hostId)
           .single(),
         supabase.from("jam_cohosts").select("user_id").eq("jam_id", jamId),
+        // Ticket buyers without an account. Served by an API route because
+        // tickets is service_role-only, so the browser client can't see them.
+        fetch(`/api/jam/${jamId}/attendees/guests`)
+          .then((r) => (r.ok ? r.json() : { guests: [] }))
+          .catch(() => ({ guests: [] })),
       ]);
 
       const rsvps = rsvpsRes.data ?? [];
@@ -109,7 +117,17 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
       const attending = (rsvps as any[]).filter((r: any) => r.status === "attending" && r.user_id !== hostId);
       const waitlist = (rsvps as any[]).filter((r: any) => r.status === "waitlist");
 
-      setData({ profileMap, attending, waitlist, totalGoing: 1 + attending.length, cohostIds });
+      const guests: GuestAttendee[] = (guestsRes as any)?.guests ?? [];
+      const guestHeads = guests.reduce((n, g) => n + 1 + g.extra, 0);
+
+      setData({
+        profileMap,
+        attending,
+        waitlist,
+        guests,
+        totalGoing: 1 + attending.length + guestHeads,
+        cohostIds,
+      });
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jamId, hostId]);
@@ -134,7 +152,7 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
   }
 
   if (!data) return null;
-  const { profileMap, attending, waitlist, totalGoing, cohostIds } = data;
+  const { profileMap, attending, waitlist, guests, totalGoing, cohostIds } = data;
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-1">
@@ -181,6 +199,23 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
             />
           );
         })}
+        {/* Guests sit with everyone else who is going — no account is needed to
+            be counted as coming. They carry no profile, so no link and no tags. */}
+        {guests.map((g, i) => (
+          <li key={`guest-${i}`} className="py-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <p className="text-sm font-medium text-zinc-900">
+                {g.name}
+                {g.extra > 0 && (
+                  <span className="ml-1.5 text-xs font-normal text-zinc-400">+{g.extra}</span>
+                )}
+              </p>
+              <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                Going
+              </span>
+            </div>
+          </li>
+        ))}
         {waitlist.map((r: any) => (
           <AttendeeRow
             key={r.user_id}

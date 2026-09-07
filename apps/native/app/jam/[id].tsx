@@ -13,6 +13,8 @@ import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
+type GuestAttendee = { name: string; extra: number };
+
 type JamDetail = {
   id: string;
   name: string | null;
@@ -248,6 +250,20 @@ function AttendeeAvatar({ attendee, isMe }: { attendee: Attendee; isMe: boolean 
   );
 }
 
+function GuestAvatar({ guest }: { guest: GuestAttendee }) {
+  const initial = guest.name[0]?.toUpperCase() ?? '?';
+  return (
+    <View className="items-center mr-3 mb-3" style={{ width: 52 }}>
+      <View className="w-10 h-10 rounded-full items-center justify-center mb-1 bg-zinc-200">
+        <Text className="font-semibold text-sm text-zinc-600">{initial}</Text>
+      </View>
+      <Text className="text-zinc-500 text-xs text-center" numberOfLines={1}>
+        {guest.extra > 0 ? `${guest.name} +${guest.extra}` : guest.name}
+      </Text>
+    </View>
+  );
+}
+
 function InfoRow({ icon, children }: { icon: string; children: React.ReactNode }) {
   return (
     <View className="flex-row items-start mb-3">
@@ -262,6 +278,9 @@ export default function JamDetailScreen() {
   const router = useRouter();
   const [jam, setJam] = useState<JamDetail | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
+  // Kept apart from `attendees`: that array drives the capacity check and the
+  // RSVP prediction, both of which key on user_id, which a guest has not got.
+  const [guestAttendees, setGuestAttendees] = useState<GuestAttendee[]>([]);
   const [myRsvpStatus, setMyRsvpStatus] = useState<string | null>(null);
   const [myInviteStatus, setMyInviteStatus] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
@@ -352,6 +371,14 @@ export default function JamDetailScreen() {
     }));
 
     setAttendees(rawRsvps.filter(r => r.status === 'attending'));
+
+    // Ticket buyers without an account. Served by the web API because tickets is
+    // service_role-only, so the app's Supabase client cannot read them. Failing
+    // quietly is right: a missing guest row shouldn't blank the whole screen.
+    fetch(`${WEB_URL}/api/jam/${id}/attendees/guests`)
+      .then(r => (r.ok ? r.json() : { guests: [] }))
+      .then(d => setGuestAttendees(d.guests ?? []))
+      .catch(() => setGuestAttendees([]));
     const myRsvp = user ? rawRsvps.find(r => r.user_id === user.id) : undefined;
     setMyRsvpStatus(myRsvp?.status ?? null);
     if (user) {
@@ -522,6 +549,8 @@ export default function JamDetailScreen() {
   const hasFullAccess = isHosting || myRsvpStatus === 'attending' || myInviteStatus === 'accepted' || jam.visibility === 'official' || jam.visibility === 'private';
 
   const attendeeIds = new Set(attendees.map(a => a.user_id));
+  // One order can cover several people under a single name, so heads and rows differ.
+  const guestHeadcount = guestAttendees.reduce((n, g) => n + 1 + g.extra, 0);
 
   return (
     <>
@@ -727,20 +756,26 @@ export default function JamDetailScreen() {
           </View>
         ) : null}
 
-        {/* Attendees */}
-        {attendees.length > 0 ? (
+        {/* Attendees — members and guests together: no account is needed to be
+            counted as coming, only to add songs to the set. */}
+        {attendees.length + guestAttendees.length > 0 ? (
           <View className="px-4 mb-6">
             <Text className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">
-              Attending ({attendees.length})
+              Attending ({attendees.length + guestHeadcount})
             </Text>
             <View className="flex-row flex-wrap">
               {attendees.slice(0, 20).map(a => (
                 <AttendeeAvatar key={a.user_id} attendee={a} isMe={a.user_id === myUserId} />
               ))}
-              {attendees.length > 20 ? (
+              {guestAttendees.slice(0, Math.max(0, 20 - attendees.length)).map((g, i) => (
+                <GuestAvatar key={`guest-${i}`} guest={g} />
+              ))}
+              {attendees.length + guestAttendees.length > 20 ? (
                 <View className="items-center mr-3 mb-3" style={{ width: 52 }}>
                   <View className="w-10 h-10 rounded-full bg-zinc-100 items-center justify-center mb-1">
-                    <Text className="text-zinc-400 text-xs font-medium">+{attendees.length - 20}</Text>
+                    <Text className="text-zinc-400 text-xs font-medium">
+                      +{attendees.length + guestAttendees.length - 20}
+                    </Text>
                   </View>
                 </View>
               ) : null}

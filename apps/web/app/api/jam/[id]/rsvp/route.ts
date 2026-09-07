@@ -6,6 +6,7 @@ import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamWaitlistPromotedHtml } from "@/emails/jam-waitlist-promoted";
 import { jamRsvpConfirmedHtml } from "@/emails/jam-rsvp-confirmed";
 import { createNotification } from "@/lib/notifications";
+import { joinJamSetList } from "@/lib/jamAttendance";
 
 export async function POST(
   req: Request,
@@ -65,29 +66,7 @@ export async function POST(
 
   // Add to linked set list if the jam has one and the RSVP is confirmed (not waitlist)
   if (newStatus === "attending") {
-    const { data: linkedSet } = await admin
-      .from("sets")
-      .select("id, owner_user_id")
-      .eq("jam_id", jamId)
-      .maybeSingle();
-
-    if (linkedSet && linkedSet.owner_user_id !== user.id) {
-      const { data: existingCollab } = await admin
-        .from("set_collaborators")
-        .select("id")
-        .eq("set_id", linkedSet.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (!existingCollab) {
-        await admin.from("set_collaborators").insert({
-          set_id: linkedSet.id,
-          user_id: user.id,
-          invited_by: linkedSet.owner_user_id,
-          status: "accepted",
-        });
-      }
-    }
+    await joinJamSetList(admin, jamId, user.id);
   }
 
   // Send RSVP confirmation email (only when newly confirmed, not if already attending)

@@ -62,7 +62,7 @@ export default function EditJamForm({
   const supabase = supabaseBrowser();
   const router = useRouter();
 
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [canPostOfficial, setCanPostOfficial] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [visibility, setVisibility] = useState(jam.visibility);
   const [previewing, setPreviewing] = useState(false);
@@ -103,8 +103,8 @@ export default function EditJamForm({
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData.user?.id;
       if (uid) {
-        const { data: p } = await supabase.from("profiles").select("role, display_name, username").eq("id", uid).single();
-        setIsAdmin((p as any)?.role === "admin");
+        const { data: p } = await supabase.from("profiles").select("role, can_host_official, display_name, username").eq("id", uid).single();
+        setCanPostOfficial((p as any)?.role === "admin" || (p as any)?.can_host_official === true);
         setDisplayName((p as any)?.display_name ?? (p as any)?.username ?? null);
       }
       const [{ data: g }, { data: t }] = await Promise.all([
@@ -279,7 +279,7 @@ export default function EditJamForm({
               <p className="text-xs text-zinc-500">Only visible to people you invite</p>
             </div>
           </label>
-          {isAdmin && (
+          {canPostOfficial && (
             <label className="flex items-start gap-3 cursor-pointer">
               <input type="radio" name="visibility" value="official" checked={visibility === "official"} onChange={() => setVisibility("official")} className="mt-0.5" />
               <div>

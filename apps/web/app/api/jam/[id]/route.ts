@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { canManageJam } from "@/lib/jamAuthz";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { createNotification } from "@/lib/notifications";
@@ -23,7 +24,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     .maybeSingle();
 
   if (!currentJam) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (currentJam.host_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  if (!(await canManageJam(admin, id, user.id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
   const {
@@ -141,7 +144,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     .maybeSingle();
 
   if (!jam) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (jam.host_user_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  if (!(await canManageJam(admin, id, user.id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Fetch all attendees and waitlisted users before deleting
   const { data: rsvps } = await admin

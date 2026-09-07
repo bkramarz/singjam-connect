@@ -67,9 +67,22 @@ export default function AuthPanel({
     if (error) {
       setStatus(error.message);
       setBusy(false);
-    } else {
-      router.push(await resolveDestination());
+      return;
     }
+
+    // Signing in is the moment a guest purchase can be attached to an account.
+    // OAuth and signup do this server-side; this path reaches neither, so it
+    // has to ask. Never blocks the sign-in — a failure here just means the
+    // ticket attaches on their next visit instead.
+    const claimed = await fetch("/api/tickets/claim", { method: "POST" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    const dest = await resolveDestination();
+    // Nothing more specific was asked for, and they just turned out to own a
+    // ticket — send them to it rather than to their repertoire.
+    const claimedJam = claimed?.jam_ids?.[0];
+    router.push(dest === "/repertoire" && claimedJam ? `/jam/${claimedJam}` : dest);
   }
 
   async function signUp() {

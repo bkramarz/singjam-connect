@@ -10,6 +10,7 @@ import JamInviteList from "@/components/JamInviteList";
 import JamHostActions from "@/components/JamHostActions";
 import JamAttendeeList from "@/components/JamAttendeeList";
 import JamSetList from "@/components/JamSetList";
+import TicketPurchasePanel from "@/components/TicketPurchasePanel";
 
 export type InviteEntry = {
   id: string;
@@ -37,6 +38,7 @@ export type JamViewData = {
   isHost: boolean;
   isCoHost: boolean;
   hasFullAccess: boolean;
+  canManage: boolean;
   showRsvp: boolean;
   canInvite: boolean;
   invitesEnabled: boolean;
@@ -63,6 +65,7 @@ export default function JamView({
     isOfficial,
     isHost,
     isCoHost,
+    canManage,
     showRsvp,
     canInvite,
     invitesEnabled,
@@ -72,7 +75,6 @@ export default function JamView({
   const [rsvpStatus, setRsvpStatus] = useState(data.rsvpStatus);
   const [hasFullAccess, setHasFullAccess] = useState(data.hasFullAccess);
   const [inviteList, setInviteList] = useState(data.inviteList);
-  const canManage = isHost || isCoHost;
 
   return (
     <div className="space-y-4">
@@ -90,7 +92,7 @@ export default function JamView({
                 capacity={jam.capacity}
                 onStatusChange={(newStatus) => {
                   setRsvpStatus(newStatus);
-                  setHasFullAccess(isOfficial || newStatus === "attending" || isHost || isCoHost);
+                  setHasFullAccess(isOfficial || newStatus === "attending" || canManage);
                 }}
               />
             )}
@@ -105,8 +107,16 @@ export default function JamView({
           </>
         }
       />
+      {/* Official events sell tickets instead of taking RSVPs — showRsvp is false
+          for them. The panel renders nothing when the event has no tiers, so an
+          official event using an external tickets_url is unaffected. */}
+      {isOfficial && <TicketPurchasePanel jamId={jamId} isSignedIn={!!userId} />}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
-      {!isOfficial && <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />}
+      {/* Official events show who's going too. Ticket buyers get an attending
+          RSVP from the Stripe webhook, so the list is populated the same way —
+          guests without an account are the one gap, which is what the sign-up
+          nudge on the completion page is for. */}
+      <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={jamId}
@@ -117,7 +127,7 @@ export default function JamView({
         />
       )}
       {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
-      {canManage && <JamHostActions jamId={jamId} isHost={isHost} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
+      {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
   );
 }

@@ -1,0 +1,152 @@
+import Link from "next/link";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseServer } from "@/lib/supabase/server";
+
+// Where Stripe returns the buyer after payment. This page only *reports* status —
+// it never fulfils. Fulfilment is the webhook's job, because the buyer can close
+// the tab before this renders and a client-side callback can't be trusted.
+//
+// That means the order may still read 'pending' here for a second or two while
+// the webhook lands, so the pending state is framed as "confirming", not failure.
+
+export default async function TicketsCompletePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ session_id?: string; order_id?: string }>;
+}) {
+  const { id: jamId } = await params;
+  const { session_id, order_id } = await searchParams;
+
+  const supabase = await supabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const admin = supabaseAdmin();
+  const { data: jam } = await admin.from("jams").select("name").eq("id", jamId).maybeSingle();
+
+  // The set is the reason to come back before the day, so link it directly
+  // rather than making people find it on the event page. Readable by anyone,
+  // so guests get the link too — adding to it is what needs an account.
+  const { data: linkedSet } = await admin
+    .from("sets")
+    .select("id")
+    .eq("jam_id", jamId)
+    .maybeSingle();
+
+  // A charged order is found by its Stripe session; a comped one never had a
+  // session, so it comes back by order id instead. Both identifiers are v4
+  // uuids or Stripe's own opaque ids — unguessable, which is what the guest
+  // access rule below leans on.
+  const columns = "id, status, amount_cents, currency, buyer_user_id, buyer_email";
+  const { data: order } = session_id
+    ? await admin.from("ticket_orders").select(columns).eq("stripe_checkout_session_id", session_id).maybeSingle()
+    : order_id
+    ? await admin.from("ticket_orders").select(columns).eq("id", order_id).maybeSingle()
+    : { data: null };
+
+  // A member's order is shown only to that member — a session id in the URL must
+  // not expose someone else's purchase. A guest order has no account behind it,
+  // so possession of the unguessable session id is the only credential there is;
+  // this is the same model Stripe's own return-page samples use.
+  const isGuestOrder = order != null && order.buyer_user_id === null;
+  const mine = order && (isGuestOrder || (user && order.buyer_user_id === user.id)) ? order : null;
+
+  const ticketCount = mine
+    ? (await admin.from("tickets").select("id", { count: "exact", head: true }).eq("order_id", mine.id)).count ?? 0
+    : 0;
+
+  const money = (cents: number, currency: string) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
+
+  const jamName = jam?.name ?? "the jam";
+
+  return (
+    <div className="mx-auto max-w-md space-y-4 py-8">
+      {mine?.status === "paid" ? (
+        <>
+          <h1 className="text-xl font-semibold text-zinc-900">
+            You&apos;re in! 🎉 We can&apos;t wait to sing with you.
+          </h1>
+          <p className="text-sm text-zinc-600">
+            See you at {jamName}. {ticketCount} ticket{ticketCount === 1 ? "" : "s"} ·{" "}
+            {money(mine.amount_cents, mine.currency)} — your door code is on its way to your email.
+          </p>
+        </>
+      ) : mine?.status === "pending" ? (
+        <>
+          <h1 className="text-xl font-semibold text-zinc-900">Confirming your payment…</h1>
+          <p className="text-sm text-zinc-600">
+            This usually takes a moment. Your tickets are held — refresh this page shortly, or check
+            the event page.
+          </p>
+        </>
+      ) : mine?.status === "refunded" ? (
+        <>
+          <h1 className="text-xl font-semibold text-zinc-900">This order was refunded</h1>
+          <p className="text-sm text-zinc-600">Nothing further is owed.</p>
+        </>
+      ) : mine ? (
+        <>
+          <h1 className="text-xl font-semibold text-zinc-900">Payment didn&apos;t complete</h1>
+          <p className="text-sm text-zinc-600">
+            Your card wasn&apos;t charged and the tickets have been released. You can try again from
+            the event page.
+          </p>
+        </>
+      ) : (
+        <>
+          <h1 className="text-xl font-semibold text-zinc-900">Order not found</h1>
+          <p className="text-sm text-zinc-600">
+            We couldn&apos;t find that order. If you were charged, contact us and we&apos;ll sort it out.
+          </p>
+        </>
+      )}
+
+      {/* A guest has paid but has no account, so jam_rsvps has nowhere to point:
+          they're coming and nobody can see it. Signing up with the same address
+          claims the order (claimGuestTickets) and turns it into attendance. */}
+      {mine?.status === "paid" && isGuestOrder && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-900">Help shape the night 🎶</h2>
+          <p className="text-sm text-zinc-600">
+            You&apos;re on the guest list. Create an account to add songs to our set list and
+            checkout faster next time.
+          </p>
+          <Link
+            href={`/auth?next=/jam/${jamId}`}
+            className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          >
+            Create an account
+          </Link>
+          {mine.buyer_email && (
+            <p className="text-xs text-zinc-500">
+              Sign up with {mine.buyer_email} and this ticket comes with you.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {mine?.status === "paid" && linkedSet && (
+          <Link
+            href={`/set/${linkedSet.id}`}
+            className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          >
+            See what we&apos;re singing
+          </Link>
+        )}
+        <Link
+          href={`/jam/${jamId}`}
+          className={
+            mine?.status === "paid" && linkedSet
+              ? "inline-block rounded-xl border border-zinc-200 px-5 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
+              : "inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          }
+        >
+          Back to {jamName}
+        </Link>
+      </div>
+    </div>
+  );
+}
