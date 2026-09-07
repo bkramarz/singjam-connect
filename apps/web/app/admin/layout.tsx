@@ -42,6 +42,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </span>
             )}
           </Link>
+          <Link href="/admin/users" className="text-slate-600 hover:text-slate-900">
+            Users
+          </Link>
           <Link href="/admin/settings" className="text-slate-600 hover:text-slate-900">
             Settings
           </Link>
