@@ -39,6 +39,19 @@ function chain(result: any) {
   return c;
 }
 
+// Chains are addressed by the table they were opened on, not by position.
+// Positional indices broke every time a query was added anywhere upstream —
+// including in code the webhook merely calls — and the failure looked like a
+// logic bug rather than a bookkeeping one.
+function chainFor(table: string, nth = 0) {
+  const hits = mockAdminFrom.mock.calls
+    .map((c, i) => (c[0] === table ? i : -1))
+    .filter((i) => i >= 0);
+  const idx = hits[nth];
+  if (idx == null) throw new Error(`no .from("${table}") call #${nth}`);
+  return mockAdminFrom.mock.results[idx].value;
+}
+
 const ORDER_ID = "order-1";
 const JAM_ID = "jam-1";
 const BUYER_ID = "user-1";
@@ -63,6 +76,7 @@ function emailChains() {
   mockAdminFrom
     .mockReturnValueOnce(chain({ data: { name: "Winter Sing", starts_at: null } })) // jams
     .mockReturnValueOnce(chain({ data: [{ qr_token: "abc-def", ticket_types: { name: "General" } }] })) // tickets
+    .mockReturnValueOnce(chain({ data: null })) // linked set for the email's set link
     .mockReturnValueOnce(chain({ error: null })); // stamp ticket_email_sent_at
 }
 
@@ -76,6 +90,13 @@ function makeReq(signed = true) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks does NOT drain mockReturnValueOnce queues, nor does it drop
+  // implementations. Different events consume different numbers of chains, and
+  // the "resend down" test leaves a rejection behind — without these resets one
+  // test's leftovers silently become the next test's behaviour.
+  mockAdminFrom.mockReset();
+  mockSend.mockReset();
+  mockSend.mockResolvedValue({});
 });
 
 describe("POST /api/stripe/webhook", () => {
@@ -115,14 +136,14 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeReq());
     expect(res.status).toBe(200);
 
-    const orderChain = mockAdminFrom.mock.results[0].value;
+    const orderChain = chainFor("ticket_orders");
     expect(orderChain.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "paid", stripe_payment_intent_id: "pi_1" })
     );
     // The pending guard is what makes redelivery a no-op.
     expect(orderChain.eq).toHaveBeenCalledWith("status", "pending");
 
-    const rsvpChain = mockAdminFrom.mock.results[5].value;
+    const rsvpChain = chainFor("jam_rsvps", 1);
     expect(rsvpChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({ jam_id: JAM_ID, user_id: BUYER_ID, status: "attending" })
     );
@@ -152,7 +173,7 @@ describe("POST /api/stripe/webhook", () => {
     // The guest still gets their ticket — it's their only copy.
     expect(mockSend.mock.calls[0][0]).toMatchObject({ to: "guest@example.com" });
     // Order update + 3 email calls, and nothing more: no jam_rsvps work.
-    expect(mockAdminFrom).toHaveBeenCalledTimes(4);
+    expect(mockAdminFrom.mock.calls.filter((c) => c[0] === "jam_rsvps")).toHaveLength(0);
   });
 
   it("records what Stripe charged, not our pre-discount total", async () => {
@@ -278,7 +299,7 @@ describe("POST /api/stripe/webhook", () => {
       .mockReturnValueOnce(chain({ data: null })); // linked set lookup — none
 
     await POST(makeReq());
-    const rsvpChain = mockAdminFrom.mock.results[5].value;
+    const rsvpChain = chainFor("jam_rsvps", 1);
     expect(rsvpChain.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "attending", waitlist_position: null })
     );
@@ -303,7 +324,7 @@ describe("POST /api/stripe/webhook", () => {
 
     await POST(makeReq());
 
-    const collabChain = mockAdminFrom.mock.results[8].value;
+    const collabChain = chainFor("set_collaborators", 1);
     expect(collabChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({ set_id: "set-1", user_id: BUYER_ID, status: "accepted" })
     );
@@ -325,7 +346,8 @@ describe("POST /api/stripe/webhook", () => {
     await POST(makeReq());
 
     // Only 8 calls: no insert followed the existing-collaborator lookup.
-    expect(mockAdminFrom).toHaveBeenCalledTimes(8);
+    // Only the existing-collaborator lookup ran; no insert followed it.
+    expect(mockAdminFrom.mock.calls.filter((c) => c[0] === "set_collaborators")).toHaveLength(1);
   });
 
   it("expires the order and releases the hold on checkout.session.expired", async () => {
@@ -355,7 +377,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockAdminFrom.mock.results[0].value.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "refunded" })
     );
-    expect(mockAdminFrom.mock.results[1].value.update).toHaveBeenCalledWith(
+    expect(chainFor("jam_rsvps").update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "cancelled" })
     );
   });

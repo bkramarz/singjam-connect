@@ -59,6 +59,7 @@ export function ticketConfirmationHtml({
   currency,
   isGuest = false,
   signUpUrl,
+  setUrl,
 }: {
   name?: string | null;
   jamName: string;
@@ -73,6 +74,7 @@ export function ticketConfirmationHtml({
   currency: string;
   isGuest?: boolean;
   signUpUrl?: string;
+  setUrl?: string | null;
 }) {
   const greeting = name ? `Hi ${name},` : "Hi,";
   const dateStr = formatJamTime(startsAt, timezone);
@@ -154,10 +156,19 @@ export function ticketConfirmationHtml({
     </p>
   </div>` : ""}
 
-  <a href="${jamUrl}"
-     style="display:inline-block;margin-top:24px;background-color:#f59e0b;color:#fff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;text-decoration:none">
-    View event
-  </a>
+  <div style="margin-top:24px">
+    ${setUrl ? `
+    <a href="${setUrl}"
+       style="display:inline-block;margin-right:8px;background-color:#f59e0b;color:#fff;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;text-decoration:none">
+      See what we're singing
+    </a>` : ""}
+    <a href="${jamUrl}"
+       style="display:inline-block;${setUrl
+         ? "border:1px solid #e4e4e7;color:#18181b;"
+         : "background-color:#f59e0b;color:#fff;"}font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;text-decoration:none">
+      View event
+    </a>
+  </div>
   <p style="margin-top:32px;font-size:13px;color:#a1a1aa">SingJam · Music. Community. Love.</p>
 </body>
 </html>`;

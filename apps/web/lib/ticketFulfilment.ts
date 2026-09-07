@@ -45,6 +45,14 @@ export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder) {
     admin.from("tickets").select("qr_token, ticket_types(name)").eq("order_id", order.id),
   ]);
 
+  // The set is the reason to come back before the day, so the email leads with
+  // it when the event has one — same order as the confirmation page.
+  const { data: linkedSet } = await admin
+    .from("sets")
+    .select("id")
+    .eq("jam_id", order.jam_id)
+    .maybeSingle();
+
   const jamName = jam?.name ?? "the jam";
 
   await resend.emails.send({
@@ -68,6 +76,7 @@ export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder) {
       currency: order.currency,
       isGuest: !order.buyer_user_id,
       signUpUrl: `${SITE_URL}/auth?next=/jam/${order.jam_id}`,
+      setUrl: linkedSet ? `${SITE_URL}/set/${linkedSet.id}` : null,
     }),
   });
 }

@@ -40,6 +40,21 @@ export const TICKET_INTEGRATION_ID = "singjam_tickets_qxwmvpht";
 // This is the supported way to narrow the offering. Never reach for
 // payment_method_types — that would disable dynamic payment methods entirely and
 // freeze the list at whatever we hardcode.
+// A payment method configuration that lists ONLY what we want on a ticket
+// checkout. Set STRIPE_TICKET_PM_CONFIG to a pmc_… id to use one.
+//
+// Why this exists on top of EXCLUDED_PAYMENT_METHODS: excluding a type keeps it
+// off the session — verified, the session's payment_method_types really does
+// come back without klarna — but the Payment Element was still showing Klarna
+// and a bank option to buyers. The account's default configuration has klarna
+// and affirm switched on, and the Element appears to render from that rather
+// than from the session's narrowed list. Naming a configuration removes the
+// discrepancy at the source instead of subtracting from it afterwards.
+//
+// Unset is safe: the session falls back to the default configuration with the
+// exclusions below, which is exactly today's behaviour.
+export const TICKET_PM_CONFIG = process.env.STRIPE_TICKET_PM_CONFIG || null;
+
 export const EXCLUDED_PAYMENT_METHODS = [
   "klarna",
   "affirm",

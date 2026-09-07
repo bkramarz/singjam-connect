@@ -397,6 +397,33 @@ and `payment_method_domains` on this account is empty — so three of the four
 methods the session offers likely never render. Registering singjam.org is one
 Dashboard action and reaches far more people than PayPal would.
 
+### Klarna and a bank option still appear in the Element (open, 2026-09-07)
+
+Reported twice by Ben. The session is provably clean — one created by the real
+checkout route comes back `card, link, cashapp, amazon_pay` — so
+`excluded_payment_method_types` is doing its job at the session level. The
+Payment Element renders Klarna and a bank option anyway.
+
+The likeliest cause: the account's **default** payment method configuration has
+`klarna` and `affirm` switched on, and the Element renders from the
+configuration rather than from the session's narrowed list. Exclusion subtracts
+from the session after the fact; it doesn't change what the configuration
+advertises.
+
+**Unresolved:** whether this is cosmetic or a real bypass. If a buyer selects
+Klarna and pays, does Stripe reject it because the session excludes the type, or
+does it go through? That single test settles it, and it needs a browser.
+
+**The fix either way** is a purpose-built payment method configuration listing
+only card, link, cashapp, amazon_pay, apple_pay and google_pay, referenced by the
+session. The code already supports it: set `STRIPE_TICKET_PM_CONFIG` to a `pmc_…`
+id and the checkout route passes `payment_method_configuration`; unset, it falls
+back to today's exclusions. The configuration itself has to be made in the
+Dashboard — the restricted key lacks `payment_method_configurations_write`.
+
+BNPL stays enabled account-wide on purpose: the org may want it elsewhere, just
+not on a $15 ticket.
+
 ### Venmo — not offered by Stripe at all (checked 2026-09-07)
 
 Venmo is absent from the 43 payment methods in the account's payment method

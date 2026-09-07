@@ -11,6 +11,7 @@ import {
   HOLD_MINUTES,
   SESSION_EXPIRY_MINUTES,
   EXCLUDED_PAYMENT_METHODS,
+  TICKET_PM_CONFIG,
 } from "@/lib/stripe";
 
 type Item = { ticket_type_id: string; quantity: number };
@@ -181,6 +182,9 @@ export async function POST(
       // payment methods, managed from the Dashboard with no code change.
       // Hardcoding ['card'] would suppress wallets and hurt conversion.
       // Narrowing happens through exclusion instead, which keeps the rest dynamic.
+      // Prefer a purpose-built configuration when one is set; the exclusions are
+      // the fallback for when it isn't, and are harmless alongside it.
+      ...(TICKET_PM_CONFIG ? { payment_method_configuration: TICKET_PM_CONFIG } : {}),
       excluded_payment_method_types: [...EXCLUDED_PAYMENT_METHODS],
       ...(discounts ? { discounts } : {}),
       integration_identifier: TICKET_INTEGRATION_ID,

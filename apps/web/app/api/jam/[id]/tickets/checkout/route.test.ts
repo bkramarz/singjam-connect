@@ -30,6 +30,7 @@ vi.mock("@/lib/stripe", () => ({
   SESSION_EXPIRY_MINUTES: 30,
   HOLD_MINUTES: 35,
   EXCLUDED_PAYMENT_METHODS: ["klarna", "affirm", "afterpay_clearpay"],
+  TICKET_PM_CONFIG: null,
 }));
 
 vi.mock("@/lib/promoCode", () => ({ resolvePromoCode: mockResolvePromo }));
