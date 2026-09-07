@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { fetchAllRows } from "@singjam/core";
-import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
+import { fetchAllAuthEmails } from "@/lib/authUsers";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getServerSupabase, getServerUser, getServerUserRole } from "@/lib/supabase/cached";
 import AdminUsersTable, { type AdminUser } from "./AdminUsersTable";
 
 export const metadata: Metadata = {
   title: "Users",
 };
 
+type ProfileRow = Omit<AdminUser, "email">;
+
 export default async function AdminUsersPage() {
+  // The layout already guards /admin, but this page reads auth.users through
+  // the service role, so it re-checks rather than relying on a sibling render.
+  // Both lookups are request-cached, so this costs no extra queries.
+  const [user, role] = await Promise.all([getServerUser(), getServerUserRole()]);
+  if (!user || role !== "admin") redirect("/");
+
   const supabase = await getServerSupabase();
-  const [user, users] = await Promise.all([
-    getServerUser(),
-    fetchAllRows<AdminUser>((from, to) =>
+  const [profiles, emails] = await Promise.all([
+    fetchAllRows<ProfileRow>((from, to) =>
       supabase
         .from("profiles")
         .select("id, display_name, last_name, username, avatar_url, neighborhood, created_at, role")
@@ -19,7 +29,10 @@ export default async function AdminUsersPage() {
         .order("id")
         .range(from, to) as any
     ),
+    fetchAllAuthEmails(supabaseAdmin().auth.admin),
   ]);
+
+  const users: AdminUser[] = profiles.map((p) => ({ ...p, email: emails.get(p.id) ?? null }));
 
   return (
     <div className="space-y-4">
@@ -36,7 +49,7 @@ export default async function AdminUsersPage() {
         </div>
       </div>
 
-      <AdminUsersTable users={users} currentUserId={user?.id ?? ""} />
+      <AdminUsersTable users={users} currentUserId={user.id} />
     </div>
   );
 }

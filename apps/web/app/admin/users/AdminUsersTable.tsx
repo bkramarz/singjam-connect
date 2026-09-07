@@ -15,14 +15,16 @@ export type AdminUser = {
   avatar_url: string | null;
   neighborhood: string | null;
   created_at: string | null;
+  email: string | null;
   role: string;
 };
 
-type SortCol = "name" | "neighborhood" | "joined" | "role";
+type SortCol = "name" | "email" | "neighborhood" | "joined" | "role";
 type SortDir = "asc" | "desc";
 
 const COLUMNS: { key: SortCol; label: string }[] = [
   { key: "name", label: "User" },
+  { key: "email", label: "Email" },
   { key: "neighborhood", label: "Neighborhood" },
   { key: "joined", label: "Joined" },
   { key: "role", label: "Role" },
@@ -172,7 +174,10 @@ export default function AdminUsersTable({
   const filtered = useMemo(
     () =>
       users.filter((u) =>
-        matchesSearch([fullName(u), u.username ?? "", u.neighborhood ?? ""].join(" "), query)
+        matchesSearch(
+          [fullName(u), u.username ?? "", u.email ?? "", u.neighborhood ?? ""].join(" "),
+          query
+        )
       ),
     [users, query]
   );
@@ -183,6 +188,7 @@ export default function AdminUsersTable({
     return [...filtered].sort((a, b) => {
       let cmp = 0;
       if (col === "name") cmp = fullName(a).localeCompare(fullName(b));
+      else if (col === "email") cmp = (a.email ?? "").localeCompare(b.email ?? "");
       else if (col === "neighborhood") cmp = (a.neighborhood ?? "").localeCompare(b.neighborhood ?? "");
       else if (col === "joined") cmp = (a.created_at ?? "").localeCompare(b.created_at ?? "");
       else if (col === "role")
@@ -202,7 +208,7 @@ export default function AdminUsersTable({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onClear={() => setQuery("")}
-          placeholder="Search by name, username, or neighborhood…"
+          placeholder="Search by name, username, email, or neighborhood…"
           autoComplete="off"
         />
         {query.trim() && (
@@ -243,6 +249,15 @@ export default function AdminUsersTable({
         {sorted.map((u) => (
           <div key={u.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
             <UserCell user={u} />
+            {u.email && (
+              <a
+                href={`mailto:${u.email}`}
+                title={u.email}
+                className="mt-1.5 block truncate text-xs text-slate-500 hover:text-amber-600"
+              >
+                {u.email}
+              </a>
+            )}
             <div className="mt-1.5 truncate text-xs text-slate-500">
               {[u.neighborhood, `Joined ${formatDate(u.created_at)}`].filter(Boolean).join(" · ")}
             </div>
@@ -288,6 +303,19 @@ export default function AdminUsersTable({
               <tr key={u.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2.5">
                   <UserCell user={u} />
+                </td>
+                <td className="px-4 py-2.5 text-slate-500">
+                  {u.email ? (
+                    <a
+                      href={`mailto:${u.email}`}
+                      title={u.email}
+                      className="block max-w-[15rem] truncate hover:text-amber-600 hover:underline"
+                    >
+                      {u.email}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{u.neighborhood ?? "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500">{formatDate(u.created_at)}</td>
