@@ -3,6 +3,7 @@ import { fetchAllRows } from "@singjam/core";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { canManageJam } from "@/lib/jamAuthz";
 
 // The host's guest list and sales summary. Host or co-host only — this exposes
 // buyer names, emails and amounts paid.
@@ -42,16 +43,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { data: jam } = await admin.from("jams").select("host_user_id").eq("id", jamId).maybeSingle();
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
 
-  if (jam.host_user_id !== user.id) {
-    const { data: cohost } = await admin
-      .from("jam_cohosts")
-      .select("id")
-      .eq("jam_id", jamId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!cohost) {
-      return NextResponse.json({ error: "Only the host can view ticket sales" }, { status: 403 });
-    }
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  if (!(await canManageJam(admin, jamId, user.id))) {
+    return NextResponse.json({ error: "Only the host can view ticket sales" }, { status: 403 });
   }
 
   // The full guest list, not a page of it — a capped fetch would silently drop

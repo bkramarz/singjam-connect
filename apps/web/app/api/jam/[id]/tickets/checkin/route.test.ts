@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockAdminFrom } = vi.hoisted(() => ({
+const { mockGetUser, mockAdminFrom, mockCanManage } = vi.hoisted(() => ({
+  mockCanManage: vi.fn(),
   mockGetUser: vi.fn(),
   mockAdminFrom: vi.fn(),
 }));
@@ -16,6 +17,8 @@ vi.mock("@/lib/supabase/bearer", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: vi.fn(() => ({ from: mockAdminFrom })),
 }));
+
+vi.mock("@/lib/jamAuthz", () => ({ canManageJam: mockCanManage }));
 
 import { POST, DELETE } from "./route";
 
@@ -48,6 +51,11 @@ const delReq = (ticketId = TICKET) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks does not drain mockReturnValueOnce queues, and routes now
+  // consume different numbers of chains than they used to — a leftover would
+  // silently become the next test's first lookup.
+  mockAdminFrom.mockReset();
+  mockCanManage.mockResolvedValue(true);
 });
 
 describe("POST /api/jam/[id]/tickets/checkin", () => {
@@ -59,6 +67,7 @@ describe("POST /api/jam/[id]/tickets/checkin", () => {
   });
 
   it("refuses a stranger", async () => {
+    mockCanManage.mockResolvedValue(false);
     mockGetUser.mockResolvedValue({ data: { user: { id: "rando" } } });
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
@@ -72,7 +81,6 @@ describe("POST /api/jam/[id]/tickets/checkin", () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: COHOST } } });
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
-      .mockReturnValueOnce(chain({ data: { id: "ch1" } })) // co-host row
       .mockReturnValueOnce(chain({ data: { id: TICKET, checked_in_at: null } }))
       .mockReturnValueOnce(chain({ error: null }));
 
@@ -146,6 +154,7 @@ describe("DELETE /api/jam/[id]/tickets/checkin", () => {
   });
 
   it("refuses a stranger", async () => {
+    mockCanManage.mockResolvedValue(false);
     mockGetUser.mockResolvedValue({ data: { user: { id: "rando" } } });
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))

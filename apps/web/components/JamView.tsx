@@ -38,6 +38,7 @@ export type JamViewData = {
   isHost: boolean;
   isCoHost: boolean;
   hasFullAccess: boolean;
+  canManage: boolean;
   showRsvp: boolean;
   canInvite: boolean;
   invitesEnabled: boolean;
@@ -64,6 +65,7 @@ export default function JamView({
     isOfficial,
     isHost,
     isCoHost,
+    canManage,
     showRsvp,
     canInvite,
     invitesEnabled,
@@ -73,7 +75,6 @@ export default function JamView({
   const [rsvpStatus, setRsvpStatus] = useState(data.rsvpStatus);
   const [hasFullAccess, setHasFullAccess] = useState(data.hasFullAccess);
   const [inviteList, setInviteList] = useState(data.inviteList);
-  const canManage = isHost || isCoHost;
 
   return (
     <div className="space-y-4">
@@ -91,7 +92,7 @@ export default function JamView({
                 capacity={jam.capacity}
                 onStatusChange={(newStatus) => {
                   setRsvpStatus(newStatus);
-                  setHasFullAccess(isOfficial || newStatus === "attending" || isHost || isCoHost);
+                  setHasFullAccess(isOfficial || newStatus === "attending" || canManage);
                 }}
               />
             )}

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockAdminFrom, mockFetchAllRows } = vi.hoisted(() => ({
+const { mockGetUser, mockAdminFrom, mockFetchAllRows, mockCanManage } = vi.hoisted(() => ({
+  mockCanManage: vi.fn(),
   mockGetUser: vi.fn(),
   mockAdminFrom: vi.fn(),
   mockFetchAllRows: vi.fn(),
@@ -16,6 +17,8 @@ vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: vi.fn(() => ({ from: mockAdminFrom })),
 }));
 vi.mock("@singjam/core", () => ({ fetchAllRows: mockFetchAllRows }));
+
+vi.mock("@/lib/jamAuthz", () => ({ canManageJam: mockCanManage }));
 
 import { GET } from "./route";
 
@@ -59,6 +62,11 @@ function ticket(over: any = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks does not drain mockReturnValueOnce queues, and routes now
+  // consume different numbers of chains than they used to — a leftover would
+  // silently become the next test's first lookup.
+  mockAdminFrom.mockReset();
+  mockCanManage.mockResolvedValue(true);
   mockFetchAllRows.mockResolvedValue([]);
 });
 
@@ -71,10 +79,10 @@ describe("GET /api/jam/[id]/tickets/orders", () => {
   });
 
   it("refuses a stranger — buyer emails must not leak", async () => {
+    mockCanManage.mockResolvedValue(false);
     mockGetUser.mockResolvedValue({ data: { user: { id: "rando" } } });
     mockAdminFrom
-      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
-      .mockReturnValueOnce(chain({ data: null })); // not a co-host
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }));
 
     const res = await GET(req(), params);
     expect(res.status).toBe(403);

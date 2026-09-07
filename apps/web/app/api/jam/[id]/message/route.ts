@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { canManageJam } from "@/lib/jamAuthz";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamHostMessageHtml } from "@/emails/jam-host-message";
 import { isJamCohost } from "@/lib/jamCohosts";
@@ -33,7 +34,9 @@ export async function POST(
     .single();
 
   if (!jam) return NextResponse.json({ error: "Jam not found" }, { status: 404 });
-  if (jam.host_user_id !== user.id && !(await isJamCohost(admin, jamId, user.id))) {
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  if (!(await canManageJam(admin, jamId, user.id))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

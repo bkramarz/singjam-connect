@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { canManageJam } from "@/lib/jamAuthz";
 import TicketTierManager from "@/components/TicketTierManager";
 
 // Ticket management lives per-event rather than under /admin: hosts own their
@@ -24,19 +25,11 @@ export default async function ManageTicketsPage({ params }: { params: Promise<{ 
 
   if (!jam) notFound();
 
-  let allowed = jam.host_user_id === user.id;
-  if (!allowed) {
-    const { data: cohost } = await admin
-      .from("jam_cohosts")
-      .select("id")
-      .eq("jam_id", id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    allowed = !!cohost;
-  }
   // notFound rather than a 403 page — don't confirm the event exists to someone
   // who has no business managing it.
-  if (!allowed) notFound();
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  if (!(await canManageJam(admin, id, user.id))) notFound();
 
   return (
     <div className="space-y-4">

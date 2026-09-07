@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockBearerGetUser, mockAdminFrom, mockRpc, mockServerFrom } = vi.hoisted(() => ({
+const { mockGetUser, mockBearerGetUser, mockAdminFrom, mockRpc, mockServerFrom, mockCanManage } = vi.hoisted(() => ({
+  mockCanManage: vi.fn(),
   mockGetUser: vi.fn(),
   mockBearerGetUser: vi.fn(),
   mockAdminFrom: vi.fn(),
@@ -17,6 +18,8 @@ vi.mock("@/lib/supabase/bearer", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: vi.fn(() => ({ from: mockAdminFrom, rpc: mockRpc })),
 }));
+
+vi.mock("@/lib/jamAuthz", () => ({ canManageJam: mockCanManage }));
 
 import { GET, POST, PATCH, DELETE } from "./route";
 
@@ -49,6 +52,11 @@ function req(method: string, body?: any, url = `http://localhost/api/jam/${JAM_I
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks does not drain mockReturnValueOnce queues, and routes now
+  // consume different numbers of chains than they used to — a leftover would
+  // silently become the next test's first lookup.
+  mockAdminFrom.mockReset();
+  mockCanManage.mockResolvedValue(true);
 });
 
 describe("GET /api/jam/[id]/tickets/types", () => {
@@ -124,10 +132,10 @@ describe("POST /api/jam/[id]/tickets/types", () => {
   });
 
   it("refuses a signed-in stranger", async () => {
+    mockCanManage.mockResolvedValue(false);
     mockGetUser.mockResolvedValue({ data: { user: { id: STRANGER } } });
     mockAdminFrom
-      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } })) // jam
-      .mockReturnValueOnce(chain({ data: null })); // no cohost row
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } })); // jam
 
     const res = await POST(req("POST", { name: "General", price_cents: 1500 }), params);
     expect(res.status).toBe(403);
@@ -137,7 +145,6 @@ describe("POST /api/jam/[id]/tickets/types", () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: COHOST } } });
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
-      .mockReturnValueOnce(chain({ data: { id: "ch-1" } })) // cohost row exists
       .mockReturnValueOnce(chain({ data: { id: TYPE_ID } })); // insert
 
     const res = await POST(req("POST", { name: "General", price_cents: 1500 }), params);

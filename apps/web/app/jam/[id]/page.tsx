@@ -3,6 +3,7 @@ import { cache } from "react";
 import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { claimJamInvite } from "@/lib/claimJamInvite";
+import { canManageJam } from "@/lib/jamAuthz";
 import { formatJamDate } from "@/lib/formatJamTime";
 import JamView, { type InviteEntry } from "@/components/JamView";
 import { type JamCardData } from "@/components/JamCard";
@@ -102,14 +103,18 @@ export default async function JamPage({
   const isAttending = rsvpStatus === "attending";
   const isHost = jam.host_user_id === userId;
   const isCoHost = !!cohostRes.data;
-  const hasFullAccess = isOfficial || isAttending || isHost || isCoHost;
+  // Distinct from isHost: someone who can host official events may run any of
+  // them without being this one's host. isHost stays literal — it drives the
+  // co-host controls and whether the RSVP button is offered.
+  const canManage = userId ? await canManageJam(supabaseAdmin(), id, userId) : false;
+  const hasFullAccess = isOfficial || isAttending || canManage;
   const showRsvp = !isOfficial && !!userId && !pendingInvite && !isHost;
-  const canInvite = !!userId && !isOfficial && (isHost || isCoHost || (isAttending && jam.guests_can_invite));
+  const canInvite = !!userId && !isOfficial && (canManage || (isAttending && jam.guests_can_invite));
 
   let inviteList: InviteEntry[] = [];
   let alreadyInvitedIds: string[] = [];
 
-  if (isHost || isCoHost) {
+  if (canManage) {
     const { data: rawInvites } = await supabase
       .from("jam_invites")
       .select("id, invited_user_id, invitee_email, status")
@@ -179,6 +184,7 @@ export default async function JamPage({
         isHost,
         isCoHost,
         hasFullAccess,
+        canManage,
         showRsvp,
         canInvite,
         invitesEnabled,

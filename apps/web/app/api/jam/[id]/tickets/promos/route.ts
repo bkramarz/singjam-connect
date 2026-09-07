@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { canManageJam } from "@/lib/jamAuthz";
 import { stripe } from "@/lib/stripe";
 
 // Host management of an event's promotion codes. Creating one makes a Stripe
@@ -31,19 +32,13 @@ async function authorize(req: Request, jamId: string): Promise<Auth> {
   if (!jam) {
     return { ok: false, response: NextResponse.json({ error: "Jam not found" }, { status: 404 }) };
   }
-  if (jam.host_user_id !== user.id) {
-    const { data: cohost } = await admin
-      .from("jam_cohosts")
-      .select("id")
-      .eq("jam_id", jamId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!cohost) {
-      return {
-        ok: false,
-        response: NextResponse.json({ error: "Only the host can manage promo codes" }, { status: 403 }),
-      };
-    }
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  if (!(await canManageJam(admin, jamId, user.id))) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Only the host can manage promo codes" }, { status: 403 }),
+    };
   }
   return { ok: true, user, admin };
 }

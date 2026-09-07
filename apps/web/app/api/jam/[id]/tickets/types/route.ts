@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { canManageJam } from "@/lib/jamAuthz";
 
 // Ticket tiers for a jam. Reads are open to anyone who can see the jam; writes
 // are host or co-host only. Authorization runs here with the admin client rather
@@ -19,18 +20,14 @@ async function getUser(req: Request) {
 
 async function canManage(jamId: string, userId: string) {
   const admin = supabaseAdmin();
-  const { data: jam } = await admin.from("jams").select("host_user_id").eq("id", jamId).maybeSingle();
+  const { data: jam } = await admin.from("jams").select("id").eq("id", jamId).maybeSingle();
   if (!jam) return { ok: false as const, status: 404 };
-  if (jam.host_user_id === userId) return { ok: true as const };
 
-  const { data: cohost } = await admin
-    .from("jam_cohosts")
-    .select("id")
-    .eq("jam_id", jamId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  return cohost ? { ok: true as const } : { ok: false as const, status: 403 };
+  // Official events belong to the org, so anyone who can host one can run any
+  // of them — not only whoever created it. See lib/jamAuthz.ts.
+  return (await canManageJam(admin, jamId, userId))
+    ? { ok: true as const }
+    : { ok: false as const, status: 403 };
 }
 
 // Availability uses the same function the reservation path uses, so what a buyer

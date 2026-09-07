@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockEmailSend, mockFrom, mockGetUserById } = vi.hoisted(() => ({
+const { mockGetUser, mockEmailSend, mockFrom, mockGetUserById, mockCanManage } = vi.hoisted(() => ({
+  mockCanManage: vi.fn(),
   mockGetUser: vi.fn(),
   mockEmailSend: vi.fn().mockResolvedValue({ id: "email-id" }),
   mockFrom: vi.fn(),
@@ -25,6 +26,8 @@ vi.mock("@supabase/supabase-js", () => ({
   })),
 }));
 
+vi.mock("@/lib/jamAuthz", () => ({ canManageJam: mockCanManage }));
+
 import { POST } from "./route";
 
 function makeRequest(body: object) {
@@ -39,6 +42,7 @@ const params = Promise.resolve({ id: "test-jam-id" });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCanManage.mockResolvedValue(true);
 });
 
 describe("POST /api/jam/[id]/message", () => {
@@ -50,6 +54,7 @@ describe("POST /api/jam/[id]/message", () => {
   });
 
   it("returns 403 when the authenticated user is not the host or a co-host", async () => {
+    mockCanManage.mockResolvedValue(false);
     mockGetUser.mockResolvedValue({ data: { user: { id: "visitor-id" } } });
     mockFrom.mockImplementation((table: string) => {
       if (table === "jams") return jamRow("host-id");
