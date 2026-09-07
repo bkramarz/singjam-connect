@@ -64,13 +64,23 @@ the ticket:
 | | Read the set | Add songs | On the guest list |
 |---|---|---|---|
 | Nobody in particular | yes | no | — |
-| Guest buyer (no account) | yes | no | no — until they sign up |
+| Guest buyer (no account) | yes | no | **yes** |
 | Member buyer | yes | **yes** | **yes** |
 | Host / co-host | yes | yes | yes |
 
+Everyone who is coming is listed, account or not — a guest appears under their
+purchase name, with `+N` if one order covered several people. An account is what
+earns you set-list editing (and a faster checkout next time), not a place on the
+list.
+
 A guest who later signs up **with the address they bought under** has their order
-attached automatically, which promotes them to both columns. The seeded event has
-a linked set list with 3 songs so there is something to be let into.
+attached automatically, which moves them from the guest rows into a real profile
+row and unlocks the set. The seeded event has a linked set list with 3 songs so
+there is something to be let into.
+
+Guest names come from `GET /api/jam/<id>/attendees/guests`, which returns names
+only — the door list with emails and codes stays host-gated at
+`/api/jam/<id>/tickets/orders`.
 
 ## Four passes worth doing
 
