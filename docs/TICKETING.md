@@ -397,6 +397,17 @@ and `payment_method_domains` on this account is empty — so three of the four
 methods the session offers likely never render. Registering singjam.org is one
 Dashboard action and reaches far more people than PayPal would.
 
+### Venmo — not offered by Stripe at all (checked 2026-09-07)
+
+Venmo is absent from the 43 payment methods in the account's payment method
+configuration. It is PayPal-owned and sold through PayPal's own Braintree stack,
+so unlike PayPal this isn't a regional restriction that could lift — Stripe
+doesn't carry it.
+
+**Cash App Pay is the working equivalent** and is already enabled and resolving in
+USD sessions: same pay-from-your-phone behavior, same audience. Between card,
+Apple Pay, Google Pay, Cash App Pay and Link, a US community audience is covered.
+
 ### Payment method domains — done in test, live is a Dashboard step
 
 Elements requires a registered payment method domain before Apple Pay, Google
