@@ -371,3 +371,28 @@ Action items for Ben — none of this is discoverable from the codebase:
       opening the web purchase page in a browser
 - [x] ~~Decide (A) vs (B) in §4~~ — (A) single account, 2026-08-05
 - [x] ~~Approve the Stripe UI dependency~~ — approved, 2026-08-05
+
+## PayPal — not available on this account (checked 2026-09-07)
+
+Stripe's own PayPal payment method is limited to **European business locations**
+(AT BE BG CH CY CZ DE DK EE ES FI FR GB GR HR IE IT LI LT LU LV MT NL NO PL PT RO
+SE SI SK). This account is `country: US`, `default_currency: usd`,
+`business_type: non_profit` — so it does not qualify, and no Dashboard toggle
+changes that.
+
+The documented US route is the **PayPal custom payment method**: a gated preview
+that needs an access request, a Stripe-supplied adapter hosted in our own
+environment, our own PayPal business account, and **Stripe fees on top of
+PayPal's own**. For $8–50 community tickets that is a poor trade — a second
+integration and a second set of fees to reach people who almost all also have a
+card or a wallet.
+
+Bolting a standalone PayPal button on outside Stripe would also mean a second
+fulfilment path: our tickets, holds, refunds and check-in all hang off the Stripe
+webhook, so PayPal orders would need their own version of each. Not recommended.
+
+**The real conversion gap is domain registration.** Elements requires a
+registered payment method domain for Apple Pay, Google Pay, Link and Amazon Pay,
+and `payment_method_domains` on this account is empty — so three of the four
+methods the session offers likely never render. Registering singjam.org is one
+Dashboard action and reaches far more people than PayPal would.

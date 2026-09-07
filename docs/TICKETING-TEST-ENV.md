@@ -132,14 +132,29 @@ aren't readable anonymously at all.
 It does mean you're reviewing an event dated April. That's the price of not
 putting a test event on the live site.
 
-## Known cosmetic issue
+## Payment methods
 
-Stripe's Payment Element accordion lists **Klarna and Bank**, even though the
-session correctly excludes buy-now-pay-later — the session's
-`payment_method_types` is `card, link, cashapp, amazon_pay`, verified directly.
-So the exclusion works where it counts, but the Element seems to advertise more
-than the session permits. Worth an eyeball; if a Klarna attempt actually fails,
-that needs fixing before launch.
+Verified 2026-09-07 by creating a session with the route's exact parameters and
+reading back what Stripe resolved:
+
+```
+with exclusions   : card, link, cashapp, amazon_pay
+without exclusions: card, klarna, link, cashapp, amazon_pay
+```
+
+So the BNPL exclusion works — Klarna is genuinely gone. An earlier note here
+claimed the Element still advertised Klarna and Bank despite the exclusion; that
+was wrong, or was read off a session created before the exclusion landed.
+
+**But no payment method domain is registered** (`payment_method_domains` is
+empty), and Elements *requires* registration for Apple Pay, Google Pay, Link and
+Amazon Pay. So of the four methods the session offers, three probably can't
+render — which is why checkout collapses to a lone "Card" accordion row. That,
+not PayPal, is the conversion fix. Register at
+dashboard.stripe.com/settings/payment_method_domains.
+
+PayPal is not available: PayPal-through-Stripe is limited to European business
+locations and this account is US. See `docs/TICKETING.md`.
 
 ## Running it again
 
