@@ -170,6 +170,12 @@ export default function TicketPurchasePanel({
         .then((j) => setTypes(j.ticket_types ?? []));
       return;
     }
+    // A fully-discounted order is already fulfilled server-side — there is no
+    // payment step to show, so go straight to the confirmation.
+    if (json.free) {
+      window.location.href = `/jam/${jamId}/tickets/complete?order_id=${json.order_id}`;
+      return;
+    }
     setClientSecret(json.client_secret);
   }
 

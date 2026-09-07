@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockBearerGetUser, mockAdminFrom, mockRpc, mockSessionsCreate } =
-  vi.hoisted(() => ({
-    mockGetUser: vi.fn(),
-    mockBearerGetUser: vi.fn(),
-    mockAdminFrom: vi.fn(),
-    mockRpc: vi.fn(),
-    mockSessionsCreate: vi.fn(),
-  }));
+const {
+  mockGetUser, mockBearerGetUser, mockAdminFrom, mockRpc, mockSessionsCreate,
+  mockResolvePromo, mockFulfil,
+} = vi.hoisted(() => ({
+  mockGetUser: vi.fn(),
+  mockBearerGetUser: vi.fn(),
+  mockAdminFrom: vi.fn(),
+  mockRpc: vi.fn(),
+  mockSessionsCreate: vi.fn(),
+  mockResolvePromo: vi.fn(),
+  mockFulfil: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   supabaseServer: vi.fn().mockResolvedValue({ auth: { getUser: mockGetUser } }),
@@ -27,6 +31,9 @@ vi.mock("@/lib/stripe", () => ({
   HOLD_MINUTES: 35,
   EXCLUDED_PAYMENT_METHODS: ["klarna", "affirm", "afterpay_clearpay"],
 }));
+
+vi.mock("@/lib/promoCode", () => ({ resolvePromoCode: mockResolvePromo }));
+vi.mock("@/lib/ticketFulfilment", () => ({ fulfilPendingOrder: mockFulfil }));
 
 import { POST } from "./route";
 
@@ -61,7 +68,7 @@ const ONE_TICKET = { items: [{ ticket_type_id: TYPE_ID, quantity: 1 }] };
 // ticket_promo_codes lookup where the route actually makes it — between the
 // tickets select and the final ticket_orders update — because these are
 // mockReturnValueOnce queues and order matters.
-function happyPathDb(opts: { promo?: { stripe_promotion_code_id: string } | null } = {}) {
+function happyPathDb() {
   mockAdminFrom
     .mockReturnValueOnce(chain({ data: { id: JAM_ID, name: "Winter Sing", visibility: "official" } }))
     .mockReturnValueOnce(chain({ data: { id: ORDER_ID, amount_cents: 3000, currency: "usd" } }))
@@ -73,17 +80,23 @@ function happyPathDb(opts: { promo?: { stripe_promotion_code_id: string } | null
         ],
       })
     );
-  if ("promo" in opts) mockAdminFrom.mockReturnValueOnce(chain({ data: opts.promo }));
   mockAdminFrom.mockReturnValueOnce(chain({ error: null })); // update or releaseHold
   mockRpc.mockResolvedValue({ data: ORDER_ID, error: null });
 }
 
-// Index of the trailing ticket_orders chain, which shifts when a promo lookup
-// is in play.
-const TRAILING = (withPromo: boolean) => (withPromo ? 4 : 3);
+// Index of the trailing ticket_orders chain. Promo resolution no longer touches
+// the admin client — it lives behind resolvePromoCode — so this is fixed now.
+const TRAILING = 3;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks does NOT drain mockReturnValueOnce queues, and paths through
+  // this route consume different numbers of chains — the free-ticket path
+  // returns before the trailing update. Without a reset, one test's unused
+  // chain becomes the next test's "jam" lookup and it 404s for no visible
+  // reason.
+  mockAdminFrom.mockReset();
+  mockRpc.mockReset();
 });
 
 describe("POST /api/jam/[id]/tickets/checkout", () => {
@@ -289,7 +302,11 @@ describe("POST /api/jam/[id]/tickets/checkout", () => {
 
   it("applies a promo code registered for this event", async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
-    happyPathDb({ promo: { stripe_promotion_code_id: "promo_123" } });
+    happyPathDb();
+    mockResolvePromo.mockResolvedValue({
+      valid: true, code: "EARLYBIRD", label: "10% off",
+      promotionCodeId: "promo_123", discountCents: 300, totalCents: 2700,
+    });
     mockSessionsCreate.mockResolvedValue({ id: "cs_1", client_secret: "cs_secret" });
 
     const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "EARLYBIRD" }), params);
@@ -302,14 +319,15 @@ describe("POST /api/jam/[id]/tickets/checkout", () => {
     // Codes are account-wide in Stripe, so this is what stops one event's
     // discount being redeemed on another event's checkout.
     mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
-    happyPathDb({ promo: null }); // no row for this jam
+    happyPathDb();
+    mockResolvePromo.mockResolvedValue({ valid: false, reason: "That code isn't valid for this event" });
 
     const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "OTHEREVENT" }), params);
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/this event/i);
     expect(mockSessionsCreate).not.toHaveBeenCalled();
     // Otherwise the tickets sit reserved for the full hold window for nothing.
-    const releaseChain = mockAdminFrom.mock.results[TRAILING(true)].value;
+    const releaseChain = mockAdminFrom.mock.results[TRAILING].value;
     expect(releaseChain.update).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
   });
 
@@ -319,7 +337,46 @@ describe("POST /api/jam/[id]/tickets/checkout", () => {
     mockSessionsCreate.mockResolvedValue({ id: "cs_1", client_secret: "cs_secret" });
 
     await POST(makeReq(ONE_TICKET), params);
+    expect(mockResolvePromo).not.toHaveBeenCalled();
     expect(mockSessionsCreate.mock.calls[0][0]).not.toHaveProperty("discounts");
+  });
+
+  it("skips Stripe entirely when a code takes the total to zero", async () => {
+    // A comped ticket isn't a payment. Creating a $0 session would still render
+    // a card form and ask the buyer to pay nothing.
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    happyPathDb();
+    mockResolvePromo.mockResolvedValue({
+      valid: true, code: "COMP100", label: "100% off",
+      promotionCodeId: "promo_free", discountCents: 3000, totalCents: 0,
+    });
+    mockFulfil.mockResolvedValue({ id: ORDER_ID });
+
+    const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "COMP100" }), params);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json).toMatchObject({ free: true, order_id: ORDER_ID, amount_cents: 0 });
+    expect(json.client_secret).toBeNull();
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
+    // Fulfilled through the same path a charged order takes, recording $0.
+    expect(mockFulfil).toHaveBeenCalledWith(expect.anything(), ORDER_ID, { amountCents: 0 });
+  });
+
+  it("releases the stock if a free order can no longer be fulfilled", async () => {
+    // fulfilPendingOrder returns null when the order is not pending any more —
+    // expired, or already claimed by a racing request.
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    happyPathDb();
+    mockResolvePromo.mockResolvedValue({
+      valid: true, code: "COMP100", label: "100% off",
+      promotionCodeId: "promo_free", discountCents: 3000, totalCents: 0,
+    });
+    mockFulfil.mockResolvedValue(null);
+
+    const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "COMP100" }), params);
+    expect(res.status).toBe(409);
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   it("releases the hold when Stripe rejects the session", async () => {

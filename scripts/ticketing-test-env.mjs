@@ -31,6 +31,7 @@ const stripe = new Stripe(env.STRIPE_RESTRICTED_KEY);
 
 const MARK = "[TEST ENV]";
 const EVENT_NAME = `${MARK} Ticketing review event`;
+const FREE_CODE = "SINGJAMFREE";
 const PROMO_CODE = "SINGJAMTEST";
 
 const ACCOUNTS = [
@@ -151,6 +152,36 @@ async function seed() {
     console.log(`  registered ${PROMO_CODE} against the test event`);
   }
 
+  // 4b. A 100%-off code, so the comped-ticket path can be exercised. A total of
+  // zero skips Stripe entirely and is fulfilled server-side, so this is the only
+  // way to reach that branch by hand.
+  const freeFound = await stripe.promotionCodes.list({ code: FREE_CODE, active: true, limit: 1 });
+  let freePromoId = freeFound.data[0]?.id ?? null;
+  let freeCouponId = freeFound.data[0]?.promotion?.coupon ?? null;
+  if (!freePromoId) {
+    const coupon = await stripe.coupons.create({
+      percent_off: 100, duration: "once", name: `${MARK} free`,
+    });
+    const promo = await stripe.promotionCodes.create({
+      promotion: { type: "coupon", coupon: coupon.id },
+      code: FREE_CODE,
+    });
+    freePromoId = promo.id; freeCouponId = coupon.id;
+    console.log(`  promo code created: ${FREE_CODE} (100% off)`);
+  } else {
+    console.log(`  promo code exists: ${FREE_CODE}`);
+  }
+
+  const { data: freeRow } = await db.from("ticket_promo_codes")
+    .select("id").eq("jam_id", jam.id).ilike("code", FREE_CODE).maybeSingle();
+  if (!freeRow) {
+    await db.from("ticket_promo_codes").insert({
+      jam_id: jam.id, code: FREE_CODE, stripe_promotion_code_id: freePromoId,
+      stripe_coupon_id: freeCouponId, label: "100% off", created_by: users.host.id,
+    });
+    console.log(`  registered ${FREE_CODE} against the test event`);
+  }
+
   // 5. Set list linked to the event
   // Without one there is nothing for a ticket to unlock: buying a ticket is
   // what makes someone a collaborator on the jam's set (lib/jamAttendance.ts),
@@ -182,7 +213,7 @@ async function seed() {
   console.log(`Host   ${ACCOUNTS[0].email}`);
   console.log(`Member ${ACCOUNTS[1].email}`);
   console.log(`Password for both: ${PASSWORD}\n`);
-  console.log(`Promo code: ${PROMO_CODE} (25% off)`);
+  console.log(`Promo code: ${PROMO_CODE} (25% off) · ${FREE_CODE} (100% off — skips payment)`);
   console.log(`Test card:  4242 4242 4242 4242, any future expiry, any CVC`);
   console.log(`${"─".repeat(64)}`);
 }
@@ -215,6 +246,14 @@ async function teardown() {
   }
 
   await db.from("ticket_promo_codes").delete().ilike("code", PROMO_CODE);
+  await db.from("ticket_promo_codes").delete().ilike("code", FREE_CODE);
+  const freeFound = await stripe.promotionCodes.list({ code: FREE_CODE, active: true, limit: 1 });
+  for (const p of freeFound.data) {
+    await stripe.promotionCodes.update(p.id, { active: false });
+    const couponId = p.promotion?.coupon ?? p.coupon?.id ?? p.coupon;
+    if (couponId) { try { await stripe.coupons.del(couponId); } catch {} }
+    console.log(`  deactivated promo code ${FREE_CODE}`);
+  }
   const found = await stripe.promotionCodes.list({ code: PROMO_CODE, active: true, limit: 1 });
   for (const p of found.data) {
     await stripe.promotionCodes.update(p.id, { active: false });

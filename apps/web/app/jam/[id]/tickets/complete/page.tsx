@@ -14,10 +14,10 @@ export default async function TicketsCompletePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ session_id?: string }>;
+  searchParams: Promise<{ session_id?: string; order_id?: string }>;
 }) {
   const { id: jamId } = await params;
-  const { session_id } = await searchParams;
+  const { session_id, order_id } = await searchParams;
 
   const supabase = await supabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
@@ -25,12 +25,15 @@ export default async function TicketsCompletePage({
   const admin = supabaseAdmin();
   const { data: jam } = await admin.from("jams").select("name").eq("id", jamId).maybeSingle();
 
+  // A charged order is found by its Stripe session; a comped one never had a
+  // session, so it comes back by order id instead. Both identifiers are v4
+  // uuids or Stripe's own opaque ids — unguessable, which is what the guest
+  // access rule below leans on.
+  const columns = "id, status, amount_cents, currency, buyer_user_id, buyer_email";
   const { data: order } = session_id
-    ? await admin
-        .from("ticket_orders")
-        .select("id, status, amount_cents, currency, buyer_user_id, buyer_email")
-        .eq("stripe_checkout_session_id", session_id)
-        .maybeSingle()
+    ? await admin.from("ticket_orders").select(columns).eq("stripe_checkout_session_id", session_id).maybeSingle()
+    : order_id
+    ? await admin.from("ticket_orders").select(columns).eq("id", order_id).maybeSingle()
     : { data: null };
 
   // A member's order is shown only to that member — a session id in the URL must

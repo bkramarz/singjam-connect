@@ -53,6 +53,7 @@ The host account is deliberately **not an admin**. It's a plain member with
 
 - Card `4242 4242 4242 4242`, any future expiry, any CVC, any postcode
 - Promo code **`SINGJAMTEST`** — 25% off
+- Promo code **`SINGJAMFREE`** — 100% off, and skips the payment step entirely
 - Everything is Stripe **test mode**. No real money moves.
 
 ## What a ticket now buys
@@ -82,7 +83,7 @@ Guest names come from `GET /api/jam/<id>/attendees/guests`, which returns names
 only — the door list with emails and codes stays host-gated at
 `/api/jam/<id>/tickets/orders`.
 
-## Four passes worth doing
+## Five passes worth doing
 
 **As a guest** (private window, don't sign in)
 Pick tickets → name and email appear inline, no sign-in wall → optionally
@@ -115,6 +116,14 @@ This path was rehearsed end to end on 2026-09-07 against the real database and
 the real `/api/auth/complete` route — order claimed, ticket holder set, RSVP
 `attending`, collaborator role `editor` — using a disposable alias that was then
 deleted.
+
+**A free ticket** (any window, guest or member)
+Pick a ticket → `SINGJAMFREE` → the total goes to $0.00 → **Buy should take you
+straight to the confirmation, with no card form at all.** A zero total never
+reaches Stripe: the order is fulfilled server-side through the same code the
+webhook uses, so the ticket, the email and the guest-list entry all still happen.
+Verified 2026-09-07 against the running stack — `stripe_checkout_session_id` came
+back `null` on a paid, $0, ticketed order.
 
 **As the host** (sign in as the host account)
 Open the manage page. Add and delete tiers; try deleting one that has sales (it

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { resolvePromoCode } from "@/lib/promoCode";
+import { fulfilPendingOrder } from "@/lib/ticketFulfilment";
 import {
   stripe,
   SITE_URL,
@@ -126,22 +128,43 @@ export async function POST(
   // built-in code field, so the code is resolved here and attached to the
   // session; allow_promotion_codes only applies to Stripe-rendered checkout.
   let discounts: { promotion_code: string }[] | undefined;
+  let totalCents = order!.amount_cents;
   if (promoCode) {
-    // Resolved through ticket_promo_codes, scoped to this jam. A Stripe lookup by
-    // code name would honour any active code on the account, letting a discount
-    // made for one event be redeemed on every other event.
-    const { data: registered } = await admin
-      .from("ticket_promo_codes")
-      .select("stripe_promotion_code_id")
-      .eq("jam_id", jamId)
-      .ilike("code", promoCode)
-      .maybeSingle();
+    // Shared with the preview so the two can't disagree — and because the free
+    // path below never reaches Stripe, this is the only thing enforcing expiry
+    // and redemption limits on a fully-discounted order.
+    const resolved = await resolvePromoCode(admin, jamId, promoCode, order!.amount_cents, order!.currency);
 
-    if (!registered) {
+    if ("error" in resolved) {
       await releaseHold(admin, order!.id);
-      return NextResponse.json({ error: "That promo code isn't valid for this event" }, { status: 400 });
+      return NextResponse.json({ error: "Could not check that code" }, { status: 502 });
     }
-    discounts = [{ promotion_code: registered.stripe_promotion_code_id }];
+    if (!resolved.valid) {
+      await releaseHold(admin, order!.id);
+      return NextResponse.json({ error: resolved.reason }, { status: 400 });
+    }
+    discounts = [{ promotion_code: resolved.promotionCodeId }];
+    totalCents = resolved.totalCents;
+  }
+
+  // Nothing to charge, so don't ask. Stripe would happily make a zero-amount
+  // session, but the Payment Element still renders a card form against it and
+  // the buyer is left entering details for a $0.00 "payment". A comped ticket
+  // isn't a payment, so it skips the processor entirely and is fulfilled here,
+  // through the same code the webhook uses for a charged order.
+  if (totalCents === 0) {
+    const paid = await fulfilPendingOrder(admin, order!.id, { amountCents: 0 });
+    if (!paid) {
+      await releaseHold(admin, order!.id);
+      return NextResponse.json({ error: "Could not complete that order" }, { status: 409 });
+    }
+    return NextResponse.json({
+      order_id: order!.id,
+      free: true,
+      client_secret: null,
+      amount_cents: 0,
+      currency: order!.currency,
+    });
   }
 
   try {
