@@ -22,12 +22,14 @@ export type AdminUser = {
 type SortCol = "name" | "email" | "neighborhood" | "joined" | "role";
 type SortDir = "asc" | "desc";
 
-const COLUMNS: { key: SortCol; label: string }[] = [
-  { key: "name", label: "User" },
-  { key: "email", label: "Email" },
-  { key: "neighborhood", label: "Neighborhood" },
-  { key: "joined", label: "Joined" },
-  { key: "role", label: "Role" },
+// The page container is max-w-4xl, so the desktop table is laid out on fixed
+// percentages rather than letting long emails push the role picker off the edge.
+const COLUMNS: { key: SortCol; label: string; width: string }[] = [
+  { key: "name", label: "User", width: "30%" },
+  { key: "email", label: "Email", width: "27%" },
+  { key: "neighborhood", label: "Neighborhood", width: "16%" },
+  { key: "joined", label: "Joined", width: "12%" },
+  { key: "role", label: "Role", width: "15%" },
 ];
 
 function fullName(u: AdminUser) {
@@ -98,7 +100,7 @@ function RoleSelect({
         disabled={isSelf || saving}
         aria-label={`Role for ${fullName(user)}`}
         title={isSelf ? "You can't change your own role — ask another admin." : undefined}
-        className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 sm:w-auto"
+        className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
       >
         {/* A role outside the grantable set (e.g. a retired enum label) still needs an option to show */}
         {!isUserRole(role) && <option value={role}>{roleLabel(role)}</option>}
@@ -280,7 +282,12 @@ export default function AdminUsersTable({
 
       {/* Desktop table */}
       <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[44rem] table-fixed text-sm">
+          <colgroup>
+            {COLUMNS.map((col) => (
+              <col key={col.key} style={{ width: col.width }} />
+            ))}
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-medium text-slate-500">
               {COLUMNS.map((col) => (
@@ -309,7 +316,7 @@ export default function AdminUsersTable({
                     <a
                       href={`mailto:${u.email}`}
                       title={u.email}
-                      className="block max-w-[15rem] truncate hover:text-amber-600 hover:underline"
+                      className="block truncate hover:text-amber-600 hover:underline"
                     >
                       {u.email}
                     </a>
@@ -318,7 +325,7 @@ export default function AdminUsersTable({
                   )}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{u.neighborhood ?? "—"}</td>
-                <td className="px-4 py-2.5 text-slate-500">{formatDate(u.created_at)}</td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">{formatDate(u.created_at)}</td>
                 <td className="px-4 py-2.5">
                   <RoleSelect
                     user={u}
