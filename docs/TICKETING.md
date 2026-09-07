@@ -396,3 +396,32 @@ registered payment method domain for Apple Pay, Google Pay, Link and Amazon Pay,
 and `payment_method_domains` on this account is empty — so three of the four
 methods the session offers likely never render. Registering singjam.org is one
 Dashboard action and reaches far more people than PayPal would.
+
+### Payment method domains — done in test, live is a Dashboard step
+
+Elements requires a registered payment method domain before Apple Pay, Google
+Pay, Link or Amazon Pay will render. Nothing was registered, which is why
+checkout showed a lone "Card" row.
+
+Registered **test mode** 2026-09-07 via the API (`rk_test` can only reach test
+mode), both returning apple_pay / google_pay / link / amazon_pay `active`:
+
+| domain | id | livemode |
+|---|---|---|
+| singjam.org | pmd_1UD9PeL0Q3ZMbggUl4xxLoMo | false |
+| www.singjam.org | pmd_1UD9PeL0Q3ZMbggUWVOBPYcZ | false |
+
+**Live mode still needs doing** at dashboard.stripe.com/settings/payment_method_domains
+— it needs a live key, which is deliberately not in `.env.local`.
+
+Two things to watch when doing it:
+
+- `https://singjam.org/.well-known/apple-developer-merchantid-domain-association`
+  currently 404s. Test mode doesn't check it; live mode may. If the Dashboard
+  reports Apple Pay as failed and offers a file, drop it at
+  `apps/web/public/.well-known/` (no `public/` directory exists yet — it needs
+  creating) and re-verify.
+- **Wallets will not appear on `localhost` no matter what.** Domain registration
+  can't cover it, so local checkout will keep showing only Card. That is expected,
+  not a regression — judge the wallet row on a deploy preview or production, or
+  through an HTTPS tunnel registered as its own domain.
