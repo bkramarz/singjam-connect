@@ -25,6 +25,15 @@ export default async function TicketsCompletePage({
   const admin = supabaseAdmin();
   const { data: jam } = await admin.from("jams").select("name").eq("id", jamId).maybeSingle();
 
+  // The set is the reason to come back before the day, so link it directly
+  // rather than making people find it on the event page. Readable by anyone,
+  // so guests get the link too — adding to it is what needs an account.
+  const { data: linkedSet } = await admin
+    .from("sets")
+    .select("id")
+    .eq("jam_id", jamId)
+    .maybeSingle();
+
   // A charged order is found by its Stripe session; a comped one never had a
   // session, so it comes back by order id instead. Both identifiers are v4
   // uuids or Stripe's own opaque ids — unguessable, which is what the guest
@@ -118,12 +127,26 @@ export default async function TicketsCompletePage({
         </div>
       )}
 
-      <Link
-        href={`/jam/${jamId}`}
-        className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
-      >
-        Back to {jamName}
-      </Link>
+      <div className="flex flex-wrap gap-2">
+        {mine?.status === "paid" && linkedSet && (
+          <Link
+            href={`/set/${linkedSet.id}`}
+            className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          >
+            See what we&apos;re singing
+          </Link>
+        )}
+        <Link
+          href={`/jam/${jamId}`}
+          className={
+            mine?.status === "paid" && linkedSet
+              ? "inline-block rounded-xl border border-zinc-200 px-5 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
+              : "inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          }
+        >
+          Back to {jamName}
+        </Link>
+      </div>
     </div>
   );
 }
