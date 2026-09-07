@@ -25,11 +25,11 @@ type SortDir = "asc" | "desc";
 // The page container is max-w-4xl, so the desktop table is laid out on fixed
 // percentages rather than letting long emails push the role picker off the edge.
 const COLUMNS: { key: SortCol; label: string; width: string }[] = [
-  { key: "name", label: "User", width: "30%" },
-  { key: "email", label: "Email", width: "27%" },
-  { key: "neighborhood", label: "Neighborhood", width: "16%" },
-  { key: "joined", label: "Joined", width: "12%" },
-  { key: "role", label: "Role", width: "15%" },
+  { key: "name", label: "User", width: "28%" },
+  { key: "email", label: "Email", width: "24%" },
+  { key: "neighborhood", label: "Neighborhood", width: "14%" },
+  { key: "joined", label: "Joined", width: "15%" },
+  { key: "role", label: "Role", width: "19%" },
 ];
 
 function fullName(u: AdminUser) {
@@ -282,7 +282,7 @@ export default function AdminUsersTable({
 
       {/* Desktop table */}
       <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[44rem] table-fixed text-sm">
+        <table className="w-full min-w-[48rem] table-fixed text-sm">
           <colgroup>
             {COLUMNS.map((col) => (
               <col key={col.key} style={{ width: col.width }} />
