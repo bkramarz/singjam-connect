@@ -142,13 +142,16 @@ export function ticketConfirmationHtml({
   <div style="margin-top:24px;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
     <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Help shape the night 🎶</p>
     <p style="font-size:13px;color:#52525b;margin:0 0 12px">
-      You're on the guest list already. Make an account with this email and you can add what you
-      want to sing to the set list, so we know before you arrive — and checkout's a tap next time.
+      You're on the guest list. Create an account to add songs to our set list and checkout
+      faster next time.
     </p>
     <a href="${signUpUrl}"
        style="display:inline-block;background-color:#f59e0b;color:#fff;font-weight:600;font-size:13px;padding:8px 16px;border-radius:8px;text-decoration:none">
       Create an account
     </a>
+    <p style="font-size:12px;color:#a1a1aa;margin:10px 0 0">
+      Sign up with this email address and your ticket comes with you.
+    </p>
   </div>` : ""}
 
   <a href="${jamUrl}"
