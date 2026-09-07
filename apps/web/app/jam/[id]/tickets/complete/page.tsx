@@ -94,10 +94,10 @@ export default async function TicketsCompletePage({
           claims the order (claimGuestTickets) and turns it into attendance. */}
       {mine?.status === "paid" && isGuestOrder && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Create an account to join in</h2>
+          <h2 className="text-sm font-semibold text-zinc-900">Add songs to the set list</h2>
           <p className="text-sm text-zinc-600">
-            Your ticket is yours either way. With an account you&apos;ll show on the guest list
-            as going, and you can add songs to the set list before the day.
+            You&apos;re on the guest list either way. With an account you can add songs to the
+            set list before the day — and check out faster next time.
           </p>
           <Link
             href={`/auth?next=/jam/${jamId}`}
