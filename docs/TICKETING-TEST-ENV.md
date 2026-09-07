@@ -2,28 +2,34 @@
 
 Everything is running. Open the links below and click through.
 
-## The one thing to check first
+## The port must be 3000
 
-The **Pay** button was permanently disabled until a fix late in this session, and
-I could not complete a purchase headlessly to prove the fix works end to end —
-Stripe loads an invisible hCaptcha, and headless browsers routinely fail it, so
-`confirm()` never resolved for my automation and returned no error to inspect.
+The Stripe return URL is built from `SITE_URL` in `apps/web/lib/stripe.ts`, which
+reads `NEXT_PUBLIC_SITE_URL` — and `.env.local` sets that to `http://localhost:3000`.
+Run the dev server on any other port and the payment still succeeds, the webhook
+still fulfils, but Stripe bounces the buyer to port 3000 and they get
+`ERR_CONNECTION_REFUSED` instead of their ticket. Nothing is broken when that
+happens; the order is paid and the completion page is reachable by hand at
+`/jam/<id>/tickets/complete?session_id=<cs_test_…>` on the right port.
 
-**So the first thing worth doing is a real purchase in a real browser.** If the
-Pay button works and you land on the completion page, the flow is good. If it
-doesn't, that's the bug to report and it's mine to fix.
+## Verified end to end (2026-09-07)
 
-Everything up to that point *is* verified automatically: the panel renders for a
-logged-out visitor, tiers list, the stepper works, guest fields appear, the
-checkout API reserves stock and returns a client secret, and Stripe's Payment
-Element mounts with the correct total.
+A real guest purchase was completed in a real browser: card accepted,
+`checkout.session.completed` and `payment_intent.succeeded` both delivered 200 to
+the webhook, order moved to `paid`, stock decremented to 1/20, a ticket row was
+issued, and the completion page rendered "You're going to …". The previously
+suspect **Pay** button works.
+
+This closes the one thing the earlier session could not prove: Stripe loads an
+invisible hCaptcha that headless browsers routinely fail, so `confirm()` never
+resolved for automation and returned no error to inspect. It needed a human.
 
 ## Links
 
 | | |
 |---|---|
-| Event page (buyer) | http://localhost:3457/jam/a13e41a1-ef3f-437b-9b34-7ec1a6ff09fd |
-| Tickets & guest list (host) | http://localhost:3457/jam/a13e41a1-ef3f-437b-9b34-7ec1a6ff09fd/tickets/manage |
+| Event page (buyer) | http://localhost:3000/jam/a13e41a1-ef3f-437b-9b34-7ec1a6ff09fd |
+| Tickets & guest list (host) | http://localhost:3000/jam/a13e41a1-ef3f-437b-9b34-7ec1a6ff09fd/tickets/manage |
 
 ## Accounts
 
@@ -99,8 +105,8 @@ node scripts/ticketing-test-env.mjs teardown   # removes event, tiers, orders, a
 Services, if they need restarting:
 
 ```bash
-cd apps/web && PORT=3457 npm run dev
-stripe listen --forward-to localhost:3457/api/stripe/webhook
+cd apps/web && PORT=3000 npm run dev
+stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
 `stripe listen` must be running or payments will complete at Stripe and the order
