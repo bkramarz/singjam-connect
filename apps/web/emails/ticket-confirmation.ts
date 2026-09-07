@@ -86,7 +86,7 @@ export function ticketConfirmationHtml({
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;max-width:480px;margin:0 auto;color:#18181b;padding:32px 16px">
-  <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">We can't wait to sing with you 🎟️</h1>
+  <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">You're in! 🎉 We can't wait to sing with you.</h1>
   <p style="font-size:15px;line-height:1.6;color:#52525b">
     ${greeting} You're coming to <strong>${jamName}</strong> —
     <strong>${money(amountCents, currency)}</strong> confirmed. Show this email at the door, or
@@ -140,7 +140,7 @@ export function ticketConfirmationHtml({
 
   ${isGuest && signUpUrl ? `
   <div style="margin-top:24px;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
-    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Help shape the night</p>
+    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Help shape the night 🎶</p>
     <p style="font-size:13px;color:#52525b;margin:0 0 12px">
       You're on the guest list already. Make an account with this email and you can add what you
       want to sing to the set list, so we know before you arrive — and checkout's a tap next time.

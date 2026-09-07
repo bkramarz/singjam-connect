@@ -54,7 +54,7 @@ export default async function TicketsCompletePage({
       {mine?.status === "paid" ? (
         <>
           <h1 className="text-xl font-semibold text-zinc-900">
-            You&apos;re in — we can&apos;t wait to sing with you
+            You&apos;re in! 🎉 We can&apos;t wait to sing with you.
           </h1>
           <p className="text-sm text-zinc-600">
             See you at {jamName}. {ticketCount} ticket{ticketCount === 1 ? "" : "s"} ·{" "}
@@ -96,7 +96,7 @@ export default async function TicketsCompletePage({
           claims the order (claimGuestTickets) and turns it into attendance. */}
       {mine?.status === "paid" && isGuestOrder && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Help shape the night</h2>
+          <h2 className="text-sm font-semibold text-zinc-900">Help shape the night 🎶</h2>
           <p className="text-sm text-zinc-600">
             You&apos;re on the guest list already. With an account you can add what you want to
             sing to the set list, so we know before you arrive — and checkout&apos;s a tap next
