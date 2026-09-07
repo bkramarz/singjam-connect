@@ -416,10 +416,23 @@ does it go through? That single test settles it, and it needs a browser.
 
 **The fix either way** is a purpose-built payment method configuration listing
 only card, link, cashapp, amazon_pay, apple_pay and google_pay, referenced by the
-session. The code already supports it: set `STRIPE_TICKET_PM_CONFIG` to a `pmc_…`
-id and the checkout route passes `payment_method_configuration`; unset, it falls
-back to today's exclusions. The configuration itself has to be made in the
-Dashboard — the restricted key lacks `payment_method_configurations_write`.
+session via `STRIPE_TICKET_PM_CONFIG`; unset, the route falls back to today's
+exclusions.
+
+Ben created the **live-mode** configuration 2026-09-07:
+`pmc_1UDAnBL0Q3ZMbggU8t7ijh1h`. It belongs in the **Netlify** environment, not in
+`apps/web/.env.local`, which holds test keys.
+
+**A pmc id belongs to exactly one Stripe mode.** Using the live id with a test
+key fails the session outright — verified: `resource_missing`, no session, no
+sale. Because that would take down ticket sales rather than merely widening the
+method list, the route now catches exactly that error, retries without the
+configuration, and logs loudly. Losing the narrowed list beats losing checkout.
+
+Local testing still shows the wide list until a **test-mode** "Tickets"
+configuration exists; its id would be different again. The restricted key cannot
+create one (`payment_method_configurations_write` not granted), so that is a
+Dashboard job in test mode.
 
 BNPL stays enabled account-wide on purpose: the org may want it elsewhere, just
 not on a $15 ticket.

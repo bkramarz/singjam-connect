@@ -30,7 +30,7 @@ vi.mock("@/lib/stripe", () => ({
   SESSION_EXPIRY_MINUTES: 30,
   HOLD_MINUTES: 35,
   EXCLUDED_PAYMENT_METHODS: ["klarna", "affirm", "afterpay_clearpay"],
-  TICKET_PM_CONFIG: null,
+  TICKET_PM_CONFIG: "pmc_test_cfg",
 }));
 
 vi.mock("@/lib/promoCode", () => ({ resolvePromoCode: mockResolvePromo }));
@@ -378,6 +378,25 @@ describe("POST /api/jam/[id]/tickets/checkout", () => {
     const res = await POST(makeReq({ ...ONE_TICKET, promo_code: "COMP100" }), params);
     expect(res.status).toBe(409);
     expect(mockSessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the default configuration when the pm config id is for the wrong mode", async () => {
+    // A pmc_ id belongs to one Stripe mode. Pointing a test deploy at the live
+    // id killed every sale with resource_missing, so this degrades instead.
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } });
+    happyPathDb();
+    const err: any = new Error("No such payment_method_configuration: pmc_live");
+    err.code = "resource_missing";
+    mockSessionsCreate
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce({ id: "cs_1", client_secret: "cs_secret" });
+
+    const res = await POST(makeReq(ONE_TICKET), params);
+
+    expect(res.status).toBe(200);
+    expect(mockSessionsCreate).toHaveBeenCalledTimes(2);
+    expect(mockSessionsCreate.mock.calls[0][0]).toHaveProperty("payment_method_configuration", "pmc_test_cfg");
+    expect(mockSessionsCreate.mock.calls[1][0]).not.toHaveProperty("payment_method_configuration");
   });
 
   it("releases the hold when Stripe rejects the session", async () => {

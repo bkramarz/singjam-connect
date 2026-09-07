@@ -169,7 +169,7 @@ export async function POST(
   }
 
   try {
-    const session = await stripe().checkout.sessions.create({
+    const sessionParams = {
       // 'elements' backs the embedded Payment Element with a Checkout Session
       // rather than a raw PaymentIntent, which is what keeps automatic_tax,
       // discounts and adaptive pricing available as configuration later. The
@@ -208,7 +208,31 @@ export async function POST(
           product_data: { name: `${jam.name ?? "Event"} — ${l.name}` },
         },
       })),
-    });
+    };
+
+    // A payment method configuration belongs to one Stripe mode. Point a test
+    // deployment at the live id (or the reverse) and EVERY sale dies with
+    // resource_missing — verified. Losing the narrowed method list is a much
+    // smaller problem than losing checkout, so a bad id degrades to the default
+    // configuration and says so loudly instead.
+    let session;
+    try {
+      session = await stripe().checkout.sessions.create(sessionParams as any);
+    } catch (e: any) {
+      const badConfig =
+        TICKET_PM_CONFIG &&
+        e?.code === "resource_missing" &&
+        String(e?.message ?? "").includes("payment_method_configuration");
+      if (!badConfig) throw e;
+      console.error(
+        `[tickets] STRIPE_TICKET_PM_CONFIG ${TICKET_PM_CONFIG} does not exist in this Stripe mode — ` +
+          "falling back to the default payment method configuration. Fix the env var."
+      );
+      // A fresh object, not a mutation: Stripe's client keeps the params it was
+      // handed, so editing them in place rewrites the record of the first call.
+      const { payment_method_configuration: _dropped, ...withoutConfig } = sessionParams as any;
+      session = await stripe().checkout.sessions.create(withoutConfig);
+    }
 
     await admin
       .from("ticket_orders")
