@@ -25,10 +25,10 @@ type SortDir = "asc" | "desc";
 // The page container is max-w-4xl, so the desktop table is laid out on fixed
 // percentages rather than letting long emails push the role picker off the edge.
 const COLUMNS: { key: SortCol; label: string; width: string }[] = [
-  { key: "name", label: "User", width: "28%" },
+  { key: "name", label: "User", width: "26%" },
   { key: "email", label: "Email", width: "24%" },
-  { key: "neighborhood", label: "Neighborhood", width: "14%" },
-  { key: "joined", label: "Joined", width: "15%" },
+  { key: "neighborhood", label: "Neighborhood", width: "17%" },
+  { key: "joined", label: "Joined", width: "14%" },
   { key: "role", label: "Role", width: "19%" },
 ];
 
@@ -324,7 +324,15 @@ export default function AdminUsersTable({
                     "—"
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-slate-500">{u.neighborhood ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-500">
+                  {u.neighborhood ? (
+                    <span className="block truncate" title={u.neighborhood}>
+                      {u.neighborhood}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">{formatDate(u.created_at)}</td>
                 <td className="px-4 py-2.5">
                   <RoleSelect
