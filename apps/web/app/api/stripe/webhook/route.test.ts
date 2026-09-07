@@ -109,7 +109,8 @@ describe("POST /api/stripe/webhook", () => {
     emailChains();
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: null })) // existing rsvp lookup
-      .mockReturnValueOnce(chain({ error: null })); // rsvp insert
+      .mockReturnValueOnce(chain({ error: null })) // rsvp insert
+      .mockReturnValueOnce(chain({ data: null })); // linked set lookup — none
 
     const res = await POST(makeReq());
     expect(res.status).toBe(200);
@@ -273,7 +274,8 @@ describe("POST /api/stripe/webhook", () => {
     emailChains();
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: { id: "rsvp-9" } })) // already has a row
-      .mockReturnValueOnce(chain({ error: null }));
+      .mockReturnValueOnce(chain({ error: null }))
+      .mockReturnValueOnce(chain({ data: null })); // linked set lookup — none
 
     await POST(makeReq());
     const rsvpChain = mockAdminFrom.mock.results[5].value;
@@ -281,6 +283,49 @@ describe("POST /api/stripe/webhook", () => {
       expect.objectContaining({ status: "attending", waitlist_position: null })
     );
     expect(rsvpChain.insert).not.toHaveBeenCalled();
+  });
+
+  it("seats the buyer at the jam's set list so they can add songs", async () => {
+    // The point of the whole feature: a ticket is what earns edit access to an
+    // official event's set. Anyone may read it; only ticket holders may add.
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder() }));
+    emailChains();
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: null })) // existing rsvp lookup
+      .mockReturnValueOnce(chain({ error: null })) // rsvp insert
+      .mockReturnValueOnce(chain({ data: { id: "set-1", owner_user_id: "host-9" } })) // linked set
+      .mockReturnValueOnce(chain({ data: null })) // not already a collaborator
+      .mockReturnValueOnce(chain({ error: null })); // collaborator insert
+
+    await POST(makeReq());
+
+    const collabChain = mockAdminFrom.mock.results[8].value;
+    expect(collabChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ set_id: "set-1", user_id: BUYER_ID, status: "accepted" })
+    );
+  });
+
+  it("does not duplicate set access for a buyer who already collaborates", async () => {
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder() }));
+    emailChains();
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: null }))
+      .mockReturnValueOnce(chain({ error: null }))
+      .mockReturnValueOnce(chain({ data: { id: "set-1", owner_user_id: "host-9" } }))
+      .mockReturnValueOnce(chain({ data: { id: "collab-1" } })); // already there
+
+    await POST(makeReq());
+
+    // Only 8 calls: no insert followed the existing-collaborator lookup.
+    expect(mockAdminFrom).toHaveBeenCalledTimes(8);
   });
 
   it("expires the order and releases the hold on checkout.session.expired", async () => {

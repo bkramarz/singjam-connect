@@ -57,6 +57,8 @@ export function ticketConfirmationHtml({
   tickets,
   amountCents,
   currency,
+  isGuest = false,
+  signUpUrl,
 }: {
   name?: string | null;
   jamName: string;
@@ -69,6 +71,8 @@ export function ticketConfirmationHtml({
   tickets: { tierName: string; qrToken: string }[];
   amountCents: number;
   currency: string;
+  isGuest?: boolean;
+  signUpUrl?: string;
 }) {
   const greeting = name ? `Hi ${name},` : "Hi,";
   const dateStr = formatJamTime(startsAt, timezone);
@@ -131,6 +135,19 @@ export function ticketConfirmationHtml({
         Outlook
       </a>
     </div>
+  </div>` : ""}
+
+  ${isGuest && signUpUrl ? `
+  <div style="margin-top:24px;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
+    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Join in before the day</p>
+    <p style="font-size:13px;color:#52525b;margin:0 0 12px">
+      Create an account with this email address and you'll show on the guest list as
+      going, and can add songs to the set list.
+    </p>
+    <a href="${signUpUrl}"
+       style="display:inline-block;background-color:#f59e0b;color:#fff;font-weight:600;font-size:13px;padding:8px 16px;border-radius:8px;text-decoration:none">
+      Create an account
+    </a>
   </div>` : ""}
 
   <a href="${jamUrl}"

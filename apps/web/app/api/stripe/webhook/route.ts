@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { markAttending } from "@/lib/jamAttendance";
 import { stripe, SITE_URL } from "@/lib/stripe";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { ticketConfirmationHtml } from "@/emails/ticket-confirmation";
@@ -68,6 +69,8 @@ async function sendTicketEmail(admin: ReturnType<typeof supabaseAdmin>, order: P
       })),
       amountCents: order.amount_cents,
       currency: order.currency,
+      isGuest: !order.buyer_user_id,
+      signUpUrl: `${SITE_URL}/auth?next=/jam/${order.jam_id}`,
     }),
   });
 }
@@ -152,26 +155,10 @@ export async function POST(req: Request) {
       // Mirror the paid order into the existing attendance model so attendee
       // lists, linked set lists and the host's notifications keep working —
       // official events otherwise have no RSVP row at all.
-      const { data: existingRsvp } = await admin
-        .from("jam_rsvps")
-        .select("id")
-        .eq("jam_id", updated.jam_id)
-        .eq("user_id", updated.buyer_user_id)
-        .maybeSingle();
-
-      if (existingRsvp) {
-        await admin
-          .from("jam_rsvps")
-          .update({ status: "attending", waitlist_position: null })
-          .eq("id", existingRsvp.id);
-      } else {
-        await admin.from("jam_rsvps").insert({
-          jam_id: updated.jam_id,
-          user_id: updated.buyer_user_id,
-          status: "attending",
-          waitlist_position: null,
-        });
-      }
+      // A ticket buys a seat at the set list too. Anyone may read an official
+      // event's set, but only people actually coming may add to it, and for a
+      // ticketed event "actually coming" means holding a ticket.
+      await markAttending(admin, updated.jam_id, updated.buyer_user_id);
       break;
     }
 

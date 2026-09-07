@@ -111,7 +111,11 @@ export default function JamView({
           official event using an external tickets_url is unaffected. */}
       {isOfficial && <TicketPurchasePanel jamId={jamId} isSignedIn={!!userId} />}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
-      {!isOfficial && <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />}
+      {/* Official events show who's going too. Ticket buyers get an attending
+          RSVP from the Stripe webhook, so the list is populated the same way —
+          guests without an account are the one gap, which is what the sign-up
+          nudge on the completion page is for. */}
+      <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={jamId}

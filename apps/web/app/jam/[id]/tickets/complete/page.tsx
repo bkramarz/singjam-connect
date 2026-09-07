@@ -28,7 +28,7 @@ export default async function TicketsCompletePage({
   const { data: order } = session_id
     ? await admin
         .from("ticket_orders")
-        .select("id, status, amount_cents, currency, buyer_user_id")
+        .select("id, status, amount_cents, currency, buyer_user_id, buyer_email")
         .eq("stripe_checkout_session_id", session_id)
         .maybeSingle()
     : { data: null };
@@ -87,6 +87,30 @@ export default async function TicketsCompletePage({
             We couldn&apos;t find that order. If you were charged, contact us and we&apos;ll sort it out.
           </p>
         </>
+      )}
+
+      {/* A guest has paid but has no account, so jam_rsvps has nowhere to point:
+          they're coming and nobody can see it. Signing up with the same address
+          claims the order (claimGuestTickets) and turns it into attendance. */}
+      {mine?.status === "paid" && isGuestOrder && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-900">Create an account to join in</h2>
+          <p className="text-sm text-zinc-600">
+            Your ticket is yours either way. With an account you&apos;ll show on the guest list
+            as going, and you can add songs to the set list before the day.
+          </p>
+          <Link
+            href={`/auth?next=/jam/${jamId}`}
+            className="inline-block rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+          >
+            Create an account
+          </Link>
+          {mine.buyer_email && (
+            <p className="text-xs text-zinc-500">
+              Sign up with {mine.buyer_email} and this ticket attaches itself.
+            </p>
+          )}
+        </div>
       )}
 
       <Link

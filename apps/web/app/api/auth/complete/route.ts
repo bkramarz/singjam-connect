@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 import { syncContact } from "@/lib/activecampaign";
+import { claimGuestTickets } from "@/lib/ticketClaim";
 
 // Called after immediate-session signup (email confirmation disabled) to
 // create the profile and link any invite token, mirroring the callback route.
@@ -30,6 +31,12 @@ export async function POST(req: Request) {
 
   if (!existing?.username && user.email) {
     syncContact(user.email).catch((err) => console.error("[ActiveCampaign] syncContact failed for", user.email, err));
+  }
+
+  // Anything they bought as a guest under this address becomes theirs now.
+  if (user.email) {
+    await claimGuestTickets(admin, user.id, user.email).catch((err) =>
+      console.error("[tickets] claimGuestTickets failed for", user.email, err));
   }
 
   // Link invite and resolve jam ID

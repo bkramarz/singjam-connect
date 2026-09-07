@@ -5,6 +5,7 @@ import { resend } from "@/lib/resend";
 import { enqueueWelcomeEmail } from "@/lib/emailOutbox";
 import { syncContact } from "@/lib/activecampaign";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { claimGuestTickets } from "@/lib/ticketClaim";
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
@@ -56,6 +57,15 @@ export async function GET(request: Request) {
         .select("username, display_name")
         .eq("id", user.id)
         .single();
+
+      // Not limited to first login: someone can buy as a guest in a private
+      // window and only sign in afterwards, or already have an account and
+      // check out as a guest anyway. Claiming on every sign-in catches both,
+      // and is a no-op once there is nothing left unclaimed.
+      if (user.email) {
+        await claimGuestTickets(supabaseAdmin(), user.id, user.email).catch((err) =>
+          console.error("[tickets] claimGuestTickets failed for", user.email, err));
+      }
 
       const isFirstLogin =
         !!user.created_at &&

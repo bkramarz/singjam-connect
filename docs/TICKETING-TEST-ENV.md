@@ -55,18 +55,43 @@ The host account is deliberately **not an admin**. It's a plain member with
 - Promo code **`SINGJAMTEST`** — 25% off
 - Everything is Stripe **test mode**. No real money moves.
 
-## Three passes worth doing
+## What a ticket now buys
+
+An official event used to be a dead end: no guest list, and a set list anyone
+could read but nobody could add to. It now behaves like any other jam, gated by
+the ticket:
+
+| | Read the set | Add songs | On the guest list |
+|---|---|---|---|
+| Nobody in particular | yes | no | — |
+| Guest buyer (no account) | yes | no | no — until they sign up |
+| Member buyer | yes | **yes** | **yes** |
+| Host / co-host | yes | yes | yes |
+
+A guest who later signs up **with the address they bought under** has their order
+attached automatically, which promotes them to both columns. The seeded event has
+a linked set list with 3 songs so there is something to be let into.
+
+## Four passes worth doing
 
 **As a guest** (private window, don't sign in)
 Pick tickets → name and email appear inline, no sign-in wall → optionally
 "Have a promo code?" → `SINGJAMTEST` → Buy → **click "Card" in the accordion**,
-it starts collapsed → pay → you should land on the completion page and get an
-email with a 6-character door code.
+it starts collapsed → pay → completion page, plus an email with a 6-character
+door code. The completion page should now also offer **Create an account**, and
+name the address to use.
 
 **As a member** (sign in as the member account)
-Same flow, no name/email step. After paying you should also appear as attending
-on the event page — guests deliberately don't, because `jam_rsvps.user_id` can't
-be null.
+Same flow, no name/email step. After paying you should appear under **Who's going**
+on the event page — that panel is new for official events — and you should be able
+to add a song to the set list, which you could not do before buying.
+
+**Claiming a guest order** (the new path)
+There is already an unclaimed paid guest order under `singjammusic613@gmail.com`
+from the 2026-09-07 test purchase. Sign in as that address and it should attach:
+the order gains a buyer, and you appear as going with set-list access. Verify with
+`node scripts/ticketing-test-env.mjs status` — "unclaimed guest orders" should drop
+to 0 and "attending" should rise.
 
 **As the host** (sign in as the host account)
 Open the manage page. Add and delete tiers; try deleting one that has sales (it

@@ -151,10 +151,34 @@ async function seed() {
     console.log(`  registered ${PROMO_CODE} against the test event`);
   }
 
+  // 5. Set list linked to the event
+  // Without one there is nothing for a ticket to unlock: buying a ticket is
+  // what makes someone a collaborator on the jam's set (lib/jamAttendance.ts),
+  // so the seed has to provide the set for that to be visible at all.
+  let { data: set } = await db.from("sets")
+    .select("id, name").eq("jam_id", jam.id).maybeSingle();
+  if (!set) {
+    const { data: created, error } = await db.from("sets")
+      .insert({ name: `${MARK} Set list`, jam_id: jam.id, owner_user_id: users.host.id })
+      .select("id, name").single();
+    if (error) throw new Error(`creating set list: ${error.message}`);
+    set = created;
+
+    const { data: songs } = await db.from("songs").select("id").limit(3);
+    if (songs?.length) {
+      await db.from("set_songs").insert(
+        songs.map((song, i) => ({ set_id: set.id, song_id: song.id, position: i }))
+      );
+    }
+    console.log(`\n  set list created: ${set.name} (${songs?.length ?? 0} songs)`);
+  } else {
+    console.log(`\n  set list exists: ${set.name}`);
+  }
+
   console.log(`\n${"─".repeat(64)}`);
   console.log("READY\n");
-  console.log(`Event page   http://localhost:3457/jam/${jam.id}`);
-  console.log(`Host page    http://localhost:3457/jam/${jam.id}/tickets/manage\n`);
+  console.log(`Event page   http://localhost:3000/jam/${jam.id}`);
+  console.log(`Host page    http://localhost:3000/jam/${jam.id}/tickets/manage\n`);
   console.log(`Host   ${ACCOUNTS[0].email}`);
   console.log(`Member ${ACCOUNTS[1].email}`);
   console.log(`Password for both: ${PASSWORD}\n`);
@@ -168,6 +192,13 @@ async function teardown() {
 
   const { data: jam } = await db.from("jams").select("id").eq("name", EVENT_NAME).maybeSingle();
   if (jam) {
+    // sets.jam_id is ON DELETE SET NULL (migration 080), so the set would be
+    // orphaned rather than removed with the event.
+    const { data: set } = await db.from("sets").select("id").eq("jam_id", jam.id).maybeSingle();
+    if (set) {
+      await db.from("sets").delete().eq("id", set.id);
+      console.log(`  deleted set list ${set.id}`);
+    }
     // Cascades to ticket_types, ticket_orders, tickets and jam_rsvps.
     await db.from("jams").delete().eq("id", jam.id);
     console.log(`  deleted event ${jam.id} (tiers, orders and tickets cascade)`);
@@ -208,6 +239,25 @@ async function status() {
     const { count: orders } = await db.from("ticket_orders").select("id", { count:"exact", head:true }).eq("jam_id", jam.id);
     const { count: checked } = await db.from("tickets").select("id", { count:"exact", head:true }).eq("jam_id", jam.id).not("checked_in_at","is",null);
     console.log(`  orders: ${orders ?? 0}, checked in: ${checked ?? 0}`);
+
+    // Who a ticket has actually seated: attendance and set-list access are the
+    // two things a purchase is supposed to grant.
+    const { data: set } = await db.from("sets").select("id, name").eq("jam_id", jam.id).maybeSingle();
+    if (set) {
+      const { count: collabs } = await db.from("set_collaborators")
+        .select("id", { count: "exact", head: true }).eq("set_id", set.id);
+      const { count: songs } = await db.from("set_songs")
+        .select("id", { count: "exact", head: true }).eq("set_id", set.id);
+      console.log(`  set list: "${set.name}" — ${songs ?? 0} songs, ${collabs ?? 0} collaborators`);
+    } else {
+      console.log("  set list: none");
+    }
+    const { count: going } = await db.from("jam_rsvps")
+      .select("id", { count: "exact", head: true }).eq("jam_id", jam.id).eq("status", "attending");
+    const { count: unclaimed } = await db.from("ticket_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("jam_id", jam.id).eq("status", "paid").is("buyer_user_id", null);
+    console.log(`  attending: ${going ?? 0}, unclaimed guest orders: ${unclaimed ?? 0}`);
   }
   for (const acct of ACCOUNTS) {
     const u = await findUser(acct.email);
