@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { fetchAllAuthEmails } from "./authUsers";
+import { fetchAllAuthEmails, fetchAllAuthUsers } from "./authUsers";
 
 function pagedAdmin(pages: { id: string; email?: string | null }[][]) {
   return {
@@ -48,5 +48,27 @@ describe("fetchAllAuthEmails", () => {
       listUsers: vi.fn(async () => ({ data: { users: [] }, error: { message: "boom" } })),
     };
     await expect(fetchAllAuthEmails(admin, 2)).rejects.toThrow("boom");
+  });
+});
+
+describe("fetchAllAuthUsers", () => {
+  it("returns every page's users in order", async () => {
+    const admin = pagedAdmin([
+      [{ id: "a" }, { id: "b" }],
+      [{ id: "c" }],
+    ]);
+    expect(await fetchAllAuthUsers(admin, 2)).toEqual([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    expect(admin.listUsers).toHaveBeenCalledTimes(2);
+    expect(admin.listUsers).toHaveBeenNthCalledWith(2, { page: 2, perPage: 2 });
+  });
+
+  it("throws instead of returning a partial list when a page fails", async () => {
+    const admin = {
+      listUsers: vi
+        .fn()
+        .mockResolvedValueOnce({ data: { users: [{ id: "a" }, { id: "b" }] }, error: null })
+        .mockResolvedValueOnce({ data: { users: [] }, error: { message: "boom" } }),
+    };
+    await expect(fetchAllAuthUsers(admin, 2)).rejects.toThrow("boom");
   });
 });

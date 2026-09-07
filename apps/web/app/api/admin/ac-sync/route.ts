@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { fetchAllRows } from "@singjam/core";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
+import { fetchAllAuthUsers } from "@/lib/authUsers";
 import { syncContact, ContactProfile } from "@/lib/activecampaign";
 
 const AC_API_URL = process.env.AC_API_URL;
@@ -31,6 +33,16 @@ async function fetchAllACContacts() {
   return contacts;
 }
 
+type ACProfileRow = {
+  id: string;
+  display_name: string | null;
+  last_name: string | null;
+  neighborhood: string | null;
+  instrument_levels: Record<string, string> | null;
+  favorite_genres: string[] | null;
+  singing_voice: string | null;
+};
+
 export type ACSyncStatus = {
   email: string;
   userId: string;
@@ -45,13 +57,11 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   const admin = supabaseAdmin();
-  const [{ data: sbAuthData }, profilesResult, acContacts] = await Promise.all([
-    admin.auth.admin.listUsers({ perPage: 1000 }),
-    admin.from("profiles").select("id"),
+  const [sbUsers, acContacts] = await Promise.all([
+    fetchAllAuthUsers(admin.auth.admin),
     fetchAllACContacts(),
   ]);
 
-  const sbUsers = sbAuthData?.users ?? [];
   const acByEmail = new Map(acContacts.map((c) => [c.email?.toLowerCase(), c]));
 
   const statuses: ACSyncStatus[] = await Promise.all(
@@ -97,16 +107,20 @@ export async function POST(req: Request) {
   }
 
   const admin = supabaseAdmin();
-  const [{ data: sbAuthData }, profilesResult] = await Promise.all([
-    admin.auth.admin.listUsers({ perPage: 1000 }),
-    admin.from("profiles").select("id,display_name,last_name,neighborhood,instrument_levels,favorite_genres,singing_voice"),
+  const [sbUsers, profiles] = await Promise.all([
+    fetchAllAuthUsers(admin.auth.admin),
+    fetchAllRows<ACProfileRow>((from, to) =>
+      admin
+        .from("profiles")
+        .select("id,display_name,last_name,neighborhood,instrument_levels,favorite_genres,singing_voice")
+        .order("id")
+        .range(from, to) as any
+    ),
   ]);
 
-  const profileById = new Map(
-    (profilesResult.data ?? []).map((p) => [p.id, p])
-  );
+  const profileById = new Map(profiles.map((p) => [p.id, p]));
 
-  const targets = (sbAuthData?.users ?? []).filter((u) => userIds.includes(u.id));
+  const targets = sbUsers.filter((u) => userIds.includes(u.id));
 
   let synced = 0;
   let failed = 0;
@@ -114,16 +128,16 @@ export async function POST(req: Request) {
   await Promise.all(
     targets.map(async (u) => {
       if (!u.email) { failed++; return; }
-      const p = profileById.get(u.id) ?? {} as Record<string, unknown>;
+      const p = profileById.get(u.id);
       const profile: ContactProfile = {
-        firstName: (p.display_name as string) || undefined,
-        lastName: (p.last_name as string) || undefined,
-        neighborhood: (p.neighborhood as string) || undefined,
-        singingVoice: (p.singing_voice as string)
-          ? (p.singing_voice as string).split(",").map((s) => s.trim())
+        firstName: p?.display_name || undefined,
+        lastName: p?.last_name || undefined,
+        neighborhood: p?.neighborhood || undefined,
+        singingVoice: p?.singing_voice
+          ? p.singing_voice.split(",").map((s) => s.trim())
           : undefined,
-        instrumentLevels: (p.instrument_levels as Record<string, string>) || undefined,
-        favoriteGenres: (p.favorite_genres as string[]) || undefined,
+        instrumentLevels: p?.instrument_levels || undefined,
+        favoriteGenres: p?.favorite_genres || undefined,
       };
       try {
         await syncContact(u.email, profile);

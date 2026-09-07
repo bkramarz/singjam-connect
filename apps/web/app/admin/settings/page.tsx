@@ -27,6 +27,7 @@ export default function AdminSettingsPage() {
 
   const [acStatus, setAcStatus] = useState<ACSyncStatus[] | null>(null);
   const [acLoading, setAcLoading] = useState(false);
+  const [acError, setAcError] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState<Set<string>>(new Set());
 
   const [reminderSending, setReminderSending] = useState(false);
@@ -75,11 +76,22 @@ export default function AdminSettingsPage() {
     setReminderSending(false);
   }
 
+  // The audit walks every page of auth.users and every AC contact, so it fails
+  // rather than reporting on a partial list — surface that instead of parsing
+  // an error body as a status array.
+  async function loadACStatus() {
+    const res = await fetch("/api/admin/ac-sync").catch(() => null);
+    if (!res?.ok) {
+      setAcError("Could not load the ActiveCampaign audit. Try again in a moment.");
+      return;
+    }
+    setAcError(null);
+    setAcStatus(await res.json());
+  }
+
   async function checkACStatus() {
     setAcLoading(true);
-    const res = await fetch("/api/admin/ac-sync");
-    const data: ACSyncStatus[] = await res.json();
-    setAcStatus(data);
+    await loadACStatus();
     setAcLoading(false);
   }
 
@@ -91,9 +103,7 @@ export default function AdminSettingsPage() {
       body: JSON.stringify({ userIds }),
     });
     // Refresh status after resync
-    const res = await fetch("/api/admin/ac-sync");
-    const data: ACSyncStatus[] = await res.json();
-    setAcStatus(data);
+    await loadACStatus();
     setResyncing(new Set());
   }
 
@@ -193,7 +203,9 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {acStatus === null && !acLoading && (
+        {acError && <p className="text-sm text-red-500">{acError}</p>}
+
+        {acStatus === null && !acLoading && !acError && (
           <p className="text-sm text-zinc-400">Click "Check status" to audit all users against ActiveCampaign.</p>
         )}
 
