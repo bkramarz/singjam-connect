@@ -414,14 +414,23 @@ mode), both returning apple_pay / google_pay / link / amazon_pay `active`:
 **Live mode still needs doing** at dashboard.stripe.com/settings/payment_method_domains
 — it needs a live key, which is deliberately not in `.env.local`.
 
-Two things to watch when doing it:
+**Live mode registered 2026-09-07** by Ben in the Dashboard: `singjam.org`
+(pmd_1UD9pJL0Q3ZMbggUnqNnxuPS) and `www.singjam.org`
+(pmd_1UD9paL0Q3ZMbggUzakAUByA), both Enabled.
 
-- `https://singjam.org/.well-known/apple-developer-merchantid-domain-association`
-  currently 404s. Test mode doesn't check it; live mode may. If the Dashboard
-  reports Apple Pay as failed and offers a file, drop it at
-  `apps/web/public/.well-known/` (no `public/` directory exists yet — it needs
-  creating) and re-verify.
-- **Wallets will not appear on `localhost` no matter what.** Domain registration
-  can't cover it, so local checkout will keep showing only Card. That is expected,
-  not a regression — judge the wallet row on a deploy preview or production, or
-  through an HTTPS tunnel registered as its own domain.
+**No Apple Pay association file is needed.**
+`/.well-known/apple-developer-merchantid-domain-association` 404s on production
+and Apple Pay is still Enabled with **Requires action: 0**. The modern
+payment-method-domains flow verifies without the hosted file that the older
+Apple Pay registration wanted — the docs ask only that the domain be registered.
+Don't add a `public/.well-known/` file chasing this; it isn't the problem.
+
+**Wallets will not appear on `localhost` no matter what.** Domain registration
+can't cover it, so local checkout keeps showing only Card. That is expected, not
+a regression — judge the wallet row on a deploy preview or production.
+
+**13 methods are enabled on the account, but a USD session resolves to 4.**
+Probe output was `card, link, cashapp, amazon_pay`; MB WAY (Portugal) and
+Satispay (Italy) are enabled but never surface for US buyers in USD. Inert, not
+worth a change, but don't be surprised by the gap between the Dashboard count and
+what the Element shows.
