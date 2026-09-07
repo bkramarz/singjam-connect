@@ -88,9 +88,9 @@ export function ticketConfirmationHtml({
 <body style="font-family:sans-serif;max-width:480px;margin:0 auto;color:#18181b;padding:32px 16px">
   <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">We can't wait to sing with you 🎟️</h1>
   <p style="font-size:15px;line-height:1.6;color:#52525b">
-    ${greeting} You're coming to <strong>${jamName}</strong>, and your payment of
-    <strong>${money(amountCents, currency)}</strong> is confirmed. Show this email at the door,
-    or just give your name — we'll be looking out for you.
+    ${greeting} You're coming to <strong>${jamName}</strong> —
+    <strong>${money(amountCents, currency)}</strong> confirmed. Show this email at the door, or
+    just give your name.
   </p>
 
   <div style="margin-top:20px;padding:16px;background:#f4f4f5;border-radius:10px">
@@ -140,12 +140,10 @@ export function ticketConfirmationHtml({
 
   ${isGuest && signUpUrl ? `
   <div style="margin-top:24px;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
-    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Want to help shape the night?</p>
+    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Help shape the night</p>
     <p style="font-size:13px;color:#52525b;margin:0 0 12px">
-      You're on the guest list already — that's all you need to walk in and sing. But if you
-      make an account with this email address, you can put the songs you'd love to play into
-      the set list before the day, so we arrive knowing what you want to sing. Next time,
-      checkout is a tap.
+      You're on the guest list already. Make an account with this email and you can add what you
+      want to sing to the set list, so we know before you arrive — and checkout's a tap next time.
     </p>
     <a href="${signUpUrl}"
        style="display:inline-block;background-color:#f59e0b;color:#fff;font-weight:600;font-size:13px;padding:8px 16px;border-radius:8px;text-decoration:none">

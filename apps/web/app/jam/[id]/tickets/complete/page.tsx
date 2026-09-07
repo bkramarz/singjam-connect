@@ -58,8 +58,7 @@ export default async function TicketsCompletePage({
           </h1>
           <p className="text-sm text-zinc-600">
             See you at {jamName}. {ticketCount} ticket{ticketCount === 1 ? "" : "s"} ·{" "}
-            {money(mine.amount_cents, mine.currency)} paid — your confirmation and door code are on
-            their way to your email.
+            {money(mine.amount_cents, mine.currency)} — your door code is on its way to your email.
           </p>
         </>
       ) : mine?.status === "pending" ? (
@@ -97,12 +96,11 @@ export default async function TicketsCompletePage({
           claims the order (claimGuestTickets) and turns it into attendance. */}
       {mine?.status === "paid" && isGuestOrder && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Want to help shape the night?</h2>
+          <h2 className="text-sm font-semibold text-zinc-900">Help shape the night</h2>
           <p className="text-sm text-zinc-600">
-            You&apos;re on the guest list already — that&apos;s all you need to walk in and sing.
-            But if you make an account, you can put the songs you&apos;d love to play into the set
-            list before the day, so we arrive knowing what you want to sing. Next time, checkout
-            is a tap.
+            You&apos;re on the guest list already. With an account you can add what you want to
+            sing to the set list, so we know before you arrive — and checkout&apos;s a tap next
+            time.
           </p>
           <Link
             href={`/auth?next=/jam/${jamId}`}
