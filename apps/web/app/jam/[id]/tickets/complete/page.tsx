@@ -53,10 +53,13 @@ export default async function TicketsCompletePage({
     <div className="mx-auto max-w-md space-y-4 py-8">
       {mine?.status === "paid" ? (
         <>
-          <h1 className="text-xl font-semibold text-zinc-900">You&apos;re going to {jamName}</h1>
+          <h1 className="text-xl font-semibold text-zinc-900">
+            You&apos;re in — we can&apos;t wait to sing with you
+          </h1>
           <p className="text-sm text-zinc-600">
-            {ticketCount} ticket{ticketCount === 1 ? "" : "s"} ·{" "}
-            {money(mine.amount_cents, mine.currency)} paid. A confirmation is on its way to your email.
+            See you at {jamName}. {ticketCount} ticket{ticketCount === 1 ? "" : "s"} ·{" "}
+            {money(mine.amount_cents, mine.currency)} paid — your confirmation and door code are on
+            their way to your email.
           </p>
         </>
       ) : mine?.status === "pending" ? (
@@ -94,10 +97,12 @@ export default async function TicketsCompletePage({
           claims the order (claimGuestTickets) and turns it into attendance. */}
       {mine?.status === "paid" && isGuestOrder && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Add songs to the set list</h2>
+          <h2 className="text-sm font-semibold text-zinc-900">Want to help shape the night?</h2>
           <p className="text-sm text-zinc-600">
-            You&apos;re on the guest list either way. With an account you can add songs to the
-            set list before the day — and check out faster next time.
+            You&apos;re on the guest list already — that&apos;s all you need to walk in and sing.
+            But if you make an account, you can put the songs you&apos;d love to play into the set
+            list before the day, so we arrive knowing what you want to sing. Next time, checkout
+            is a tap.
           </p>
           <Link
             href={`/auth?next=/jam/${jamId}`}
@@ -107,7 +112,7 @@ export default async function TicketsCompletePage({
           </Link>
           {mine.buyer_email && (
             <p className="text-xs text-zinc-500">
-              Sign up with {mine.buyer_email} and this ticket attaches itself.
+              Sign up with {mine.buyer_email} and this ticket comes with you.
             </p>
           )}
         </div>
