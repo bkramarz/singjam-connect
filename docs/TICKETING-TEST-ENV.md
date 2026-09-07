@@ -87,11 +87,24 @@ on the event page — that panel is new for official events — and you should b
 to add a song to the set list, which you could not do before buying.
 
 **Claiming a guest order** (the new path)
-There is already an unclaimed paid guest order under `singjammusic613@gmail.com`
-from the 2026-09-07 test purchase. Sign in as that address and it should attach:
-the order gains a buyer, and you appear as going with set-list access. Verify with
-`node scripts/ticketing-test-env.mjs status` — "unclaimed guest orders" should drop
-to 0 and "attending" should rise.
+Sign **up**, not in — the address has no account, and creating one is what
+triggers the claim. There is an unclaimed paid guest order under
+`singjammusic613@gmail.com` from the 2026-09-07 test purchase waiting for exactly
+this. Google sign-in is the one-click route for a gmail address; email/password
+works too. On success the order gains a buyer, and you appear as going with
+set-list access.
+
+Verify with `node scripts/ticketing-test-env.mjs status` — "unclaimed guest
+orders" should drop to 0, "attending" should rise, and the set list should gain a
+collaborator.
+
+Don't want to spend a real address? Buy a fresh guest ticket under any
+`benkramarz+something@gmail.com` alias first, then sign up with that.
+
+This path was rehearsed end to end on 2026-09-07 against the real database and
+the real `/api/auth/complete` route — order claimed, ticket holder set, RSVP
+`attending`, collaborator role `editor` — using a disposable alias that was then
+deleted.
 
 **As the host** (sign in as the host account)
 Open the manage page. Add and delete tiers; try deleting one that has sales (it
