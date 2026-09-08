@@ -15,7 +15,9 @@ import { ticketDeliveryFailedEmailHtml, type FailedTicketDelivery } from "@/emai
 // retries first, because a transient Resend outage is the likeliest cause and a
 // retry fixes it outright, and only alerts a human for what it cannot deliver.
 
-const ALERT_TO = "events@singjam.org";
+// Both monitored role inboxes rather than one: an undelivered ticket is a
+// money-taken problem, so it should not be waiting behind one person's inbox.
+const ALERT_TO = ["events@singjam.org", "music@singjam.org"];
 const ALERT_FLAG = "ticket_delivery_failed_notified";
 const ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 

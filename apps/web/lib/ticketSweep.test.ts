@@ -114,7 +114,7 @@ describe("sweepUndeliveredTickets", () => {
 
     expect(sent()).toHaveLength(1);
     const mail = sent()[0][0];
-    expect(mail.to).toBe("events@singjam.org");
+    expect(mail.to).toEqual(["events@singjam.org", "music@singjam.org"]);
     expect(mail.subject).toContain("1 paid ticket");
     expect(mail.html).toContain("Tuesday Jam");
     expect(mail.html).toContain("buyer@example.com");
