@@ -338,6 +338,19 @@ export default function TicketPurchasePanel({
             </a>
             .
           </p>
+
+          {/* Asked here rather than by the Buy button because it is a question
+              about the address just typed, not about the payment. Guests only —
+              a member subscribed when they created their account. */}
+          <label className="flex cursor-pointer items-start gap-2.5 border-t border-zinc-100 pt-2.5 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={marketingOptIn}
+              onChange={(e) => setMarketingOptIn(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+            />
+            <span>Email me about future SingJam events</span>
+          </label>
         </div>
       )}
 
@@ -411,35 +424,22 @@ export default function TicketPurchasePanel({
         )
       )}
 
+      {/* Last thing before paying, and deliberately after the promo block: the
+          amount depends on the discounted total, so it has to be read where the
+          buyer can already see what they are actually paying. */}
       {count > 0 && !soldOut && (
-        <div className="space-y-2">
-          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
-            <input
-              type="checkbox"
-              checked={coverFees}
-              onChange={(e) => setCoverFees(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
-            />
-            <span>
-              Cover the {money(coverageFeeCents(subtotal), currency)} processing fee so all of my
-              ticket goes to SingJam
-            </span>
-          </label>
-
-          {/* Guests only. A member already subscribed when they made an account,
-              so asking again would be noise. */}
-          {!isSignedIn && (
-            <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
-              <input
-                type="checkbox"
-                checked={marketingOptIn}
-                onChange={(e) => setMarketingOptIn(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
-              />
-              <span>Email me about future SingJam events</span>
-            </label>
-          )}
-        </div>
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
+          <input
+            type="checkbox"
+            checked={coverFees}
+            onChange={(e) => setCoverFees(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+          />
+          <span>
+            Cover the {money(coverageFeeCents(subtotal), currency)} processing fee so all of my
+            ticket goes to SingJam
+          </span>
+        </label>
       )}
 
       <button
