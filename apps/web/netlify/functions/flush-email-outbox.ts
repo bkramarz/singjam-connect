@@ -2,6 +2,7 @@ import { schedule } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { flushEmailOutbox, sweepPendingWelcomes } from "../../lib/emailOutbox";
+import { expireStaleTicketHolds, sweepUndeliveredTickets } from "../../lib/ticketSweep";
 
 export const handler = schedule("*/10 * * * *", async () => {
   const admin = createClient(
@@ -11,6 +12,10 @@ export const handler = schedule("*/10 * * * *", async () => {
   );
   const resend = new Resend(process.env.RESEND_API_KEY);
 
+  // Two independent sweeps, each in its own try: a Resend outage takes out the
+  // welcome flush, and that must not be the reason a paid ticket goes unnoticed.
+  let failed = false;
+
   try {
     // Backstop the profile-save send first, then retry whatever is still
     // pending (including anything the sweep just enqueued).
@@ -18,8 +23,18 @@ export const handler = schedule("*/10 * * * *", async () => {
     await flushEmailOutbox(admin, resend);
   } catch (err) {
     console.error("flush-email-outbox:", err);
-    return { statusCode: 500 };
+    failed = true;
   }
 
-  return { statusCode: 200 };
+  try {
+    const expired = await expireStaleTicketHolds(admin);
+    if (expired > 0) console.log(`[ticketSweep] expired ${expired} stale hold(s)`);
+    const tickets = await sweepUndeliveredTickets(admin);
+    if (tickets.pending > 0) console.log("[ticketSweep]", tickets);
+  } catch (err) {
+    console.error("ticket-sweep:", err);
+    failed = true;
+  }
+
+  return { statusCode: failed ? 500 : 200 };
 });

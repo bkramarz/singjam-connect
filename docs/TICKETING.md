@@ -485,3 +485,135 @@ Probe output was `card, link, cashapp, amazon_pay`; MB WAY (Portugal) and
 Satispay (Italy) are enabled but never surface for US buyers in USD. Inert, not
 worth a change, but don't be surprised by the gap between the Dashboard count and
 what the Element shows.
+
+---
+
+# What's left (as of 2026-09-08, post-launch)
+
+Paid ticketing is **live on production with real money**. Verified end to end that
+night: live purchase → webhook → order paid → ticket issued → confirmation email →
+buyer seated as attending with set-list access → refund → RSVP cancelled → an
+abandoned checkout expiring and releasing its hold. All six webhook events have
+now fired for real.
+
+What follows is what is genuinely not finished, after the alarm below.
+
+## Closed since launch
+
+**The silent-fulfilment alarm is built** (`apps/web/lib/ticketSweep.ts`, wired
+into the existing ten-minute `flush-email-outbox` schedule). Migration 154's
+partial index on `(status = 'paid' and ticket_email_sent_at is null)` finally has
+a reader:
+
+- It **retries first** — a transient Resend outage is the likeliest cause of an
+  unstamped order, and a retry fixes it outright with nobody woken up.
+- What it cannot deliver, it **emails to `events@singjam.org`**: event, buyer
+  address, amount, order id, the actual error, and a link to that event's guest
+  list so the ticket can be sent by hand.
+- It alerts **once per situation, not once per sweep** — dedupe lives in
+  `system_flags` under `ticket_delivery_failed_notified`, keyed on the order ids
+  the last alert named, so a repeat is suppressed for six hours but an order the
+  alert has never mentioned always sends immediately. Same pattern as the Spotify
+  token alert.
+- `sendTicketEmail` now **returns whether it sent**, and fulfilment only stamps
+  the order when it did. Previously an order with no resolvable address was
+  stamped as delivered and vanished from the queue — the one failure the detector
+  could not have caught.
+- The same schedule now calls **`expire_stale_ticket_orders()`**, which nothing
+  had ever called. Production was still holding a `pending` order from 9 August
+  whose expiry webhook never landed; the sweep released it.
+
+## 1. Managing an official event grants nothing on its set list
+
+`canManageJam` (lib/jamAuthz.ts) governs the jam. Set access is a separate system:
+owner-or-accepted-collaborator, which takes no notice of it. So Sherri can run an
+event Ben created — tiers, sales, door check-in — but cannot touch its set list.
+That is precisely the "second pair of hands" case the authz work was meant to fix,
+and it stopped at the jam boundary.
+
+**Not a one-liner.** The owner-or-collaborator test is re-implemented across ~17
+files (the set page, the PDF page, and every mutation route: songs, reorder,
+delete, collaborators, invites, copy, playlists), several with 2–3 checks each.
+Fixing only the page would be worse than nothing — edit controls that 403 on click.
+It wants a shared `canEditSet()` folding in `canManageJam` for a jam-linked set,
+threaded through all of them, same shape as the `canManageJam` refactor itself.
+
+Open design question inside it: should managing a jam grant **editor** or
+**co-owner** on its set? Co-owner can remove other people's songs. For a host
+fixing the running order before doors, probably yes — but that is a decision.
+
+Workaround meanwhile: add the person as a set collaborator, one click.
+
+## 2. A refund does not revoke set access — NOT a bug
+
+Confirmed by reading the code: cancelling an RSVP on an ordinary jam does not
+remove `set_collaborators` either — it only deletes the co-host row. Refunds
+behaving the same way is *consistent*. Making refunds stricter than RSVP
+cancellation would be the odd choice.
+
+There is also a decent argument for leaving it: somebody who added songs to a set
+should probably not lose access to their own contributions because they dropped
+out. Listed here so it is not "fixed" by reflex. It is a product decision, and it
+belongs to both paths or neither.
+
+## 3. A failed `markAttending` seats nobody, and retries cannot fix it
+
+Found while building the alarm, not yet fixed. `fulfilPendingOrder` flips the
+order to `paid`, sends the ticket, *then* calls `markAttending`. That last call
+has no try/catch, so if it throws the webhook returns 500 — but the order is
+already `paid`, so Stripe's retry hits the `.eq("status", "pending")` guard,
+`fulfilPendingOrder` returns null, and the retry succeeds having done nothing.
+Net result: money taken, ticket delivered, buyer never seated and with no
+set-list access.
+
+Deliberately left alone rather than half-fixed. Wrapping `markAttending` in a
+try/catch would silence the one 500 that currently reaches Stripe and make the
+failure *completely* invisible — strictly worse. The fix is the pair: catch it,
+and give the sweep a second reconciliation query (paid member orders from the
+last day with no `attending` row in `jam_rsvps`). Both, or neither.
+
+## 4. Mobile polish
+
+Not yet looked at. The whole ticketing surface was built and reviewed on desktop:
+the tier picker and its +/- steppers, the guest name/email step, the promo code
+row, the Payment Element accordion, the confirmation page and its two CTAs, and
+the host manage page — which is the most suspect, since it is a dense table of
+sales, search and check-in buttons that a host will realistically use **on a phone
+at the door**. Check the check-in flow one-handed before an event depends on it.
+
+## Ben's Dashboard tasks (no code)
+
+- **Turn on developer/API email alerts** at Settings → Communication preferences,
+  so a failing endpoint reaches a human. Coarse — it fires on sustained failure,
+  not the first one — but strictly better than nothing.
+- **Check the 501(c)(3) rate.** The account is `business_type: non_profit`, and
+  Stripe's nonprofit pricing is an application, not automatic. It applies to every
+  ticket ever sold, so it is worth more than most of this list.
+- **Create a test-mode "Tickets" payment method configuration.** The live one
+  (`pmc_1UDAnBL0Q3ZMbggU8t7ijh1h`) is live-mode only, so local checkout still shows
+  the wide method list. Its id would go in `apps/web/.env.local`, not Netlify.
+- **Confirm Klarna is gone** from live checkout after unselecting "Pay later with
+  Klarna" in Link settings.
+- **Look at "SingJam at 2727 California"** (2026-07-26, official) — it already
+  carries 1 ticket tier and is not test data. Past-dated so it cannot sell, but
+  worth knowing why it exists.
+
+## Housekeeping
+
+- **Screenshots were never attached to PR #279**, which CLAUDE.md requires for UI
+  changes. Worth adding retrospectively: the guest row under "Who's going", the
+  confirmation page, and free checkout showing no card form.
+- **Deleting a Supabase user does not remove them from ActiveCampaign.** Two
+  separate paths put test accounts in the real mailing list: `syncContact()` runs
+  on the signup routes, and the nightly `ac-sync` sweep (`0 3 * * *`) pushes every
+  Supabase user regardless of how it was created. Three test contacts were found
+  and removed manually on 2026-09-08; `teardown` now deletes the AC contact too,
+  outside the `if (user)` branch so it still cleans up when the Supabase user is
+  already gone.
+- **Test environment is torn down** (confirmed 2026-09-08: `status` reports no
+  event and neither account). To bring it back, `node
+  scripts/ticketing-test-env.mjs seed`; `teardown` removes the event, tiers,
+  orders, tickets, set list, both `+singjam-test-*` accounts and the promo codes.
+  Note the two seeded promo rows were already deleted manually on 2026-09-07 —
+  they pointed at test-mode Stripe objects and made the live checkout 502 rather
+  than cleanly rejecting the code.

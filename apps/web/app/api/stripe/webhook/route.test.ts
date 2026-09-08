@@ -228,6 +228,31 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
 
+  it("does not stamp the order as delivered when there is no address to send to", async () => {
+    // A member with no email on their auth record. Stamping would drop the
+    // order out of the sweeper's queue and nobody would ever learn the ticket
+    // was never sent.
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockGetUserById.mockResolvedValueOnce({ data: { user: {} } });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder({ buyer_email: null }) })); // order update
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: null })) // profiles lookup inside sendTicketEmail
+      .mockReturnValueOnce(chain({ data: null })) // existing rsvp lookup
+      .mockReturnValueOnce(chain({ error: null })) // rsvp insert
+      .mockReturnValueOnce(chain({ data: null })); // linked set lookup
+
+    const res = await POST(makeReq());
+    expect(res.status).toBe(200);
+    expect(mockSend).not.toHaveBeenCalled();
+
+    // Exactly one ticket_orders write: the paid transition, no email stamp.
+    const orderWrites = mockAdminFrom.mock.calls.filter((c) => c[0] === "ticket_orders");
+    expect(orderWrites).toHaveLength(1);
+  });
+
   it("still marks the order paid when the confirmation email fails", async () => {
     mockConstructEvent.mockReturnValue({
       type: "checkout.session.completed",
