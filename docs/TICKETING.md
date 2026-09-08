@@ -576,6 +576,13 @@ at the door**. Check the check-in flow one-handed before an event depends on it.
 - **Screenshots were never attached to PR #279**, which CLAUDE.md requires for UI
   changes. Worth adding retrospectively: the guest row under "Who's going", the
   confirmation page, and free checkout showing no card form.
+- **Deleting a Supabase user does not remove them from ActiveCampaign.** Two
+  separate paths put test accounts in the real mailing list: `syncContact()` runs
+  on the signup routes, and the nightly `ac-sync` sweep (`0 3 * * *`) pushes every
+  Supabase user regardless of how it was created. Three test contacts were found
+  and removed manually on 2026-09-08; `teardown` now deletes the AC contact too,
+  outside the `if (user)` branch so it still cleans up when the Supabase user is
+  already gone.
 - **Tear down the test environment when finished**:
   `node scripts/ticketing-test-env.mjs teardown`. It removes the event, tiers,
   orders, tickets, set list, both `+singjam-test-*` accounts and the promo codes.

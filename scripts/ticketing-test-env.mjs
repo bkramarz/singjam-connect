@@ -43,6 +43,26 @@ if (!PASSWORD) throw new Error("TICKETING_TEST_PASSWORD missing from apps/web/.e
 
 const cmd = process.argv[2] ?? "status";
 
+// Mirrors deleteContact() in apps/web/lib/activecampaign.ts. Duplicated rather
+// than imported because this script is plain ESM run by node, outside the Next
+// app's module resolution and path aliases. No-op when AC creds are absent.
+async function deleteAcContact(email) {
+  const base = env.AC_API_URL, key = env.AC_API_KEY;
+  if (!base || !key) return;
+  const headers = { "Api-Token": key };
+  try {
+    const found = await fetch(`${base}/api/3/contacts?email=${encodeURIComponent(email)}`, { headers });
+    const id = (await found.json())?.contacts?.[0]?.id;
+    if (!id) return;
+    const res = await fetch(`${base}/api/3/contacts/${id}`, { method: "DELETE", headers });
+    console.log(res.ok
+      ? `  deleted ActiveCampaign contact ${email}`
+      : `  WARNING: ActiveCampaign delete failed (${res.status}) for ${email}`);
+  } catch (e) {
+    console.log(`  WARNING: ActiveCampaign delete errored for ${email}: ${e.message}`);
+  }
+}
+
 async function findUser(email) {
   // No get-by-email in the admin API; page until found.
   for (let page = 1; page <= 10; page++) {
@@ -243,6 +263,12 @@ async function teardown() {
       await db.auth.admin.deleteUser(user.id);
       console.log(`  deleted account ${acct.email}`);
     }
+    // Deleting the Supabase user is not enough. The nightly ac-sync sweep
+    // (netlify/functions/ac-sync.ts, "0 3 * * *") pushes every Supabase user to
+    // ActiveCampaign, so a test account seeded through the admin API — which
+    // never touches the signup path — still ends up as a contact by the next
+    // morning. Left behind, they sit in the real mailing list forever.
+    await deleteAcContact(acct.email);
   }
 
   await db.from("ticket_promo_codes").delete().ilike("code", PROMO_CODE);
