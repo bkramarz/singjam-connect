@@ -485,3 +485,100 @@ Probe output was `card, link, cashapp, amazon_pay`; MB WAY (Portugal) and
 Satispay (Italy) are enabled but never surface for US buyers in USD. Inert, not
 worth a change, but don't be surprised by the gap between the Dashboard count and
 what the Element shows.
+
+---
+
+# What's left (as of 2026-09-08, post-launch)
+
+Paid ticketing is **live on production with real money**. Verified end to end that
+night: live purchase → webhook → order paid → ticket issued → confirmation email →
+buyer seated as attending with set-list access → refund → RSVP cancelled → an
+abandoned checkout expiring and releasing its hold. All six webhook events have
+now fired for real.
+
+What follows is what is genuinely not finished.
+
+## 1. Nothing watches for silent fulfilment failure — highest value
+
+The dangerous failure is not the endpoint erroring; Stripe notices that. It is
+Stripe getting a 200 while fulfilment did not happen: money taken, no ticket, the
+buyer left on "Confirming your payment…". Stripe cannot see it.
+
+Migration 154 already built the detector and nothing reads it — a partial index on
+`(status = 'paid' AND ticket_email_sent_at IS NULL)`, described in its own comment
+as "exactly the work queue a retry sweeper reads". A non-zero count on that index
+means money taken and ticket undelivered.
+
+`apps/web/netlify/functions/flush-email-outbox.ts` already runs every 10 minutes.
+Adding the check there is small, and it is the alarm that actually matters.
+
+## 2. Managing an official event grants nothing on its set list
+
+`canManageJam` (lib/jamAuthz.ts) governs the jam. Set access is a separate system:
+owner-or-accepted-collaborator, which takes no notice of it. So Sherri can run an
+event Ben created — tiers, sales, door check-in — but cannot touch its set list.
+That is precisely the "second pair of hands" case the authz work was meant to fix,
+and it stopped at the jam boundary.
+
+**Not a one-liner.** The owner-or-collaborator test is re-implemented across ~17
+files (the set page, the PDF page, and every mutation route: songs, reorder,
+delete, collaborators, invites, copy, playlists), several with 2–3 checks each.
+Fixing only the page would be worse than nothing — edit controls that 403 on click.
+It wants a shared `canEditSet()` folding in `canManageJam` for a jam-linked set,
+threaded through all of them, same shape as the `canManageJam` refactor itself.
+
+Open design question inside it: should managing a jam grant **editor** or
+**co-owner** on its set? Co-owner can remove other people's songs. For a host
+fixing the running order before doors, probably yes — but that is a decision.
+
+Workaround meanwhile: add the person as a set collaborator, one click.
+
+## 3. A refund does not revoke set access — NOT a bug
+
+Confirmed by reading the code: cancelling an RSVP on an ordinary jam does not
+remove `set_collaborators` either — it only deletes the co-host row. Refunds
+behaving the same way is *consistent*. Making refunds stricter than RSVP
+cancellation would be the odd choice.
+
+There is also a decent argument for leaving it: somebody who added songs to a set
+should probably not lose access to their own contributions because they dropped
+out. Listed here so it is not "fixed" by reflex. It is a product decision, and it
+belongs to both paths or neither.
+
+## 4. Mobile polish
+
+Not yet looked at. The whole ticketing surface was built and reviewed on desktop:
+the tier picker and its +/- steppers, the guest name/email step, the promo code
+row, the Payment Element accordion, the confirmation page and its two CTAs, and
+the host manage page — which is the most suspect, since it is a dense table of
+sales, search and check-in buttons that a host will realistically use **on a phone
+at the door**. Check the check-in flow one-handed before an event depends on it.
+
+## Ben's Dashboard tasks (no code)
+
+- **Turn on developer/API email alerts** at Settings → Communication preferences,
+  so a failing endpoint reaches a human. Coarse — it fires on sustained failure,
+  not the first one — but strictly better than nothing.
+- **Check the 501(c)(3) rate.** The account is `business_type: non_profit`, and
+  Stripe's nonprofit pricing is an application, not automatic. It applies to every
+  ticket ever sold, so it is worth more than most of this list.
+- **Create a test-mode "Tickets" payment method configuration.** The live one
+  (`pmc_1UDAnBL0Q3ZMbggU8t7ijh1h`) is live-mode only, so local checkout still shows
+  the wide method list. Its id would go in `apps/web/.env.local`, not Netlify.
+- **Confirm Klarna is gone** from live checkout after unselecting "Pay later with
+  Klarna" in Link settings.
+- **Look at "SingJam at 2727 California"** (2026-07-26, official) — it already
+  carries 1 ticket tier and is not test data. Past-dated so it cannot sell, but
+  worth knowing why it exists.
+
+## Housekeeping
+
+- **Screenshots were never attached to PR #279**, which CLAUDE.md requires for UI
+  changes. Worth adding retrospectively: the guest row under "Who's going", the
+  confirmation page, and free checkout showing no card form.
+- **Tear down the test environment when finished**:
+  `node scripts/ticketing-test-env.mjs teardown`. It removes the event, tiers,
+  orders, tickets, set list, both `+singjam-test-*` accounts and the promo codes.
+  Note the two seeded promo rows were already deleted manually on 2026-09-07 —
+  they pointed at test-mode Stripe objects and made the live checkout 502 rather
+  than cleanly rejecting the code.
