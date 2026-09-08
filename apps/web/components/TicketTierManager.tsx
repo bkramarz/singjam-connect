@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { guestListToCsv, guestListFilename } from "@/lib/guestListCsv";
 
 type Tier = {
   id: string;
@@ -23,6 +24,8 @@ type Guest = {
   tier: string;
   is_member: boolean;
   checked_in_at: string | null;
+  // Returned by the orders route all along; the type just never said so.
+  paid_at: string | null;
 };
 
 type PromoCode = { id: string; code: string; label: string; redeemed: number | null };
@@ -91,7 +94,7 @@ export function TicketManagerSkeleton() {
   );
 }
 
-export default function TicketTierManager({ jamId }: { jamId: string }) {
+export default function TicketTierManager({ jamId, jamName }: { jamId: string; jamName?: string | null }) {
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -227,6 +230,16 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
         prev.map((x) => (x.ticket_id === g.ticket_id ? { ...x, checked_in_at: json.checked_in_at } : x))
       );
     }
+  }
+
+  function downloadCsv() {
+    const blob = new Blob([guestListToCsv(guests)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = guestListFilename(jamName);
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const filtered = guests.filter((g) => {
@@ -433,9 +446,23 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold tracking-wide text-zinc-700">
-          Guest list {guests.length > 0 && <span className="font-normal text-zinc-400">({guests.length})</span>}
-        </h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-wide text-zinc-700">
+            Guest list {guests.length > 0 && <span className="font-normal text-zinc-400">({guests.length})</span>}
+          </h2>
+          {/* Desktop only: a downloaded file has nowhere useful to go on a
+              phone, and the door workflow there is search-and-tap, not export.
+              Always the whole list, never the current search — "download the
+              guest list" that quietly gave you four of forty would be a trap. */}
+          {guests.length > 0 && (
+            <button
+              onClick={downloadCsv}
+              className="hidden shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 sm:inline-flex"
+            >
+              Download CSV
+            </button>
+          )}
+        </div>
 
         {guests.length === 0 ? (
           <p className="text-sm text-zinc-500">No tickets sold yet.</p>

@@ -51,7 +51,7 @@ export default async function ManageTicketsPage({ params }: { params: Promise<{ 
         </p>
       )}
 
-      <TicketTierManager jamId={id} />
+      <TicketTierManager jamId={id} jamName={jam.name} />
     </div>
   );
 }
