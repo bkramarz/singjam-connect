@@ -2,7 +2,11 @@ import { schedule } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { flushEmailOutbox, sweepPendingWelcomes } from "../../lib/emailOutbox";
-import { expireStaleTicketHolds, sweepUndeliveredTickets } from "../../lib/ticketSweep";
+import {
+  expireStaleTicketHolds,
+  reconcileTicketAttendance,
+  sweepUndeliveredTickets,
+} from "../../lib/ticketSweep";
 
 export const handler = schedule("*/10 * * * *", async () => {
   const admin = createClient(
@@ -30,7 +34,9 @@ export const handler = schedule("*/10 * * * *", async () => {
     const expired = await expireStaleTicketHolds(admin);
     if (expired > 0) console.log(`[ticketSweep] expired ${expired} stale hold(s)`);
     const tickets = await sweepUndeliveredTickets(admin);
-    if (tickets.pending > 0) console.log("[ticketSweep]", tickets);
+    if (tickets.pending > 0) console.log("[ticketSweep] undelivered:", tickets);
+    const seats = await reconcileTicketAttendance(admin);
+    if (seats.pending > 0) console.log("[ticketSweep] unseated:", seats);
   } catch (err) {
     console.error("ticket-sweep:", err);
     failed = true;

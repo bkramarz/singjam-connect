@@ -39,6 +39,17 @@ function chain(result: any) {
   return c;
 }
 
+function throwingChain(message: string) {
+  const c: any = {};
+  for (const m of ["select", "eq", "update", "insert"]) {
+    c[m] = vi.fn().mockReturnValue(c);
+  }
+  c.single = vi.fn().mockRejectedValue(new Error(message));
+  c.maybeSingle = vi.fn().mockRejectedValue(new Error(message));
+  c.then = (_r: any, reject: any) => Promise.reject(new Error(message)).catch(reject);
+  return c;
+}
+
 // Chains are addressed by the table they were opened on, not by position.
 // Positional indices broke every time a query was added anywhere upstream —
 // including in code the webhook merely calls — and the failure looked like a
@@ -251,6 +262,30 @@ describe("POST /api/stripe/webhook", () => {
     // Exactly one ticket_orders write: the paid transition, no email stamp.
     const orderWrites = mockAdminFrom.mock.calls.filter((c) => c[0] === "ticket_orders");
     expect(orderWrites).toHaveLength(1);
+  });
+
+  it("keeps the sale and returns 200 when seating the buyer fails", async () => {
+    // Throwing here used to give Stripe a 500 on a sale that had completed.
+    // Its retry could never help: the status guard means a redelivery returns
+    // early, so the retry succeeded having done nothing and the buyer was
+    // never seated. Now swallowed, because reconcileTicketAttendance repairs
+    // the missing seat from migration 161's queue within ten minutes.
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder() })); // order update
+    emailChains();
+    mockAdminFrom.mockReturnValueOnce(throwingChain("jam_rsvps unreachable"));
+
+    const res = await POST(makeReq());
+    expect(res.status).toBe(200);
+
+    // The money and the ticket are both accounted for; only the seat is missing.
+    expect(chainFor("ticket_orders").update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "paid" })
+    );
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 
   it("still marks the order paid when the confirmation email fails", async () => {

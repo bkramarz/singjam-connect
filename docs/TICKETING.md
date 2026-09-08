@@ -523,6 +523,29 @@ a reader:
   had ever called. Production was still holding a `pending` order from 9 August
   whose expiry webhook never landed; the sweep released it.
 
+**Attendance reconciliation, the other half of the same problem** (migration 161,
+`ticket_orders_awaiting_attendance()`). `fulfilPendingOrder` flips the order to
+paid and only *then* seats the buyer, so the `.eq("status","pending")` guard that
+makes Stripe's redeliveries safe gave everything after it exactly one attempt —
+and `markAttending` never checks the errors on its own writes, so a failed insert
+neither threw nor left a trace. Money taken, ticket delivered, buyer absent from
+"Who's going" and with no seat on the set list.
+
+- The queue is **derived**, since attendance has no per-order marker the way the
+  email has `ticket_email_sent_at`: a paid member order with no `jam_rsvps` row.
+- Keyed on **the absence of the row, not its status**. Cancelling sets
+  `status='cancelled'` and leaves the row, and the cancel handler has no
+  official-event guard — so a ticket holder can drop out on purpose, and keying
+  on status would re-seat them every ten minutes against their wishes.
+- The sweep **verifies the seat afterwards** rather than trusting `markAttending`
+  to have written anything, or a permanently failing insert would be reported as
+  repaired on every run forever.
+- `markAttending` is now wrapped in the webhook path. That was only safe once
+  repair existed — earlier note in this doc said the fix was "both, or neither",
+  which was wrong: **reconciling alone is fine, catching alone is not.** A 500 on
+  a completed sale bought nothing anyway, because the retry hit the status guard
+  and returned early.
+
 ## 1. Managing an official event grants nothing on its set list
 
 `canManageJam` (lib/jamAuthz.ts) governs the jam. Set access is a separate system:
@@ -556,23 +579,7 @@ should probably not lose access to their own contributions because they dropped
 out. Listed here so it is not "fixed" by reflex. It is a product decision, and it
 belongs to both paths or neither.
 
-## 3. A failed `markAttending` seats nobody, and retries cannot fix it
-
-Found while building the alarm, not yet fixed. `fulfilPendingOrder` flips the
-order to `paid`, sends the ticket, *then* calls `markAttending`. That last call
-has no try/catch, so if it throws the webhook returns 500 — but the order is
-already `paid`, so Stripe's retry hits the `.eq("status", "pending")` guard,
-`fulfilPendingOrder` returns null, and the retry succeeds having done nothing.
-Net result: money taken, ticket delivered, buyer never seated and with no
-set-list access.
-
-Deliberately left alone rather than half-fixed. Wrapping `markAttending` in a
-try/catch would silence the one 500 that currently reaches Stripe and make the
-failure *completely* invisible — strictly worse. The fix is the pair: catch it,
-and give the sweep a second reconciliation query (paid member orders from the
-last day with no `attending` row in `jam_rsvps`). Both, or neither.
-
-## 4. Mobile polish
+## 3. Mobile polish
 
 Not yet looked at. The whole ticketing surface was built and reviewed on desktop:
 the tier picker and its +/- steppers, the guest name/email step, the promo code

@@ -6,10 +6,16 @@ vi.mock("@/lib/resend", () => ({
   FROM_ADDRESS: "SingJam <hello@singjam.org>",
 }));
 vi.mock("@/lib/ticketFulfilment", () => ({ sendTicketEmail: vi.fn() }));
+vi.mock("@/lib/jamAttendance", () => ({ markAttending: vi.fn() }));
 
-import { sweepUndeliveredTickets, expireStaleTicketHolds } from "./ticketSweep";
+import {
+  sweepUndeliveredTickets,
+  expireStaleTicketHolds,
+  reconcileTicketAttendance,
+} from "./ticketSweep";
 import { sendTicketEmail } from "@/lib/ticketFulfilment";
 import { resend } from "@/lib/resend";
+import { markAttending } from "@/lib/jamAttendance";
 
 // Chainable Supabase mock addressed by TABLE, never by call order: the sweep
 // touches ticket_orders, jams and system_flags in a sequence that changes with
@@ -21,6 +27,7 @@ function makeAdmin({
   flag = null as any,
   rpcData = 0 as any,
   rpcError = null as any,
+  seat = null as any,
 } = {}) {
   const updates: { table: string; payload: any; id?: string }[] = [];
   const upserts: { table: string; payload: any }[] = [];
@@ -49,6 +56,7 @@ function makeAdmin({
       if (table === "ticket_orders") return resolve({ data: queue, error: queueError });
       if (table === "jams") return resolve({ data: jams, error: null });
       if (table === "system_flags") return resolve({ data: flag, error: null });
+      if (table === "jam_rsvps") return resolve({ data: seat, error: null });
       return resolve({ data: null, error: null });
     };
     return obj;
@@ -74,6 +82,7 @@ const sent = () => (resend.emails.send as any).mock.calls;
 
 beforeEach(() => {
   vi.mocked(sendTicketEmail).mockReset();
+  vi.mocked(markAttending).mockReset();
   (resend.emails.send as any).mockReset();
   (resend.emails.send as any).mockResolvedValue({ error: null });
 });
@@ -248,5 +257,51 @@ describe("expireStaleTicketHolds", () => {
   it("returns 0 when the function errors", async () => {
     const { admin } = makeAdmin({ rpcError: { message: "nope" } });
     expect(await expireStaleTicketHolds(admin)).toBe(0);
+  });
+});
+
+describe("reconcileTicketAttendance", () => {
+  const unseated = { order_id: "o1", jam_id: "j1", user_id: "u1" };
+
+  it("does nothing when every paid buyer already has a seat", async () => {
+    const { admin } = makeAdmin({ rpcData: [] });
+    expect(await reconcileTicketAttendance(admin)).toEqual({ pending: 0, seated: 0, failed: 0 });
+    expect(markAttending).not.toHaveBeenCalled();
+  });
+
+  it("seats a paid buyer who was never seated", async () => {
+    const { admin, rpc } = makeAdmin({ rpcData: [unseated], seat: { id: "r1" } });
+
+    expect(await reconcileTicketAttendance(admin)).toEqual({ pending: 1, seated: 1, failed: 0 });
+    expect(rpc).toHaveBeenCalledWith("ticket_orders_awaiting_attendance");
+    expect(markAttending).toHaveBeenCalledWith(admin, "j1", "u1");
+  });
+
+  it("counts a failure when the seat still is not there afterwards", async () => {
+    // markAttending never checks the errors on its own writes, so it can
+    // "succeed" without writing anything. Trusting it would report the same
+    // broken order as repaired on every sweep, forever.
+    const { admin } = makeAdmin({ rpcData: [unseated], seat: null });
+
+    expect(await reconcileTicketAttendance(admin)).toEqual({ pending: 1, seated: 0, failed: 1 });
+  });
+
+  it("keeps going when seating one order throws", async () => {
+    vi.mocked(markAttending).mockRejectedValueOnce(new Error("db down"));
+    const { admin } = makeAdmin({
+      rpcData: [unseated, { order_id: "o2", jam_id: "j2", user_id: "u2" }],
+      seat: { id: "r1" },
+    });
+
+    // The throw is swallowed per order; the verification query is what decides
+    // the count, and this mock reports a seat for both.
+    expect(await reconcileTicketAttendance(admin)).toMatchObject({ pending: 2, seated: 2 });
+    expect(markAttending).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up quietly when the work-queue function errors", async () => {
+    const { admin } = makeAdmin({ rpcError: { message: "no such function" } });
+    expect(await reconcileTicketAttendance(admin)).toEqual({ pending: 0, seated: 0, failed: 0 });
+    expect(markAttending).not.toHaveBeenCalled();
   });
 });
