@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { SITE_URL } from "@/lib/stripe";
 import { sendTicketEmail, type PaidOrder } from "@/lib/ticketFulfilment";
+import { markAttending } from "@/lib/jamAttendance";
 import { ticketDeliveryFailedEmailHtml, type FailedTicketDelivery } from "@/emails/ticket-delivery-failed";
 
 // The failure Stripe cannot see. It watches for our endpoint erroring, not for
@@ -179,4 +180,59 @@ export async function expireStaleTicketHolds(admin: SupabaseClient): Promise<num
     return 0;
   }
   return typeof data === "number" ? data : 0;
+}
+
+export type AttendanceReconcileResult = { pending: number; seated: number; failed: number };
+
+// The other half of the same problem the email sweep solves, for the other
+// thing fulfilment does. `fulfilPendingOrder` flips the order to paid and only
+// then seats the buyer, so the `.eq("status","pending")` guard that makes
+// Stripe's redeliveries safe gives everything after it exactly one attempt —
+// and `markAttending` swallows the errors on its own writes, so a failure
+// leaves no trace at all. Buyer paid, ticket in hand, not on the guest list and
+// no seat on the set list.
+//
+// Migration 161 derives the queue (a paid member order with no jam_rsvps row of
+// any kind) and explains why it keys on the absence of the row rather than on
+// its status: a ticket holder can cancel deliberately, and re-seating them
+// every ten minutes would be worse than the bug.
+export async function reconcileTicketAttendance(admin: SupabaseClient): Promise<AttendanceReconcileResult> {
+  const { data, error } = await admin.rpc("ticket_orders_awaiting_attendance");
+  if (error) {
+    console.error(`[ticketSweep] ticket_orders_awaiting_attendance failed: ${error.message}`);
+    return { pending: 0, seated: 0, failed: 0 };
+  }
+
+  const rows = (data ?? []) as { order_id: string; jam_id: string; user_id: string }[];
+  let seated = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    try {
+      await markAttending(admin, row.jam_id, row.user_id);
+    } catch (err) {
+      console.error(`[ticketSweep] seating order ${row.order_id} threw:`, err);
+    }
+
+    // markAttending never inspects the errors on its own writes, so "it did not
+    // throw" is not evidence that the row exists. Check, or a permanently
+    // failing insert would be reported as repaired on every sweep forever.
+    const { data: seat } = await admin
+      .from("jam_rsvps")
+      .select("id")
+      .eq("jam_id", row.jam_id)
+      .eq("user_id", row.user_id)
+      .maybeSingle();
+
+    if (seat) {
+      seated++;
+    } else {
+      failed++;
+      console.error(
+        `[ticketSweep] order ${row.order_id} is paid but its buyer is still not seated on jam ${row.jam_id}`,
+      );
+    }
+  }
+
+  return { pending: rows.length, seated, failed };
 }

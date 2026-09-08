@@ -132,8 +132,19 @@ export async function fulfilPendingOrder(
   // Guests have no profile to attach attendance to — jam_rsvps.user_id is NOT
   // NULL. Their order and tickets are the record, and they show on the guest
   // list through the guest-attendees route instead.
+  //
+  // Isolated for the same reason as the email: the order is already correctly
+  // paid, and throwing here gave Stripe a 500 on a completed sale. Its retry
+  // could never help either — the status guard above means a redelivery
+  // returns early, so the retry succeeded having done nothing. Safe to swallow
+  // only because reconcileTicketAttendance re-derives the missing seat from
+  // migration 161 and repairs it within ten minutes.
   if (updated.buyer_user_id) {
-    await markAttending(admin, updated.jam_id, updated.buyer_user_id);
+    try {
+      await markAttending(admin, updated.jam_id, updated.buyer_user_id);
+    } catch (e) {
+      console.error("seating the buyer failed", updated.id, e);
+    }
   }
 
   return updated as PaidOrder;
