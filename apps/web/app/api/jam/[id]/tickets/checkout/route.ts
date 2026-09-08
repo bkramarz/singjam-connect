@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolvePromoCode } from "@/lib/promoCode";
+import { coverageFeeCents } from "@/lib/ticketFees";
 import { fulfilPendingOrder } from "@/lib/ticketFulfilment";
 import {
   stripe,
@@ -47,12 +48,18 @@ export async function POST(
   let guestEmail = "";
   let guestName = "";
   let promoCode = "";
+  let coverFees = false;
+  let marketingOptIn = false;
   try {
     const body = await req.json();
     items = Array.isArray(body?.items) ? body.items : [];
     guestEmail = typeof body?.email === "string" ? body.email.trim() : "";
     guestName = typeof body?.name === "string" ? body.name.trim() : "";
     promoCode = typeof body?.promo_code === "string" ? body.promo_code.trim() : "";
+    // Both default to false here, not true. The checkbox defaults to ticked in
+    // the UI, but a request that says nothing must not be read as consent.
+    coverFees = body?.cover_fees === true;
+    marketingOptIn = body?.marketing_opt_in === true;
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
@@ -103,6 +110,12 @@ export async function POST(
     );
   }
 
+  // Only guests are asked, so a signed-in buyer can never be recorded as having
+  // opted in here — their subscription came from creating an account.
+  if (marketingOptIn && !user) {
+    await admin.from("ticket_orders").update({ marketing_opt_in: true }).eq("id", orderId);
+  }
+
   const { data: order } = await admin
     .from("ticket_orders")
     .select("id, amount_cents, currency")
@@ -147,6 +160,13 @@ export async function POST(
     discounts = [{ promotion_code: resolved.promotionCodeId }];
     totalCents = resolved.totalCents;
   }
+
+  // Computed after any discount, so a buyer covering fees on a discounted
+  // ticket covers the fee on what they actually pay. A percentage promotion
+  // code does also discount this line in Stripe, so the organisation recovers
+  // slightly less than the whole fee on that combination — cents, and only when
+  // both are in play.
+  const feeCents = coverFees ? coverageFeeCents(totalCents) : 0;
 
   // Nothing to charge, so don't ask. Stripe would happily make a zero-amount
   // session, but the Payment Element still renders a card form against it and
@@ -200,14 +220,30 @@ export async function POST(
       // 30 minutes is Stripe's floor for expires_at, and is deliberately shorter
       // than the database hold so the session always dies first. See lib/stripe.ts.
       expires_at: Math.floor(Date.now() / 1000) + SESSION_EXPIRY_MINUTES * 60,
-      line_items: [...byType.values()].map((l) => ({
-        quantity: l.qty,
-        price_data: {
-          currency: l.currency,
-          unit_amount: l.price_cents,
-          product_data: { name: `${jam.name ?? "Event"} — ${l.name}` },
-        },
-      })),
+      line_items: [
+        ...[...byType.values()].map((l) => ({
+          quantity: l.qty,
+          price_data: {
+            currency: l.currency,
+            unit_amount: l.price_cents,
+            product_data: { name: `${jam.name ?? "Event"} — ${l.name}` },
+          },
+        })),
+        // Its own line so the buyer sees what the ticket costs and what the
+        // processing costs, rather than one inflated ticket price.
+        ...(feeCents > 0
+          ? [
+              {
+                quantity: 1,
+                price_data: {
+                  currency: order!.currency,
+                  unit_amount: feeCents,
+                  product_data: { name: "Processing fee" },
+                },
+              },
+            ]
+          : []),
+      ],
     };
 
     // A payment method configuration belongs to one Stripe mode. Point a test

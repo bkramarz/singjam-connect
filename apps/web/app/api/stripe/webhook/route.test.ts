@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockAdminFrom, mockConstructEvent, mockSend, mockGetUserById } = vi.hoisted(() => ({
+const { mockAdminFrom, mockConstructEvent, mockSend, mockGetUserById, mockSyncContact } = vi.hoisted(() => ({
+  mockSyncContact: vi.fn().mockResolvedValue([]),
   mockAdminFrom: vi.fn(),
   mockConstructEvent: vi.fn(),
   mockSend: vi.fn().mockResolvedValue({}),
@@ -25,6 +26,7 @@ vi.mock("@/lib/resend", () => ({
 vi.mock("@/emails/ticket-confirmation", () => ({
   ticketConfirmationHtml: vi.fn(() => "<html>"),
 }));
+vi.mock("@/lib/activecampaign", () => ({ syncContact: mockSyncContact }));
 
 import { POST } from "./route";
 
@@ -108,6 +110,8 @@ beforeEach(() => {
   mockAdminFrom.mockReset();
   mockSend.mockReset();
   mockSend.mockResolvedValue({});
+  mockSyncContact.mockReset();
+  mockSyncContact.mockResolvedValue([]);
 });
 
 describe("POST /api/stripe/webhook", () => {
@@ -286,6 +290,71 @@ describe("POST /api/stripe/webhook", () => {
       expect.objectContaining({ status: "paid" })
     );
     expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds an opted-in guest to the mailing list once the sale is real", async () => {
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(
+      chain({ data: paidOrder({ buyer_user_id: null, buyer_name: "Ada Lovelace", marketing_opt_in: true }) })
+    );
+    emailChains();
+
+    await POST(makeReq());
+
+    expect(mockSyncContact).toHaveBeenCalledTimes(1);
+    // Checkout has one Name field, so it is split rather than dumped into first.
+    expect(mockSyncContact.mock.calls[0]).toEqual([
+      "buyer@example.com",
+      { firstName: "Ada", lastName: "Lovelace" },
+    ]);
+  });
+
+  it("does not add a guest who left the box unticked", async () => {
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder({ buyer_user_id: null, marketing_opt_in: false }) }));
+    emailChains();
+
+    await POST(makeReq());
+    expect(mockSyncContact).not.toHaveBeenCalled();
+  });
+
+  it("does not re-add a member, who subscribed when they made an account", async () => {
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder({ marketing_opt_in: true }) }));
+    emailChains();
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: null }))
+      .mockReturnValueOnce(chain({ error: null }))
+      .mockReturnValueOnce(chain({ data: null }));
+
+    await POST(makeReq());
+    expect(mockSyncContact).not.toHaveBeenCalled();
+  });
+
+  it("still fulfils the order when the mailing list sync fails", async () => {
+    // An ActiveCampaign outage must not fail a webhook for a paid order.
+    mockSyncContact.mockRejectedValueOnce(new Error("AC down"));
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      data: { object: { payment_status: "paid", payment_intent: "pi_1", metadata: { order_id: ORDER_ID } } },
+    });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: paidOrder({ buyer_user_id: null, marketing_opt_in: true }) }));
+    emailChains();
+
+    const res = await POST(makeReq());
+    expect(res.status).toBe(200);
+    expect(chainFor("ticket_orders").update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "paid" })
+    );
   });
 
   it("still marks the order paid when the confirmation email fails", async () => {

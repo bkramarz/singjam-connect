@@ -410,3 +410,88 @@ describe("POST /api/jam/[id]/tickets/checkout", () => {
     expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
   });
 });
+
+describe("cover fees", () => {
+  // The route reads the flag off the body and defaults it to false, so a
+  // request that says nothing is never charged extra.
+  async function post(body: any) {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    happyPathDb();
+    mockSessionsCreate.mockResolvedValue({ client_secret: "cs_secret" });
+    return POST(makeReq({ ...ONE_TICKET, email: "guest@example.com", ...body }), params as any);
+  }
+  const lineItems = () => mockSessionsCreate.mock.calls[0][0].line_items;
+
+  it("adds a processing fee line item when the buyer covers it", async () => {
+    await post({ cover_fees: true });
+    const fee = lineItems().find((l: any) => l.price_data.product_data.name === "Processing fee");
+    // $30.00 order: (3000 + 30) / 0.971 = 3120.5 -> 3121, so 121c.
+    expect(fee).toBeTruthy();
+    expect(fee.quantity).toBe(1);
+    expect(fee.price_data.unit_amount).toBe(121);
+  });
+
+  it("charges only the ticket when the buyer unticks it", async () => {
+    await post({ cover_fees: false });
+    expect(lineItems().some((l: any) => l.price_data.product_data.name === "Processing fee")).toBe(false);
+  });
+
+  it("adds nothing when the request does not mention fees", async () => {
+    await post({});
+    expect(lineItems()).toHaveLength(1);
+  });
+
+  it("keeps the fee as its own line rather than inflating the ticket price", async () => {
+    await post({ cover_fees: true });
+    const ticket = lineItems().find((l: any) => l.price_data.product_data.name !== "Processing fee");
+    expect(ticket.price_data.unit_amount).toBe(1500);
+  });
+});
+
+describe("mailing list opt-in", () => {
+  it("records a guest's opt-in against the order", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    happyPathDb();
+    // The opt-in write is an extra ticket_orders chain ahead of the rest.
+    mockAdminFrom.mockReturnValueOnce(chain({ error: null }));
+    mockSessionsCreate.mockResolvedValue({ client_secret: "cs_secret" });
+
+    await POST(
+      makeReq({ ...ONE_TICKET, email: "guest@example.com", marketing_opt_in: true }),
+      params as any
+    );
+
+    const updates = mockAdminFrom.mock.results
+      .map((r: any) => r.value.update)
+      .filter((u: any) => u && u.mock.calls.length);
+    expect(updates.some((u: any) => u.mock.calls.some((c: any) => c[0]?.marketing_opt_in === true))).toBe(true);
+  });
+
+  it("does not record an opt-in that was never given", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    happyPathDb();
+    mockSessionsCreate.mockResolvedValue({ client_secret: "cs_secret" });
+
+    await POST(makeReq({ ...ONE_TICKET, email: "guest@example.com" }), params as any);
+
+    const updates = mockAdminFrom.mock.results
+      .map((r: any) => r.value.update)
+      .filter((u: any) => u && u.mock.calls.length);
+    expect(updates.some((u: any) => u.mock.calls.some((c: any) => c[0]?.marketing_opt_in === true))).toBe(false);
+  });
+
+  it("ignores the flag for a signed-in member, who is never asked", async () => {
+    // Members subscribe by creating an account; a member order claiming an
+    // opt-in did not come from a checkbox we showed.
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID, email: "member@singjam.org" } } });
+    happyPathDb();
+    mockSessionsCreate.mockResolvedValue({ client_secret: "cs_secret" });
+
+    await POST(makeReq({ ...ONE_TICKET, marketing_opt_in: true }), params as any);
+
+    const updates = mockAdminFrom.mock.results
+      .map((r: any) => r.value.update)
+      .filter((u: any) => u && u.mock.calls.length);
+    expect(updates.some((u: any) => u.mock.calls.some((c: any) => c[0]?.marketing_opt_in === true))).toBe(false);
+  });
+});

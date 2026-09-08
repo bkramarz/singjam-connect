@@ -3,6 +3,7 @@ import { markAttending } from "@/lib/jamAttendance";
 import { SITE_URL } from "@/lib/stripe";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { ticketConfirmationHtml } from "@/emails/ticket-confirmation";
+import { syncContact } from "@/lib/activecampaign";
 
 // Turning a pending order into a real ticket: mark it paid, send the ticket,
 // seat the buyer. Two callers reach this — the Stripe webhook for anything that
@@ -110,7 +111,9 @@ export async function fulfilPendingOrder(
     })
     .eq("id", orderId)
     .eq("status", "pending")
-    .select("id, jam_id, buyer_user_id, buyer_email, buyer_name, amount_cents, currency, ticket_email_sent_at")
+    .select(
+      "id, jam_id, buyer_user_id, buyer_email, buyer_name, amount_cents, currency, ticket_email_sent_at, marketing_opt_in"
+    )
     .maybeSingle();
 
   // Already fulfilled, expired, or gone — a redelivery, so nothing to do.
@@ -126,6 +129,24 @@ export async function fulfilPendingOrder(
       }
     } catch (e) {
       console.error("ticket confirmation email failed", updated.id, e);
+    }
+  }
+
+  // Only on a real sale, and only for a guest who asked. Members reach the
+  // mailing list by creating an account, and an order that was never paid for
+  // should not put anyone on a list. Isolated like the email: an ActiveCampaign
+  // outage must not fail a webhook for an order that is correctly paid.
+  if ((updated as any).marketing_opt_in && !updated.buyer_user_id && updated.buyer_email) {
+    try {
+      // Checkout collects one "Name" field, so split it rather than putting
+      // "Ada Lovelace" in a field labelled First name.
+      const [firstName, ...rest] = (updated.buyer_name ?? "").trim().split(/\s+/);
+      await syncContact(updated.buyer_email, {
+        ...(firstName ? { firstName } : {}),
+        ...(rest.length ? { lastName: rest.join(" ") } : {}),
+      });
+    } catch (e) {
+      console.error("mailing list sync failed", updated.id, e);
     }
   }
 
