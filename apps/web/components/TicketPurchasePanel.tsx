@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { coverageFeeCents } from "@/lib/ticketFees";
 import { loadStripe } from "@stripe/stripe-js";
 import { CheckoutElementsProvider } from "@stripe/react-stripe-js/checkout";
 import TicketCheckoutForm from "./TicketCheckoutForm";
@@ -98,6 +99,10 @@ export default function TicketPurchasePanel({
   const [guestEmail, setGuestEmail] = useState("");
   const [guestName, setGuestName] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  // Both start ticked, per the product call: covering fees is the norm, and a
+  // buyer who does not want either can untick in one tap.
+  const [coverFees, setCoverFees] = useState(true);
+  const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [showPromo, setShowPromo] = useState(false);
   const [promoBusy, setPromoBusy] = useState(false);
   // The applied discount, as previewed by the server. Cleared whenever the
@@ -156,6 +161,9 @@ export default function TicketPurchasePanel({
         // Only an applied (server-validated) code is sent, so checkout can't
         // fail on a code the buyer never successfully applied.
         ...(applied ? { promo_code: applied.code } : {}),
+        cover_fees: coverFees,
+        // Members are never asked — creating an account already subscribed them.
+        ...(isSignedIn ? {} : { marketing_opt_in: marketingOptIn }),
       }),
     });
     const json = await res.json();
@@ -215,6 +223,10 @@ export default function TicketPurchasePanel({
 
   // Mirrors the server's check so the button state matches what the API accepts.
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
+
+  const subtotal = applied ? applied.total_cents : total;
+  const feeCents = coverFees ? coverageFeeCents(subtotal) : 0;
+  const payable = subtotal + feeCents;
 
   if (types === null) return <TicketPurchaseSkeleton />;
   if (types.length === 0) return null;
@@ -399,6 +411,37 @@ export default function TicketPurchasePanel({
         )
       )}
 
+      {count > 0 && !soldOut && (
+        <div className="space-y-2">
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={coverFees}
+              onChange={(e) => setCoverFees(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+            />
+            <span>
+              Cover the {money(coverageFeeCents(subtotal), currency)} processing fee so all of my
+              ticket goes to SingJam
+            </span>
+          </label>
+
+          {/* Guests only. A member already subscribed when they made an account,
+              so asking again would be noise. */}
+          {!isSignedIn && (
+            <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
+              <input
+                type="checkbox"
+                checked={marketingOptIn}
+                onChange={(e) => setMarketingOptIn(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+              />
+              <span>Email me about future SingJam events</span>
+            </label>
+          )}
+        </div>
+      )}
+
       <button
         onClick={startCheckout}
         disabled={busy || count === 0 || soldOut || (!isSignedIn && !emailLooksValid)}
@@ -412,10 +455,7 @@ export default function TicketPurchasePanel({
           ? "Select tickets"
           : !isSignedIn && !emailLooksValid
           ? "Enter your email"
-          : `Buy ${count} ticket${count === 1 ? "" : "s"} · ${money(
-              applied ? applied.total_cents : total,
-              currency
-            )}`}
+          : `Buy ${count} ticket${count === 1 ? "" : "s"} · ${money(payable, currency)}`}
       </button>
     </div>
   );
