@@ -1,0 +1,58 @@
+# Alerts were already on, but automated security fixes were not — so 59 of them
+# accumulated with nothing ever opening a PR. Enabling the fixes covers
+# advisories; this file covers the ordinary drift that turns into advisories.
+#
+# The two npm entries are not a mistake: apps/web and packages/* resolve through
+# the root lockfile, while apps/native keeps its own.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    # One PR for the routine drift rather than thirty. Majors are deliberately
+    # left out of the group so they arrive alone and get read properly.
+    groups:
+      root-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/apps/native"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      native-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # An Expo SDK move is a migration performed with `expo install`, not a
+      # dependency bump — a PR that edits these by hand builds a broken app.
+      - dependency-name: expo
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-native
+        update-types: ["version-update:semver-major"]
+      # Pinned by the root `overrides` and a postinstall symlink; bumping it
+      # from here has broken the native build before.
+      - dependency-name: react-native-css-interop
