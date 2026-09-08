@@ -21,8 +21,10 @@ export type PaidOrder = {
 };
 
 // Resolves the recipient and ticket list, then sends. Members may have no
-// buyer_email stored, so fall back to their auth record.
-export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder) {
+// buyer_email stored, so fall back to their auth record. Returns false when
+// there is no address to send to — the caller must not then stamp the order as
+// delivered, or the sweeper would never look at it again.
+export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder): Promise<boolean> {
   let email = order.buyer_email;
   let name = order.buyer_name;
 
@@ -34,7 +36,7 @@ export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder) {
     email = authData.user?.email ?? null;
     name = name ?? (profile as any)?.display_name ?? (profile as any)?.username ?? null;
   }
-  if (!email) return;
+  if (!email) return false;
 
   const [{ data: jam }, { data: tickets }] = await Promise.all([
     admin
@@ -79,6 +81,8 @@ export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder) {
       setUrl: linkedSet ? `${SITE_URL}/set/${linkedSet.id}` : null,
     }),
   });
+
+  return true;
 }
 
 // Everything that follows a pending order becoming real. Idempotent throughout:
@@ -117,8 +121,9 @@ export async function fulfilPendingOrder(
   // already correctly paid and the unstamped row is a retry queue.
   if (!(updated as any).ticket_email_sent_at) {
     try {
-      await sendTicketEmail(admin, updated as PaidOrder);
-      await admin.from("ticket_orders").update({ ticket_email_sent_at: now }).eq("id", updated.id);
+      if (await sendTicketEmail(admin, updated as PaidOrder)) {
+        await admin.from("ticket_orders").update({ ticket_email_sent_at: now }).eq("id", updated.id);
+      }
     } catch (e) {
       console.error("ticket confirmation email failed", updated.id, e);
     }

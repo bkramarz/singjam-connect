@@ -496,23 +496,34 @@ buyer seated as attending with set-list access → refund → RSVP cancelled →
 abandoned checkout expiring and releasing its hold. All six webhook events have
 now fired for real.
 
-What follows is what is genuinely not finished.
+What follows is what is genuinely not finished, after the alarm below.
 
-## 1. Nothing watches for silent fulfilment failure — highest value
+## Closed since launch
 
-The dangerous failure is not the endpoint erroring; Stripe notices that. It is
-Stripe getting a 200 while fulfilment did not happen: money taken, no ticket, the
-buyer left on "Confirming your payment…". Stripe cannot see it.
+**The silent-fulfilment alarm is built** (`apps/web/lib/ticketSweep.ts`, wired
+into the existing ten-minute `flush-email-outbox` schedule). Migration 154's
+partial index on `(status = 'paid' and ticket_email_sent_at is null)` finally has
+a reader:
 
-Migration 154 already built the detector and nothing reads it — a partial index on
-`(status = 'paid' AND ticket_email_sent_at IS NULL)`, described in its own comment
-as "exactly the work queue a retry sweeper reads". A non-zero count on that index
-means money taken and ticket undelivered.
+- It **retries first** — a transient Resend outage is the likeliest cause of an
+  unstamped order, and a retry fixes it outright with nobody woken up.
+- What it cannot deliver, it **emails to `events@singjam.org`**: event, buyer
+  address, amount, order id, the actual error, and a link to that event's guest
+  list so the ticket can be sent by hand.
+- It alerts **once per situation, not once per sweep** — dedupe lives in
+  `system_flags` under `ticket_delivery_failed_notified`, keyed on the order ids
+  the last alert named, so a repeat is suppressed for six hours but an order the
+  alert has never mentioned always sends immediately. Same pattern as the Spotify
+  token alert.
+- `sendTicketEmail` now **returns whether it sent**, and fulfilment only stamps
+  the order when it did. Previously an order with no resolvable address was
+  stamped as delivered and vanished from the queue — the one failure the detector
+  could not have caught.
+- The same schedule now calls **`expire_stale_ticket_orders()`**, which nothing
+  had ever called. Production was still holding a `pending` order from 9 August
+  whose expiry webhook never landed; the sweep released it.
 
-`apps/web/netlify/functions/flush-email-outbox.ts` already runs every 10 minutes.
-Adding the check there is small, and it is the alarm that actually matters.
-
-## 2. Managing an official event grants nothing on its set list
+## 1. Managing an official event grants nothing on its set list
 
 `canManageJam` (lib/jamAuthz.ts) governs the jam. Set access is a separate system:
 owner-or-accepted-collaborator, which takes no notice of it. So Sherri can run an
@@ -533,7 +544,7 @@ fixing the running order before doors, probably yes — but that is a decision.
 
 Workaround meanwhile: add the person as a set collaborator, one click.
 
-## 3. A refund does not revoke set access — NOT a bug
+## 2. A refund does not revoke set access — NOT a bug
 
 Confirmed by reading the code: cancelling an RSVP on an ordinary jam does not
 remove `set_collaborators` either — it only deletes the co-host row. Refunds
@@ -544,6 +555,22 @@ There is also a decent argument for leaving it: somebody who added songs to a se
 should probably not lose access to their own contributions because they dropped
 out. Listed here so it is not "fixed" by reflex. It is a product decision, and it
 belongs to both paths or neither.
+
+## 3. A failed `markAttending` seats nobody, and retries cannot fix it
+
+Found while building the alarm, not yet fixed. `fulfilPendingOrder` flips the
+order to `paid`, sends the ticket, *then* calls `markAttending`. That last call
+has no try/catch, so if it throws the webhook returns 500 — but the order is
+already `paid`, so Stripe's retry hits the `.eq("status", "pending")` guard,
+`fulfilPendingOrder` returns null, and the retry succeeds having done nothing.
+Net result: money taken, ticket delivered, buyer never seated and with no
+set-list access.
+
+Deliberately left alone rather than half-fixed. Wrapping `markAttending` in a
+try/catch would silence the one 500 that currently reaches Stripe and make the
+failure *completely* invisible — strictly worse. The fix is the pair: catch it,
+and give the sweep a second reconciliation query (paid member orders from the
+last day with no `attending` row in `jam_rsvps`). Both, or neither.
 
 ## 4. Mobile polish
 
@@ -583,8 +610,9 @@ at the door**. Check the check-in flow one-handed before an event depends on it.
   and removed manually on 2026-09-08; `teardown` now deletes the AC contact too,
   outside the `if (user)` branch so it still cleans up when the Supabase user is
   already gone.
-- **Tear down the test environment when finished**:
-  `node scripts/ticketing-test-env.mjs teardown`. It removes the event, tiers,
+- **Test environment is torn down** (confirmed 2026-09-08: `status` reports no
+  event and neither account). To bring it back, `node
+  scripts/ticketing-test-env.mjs seed`; `teardown` removes the event, tiers,
   orders, tickets, set list, both `+singjam-test-*` accounts and the promo codes.
   Note the two seeded promo rows were already deleted manually on 2026-09-07 —
   they pointed at test-mode Stripe objects and made the live checkout 502 rather
