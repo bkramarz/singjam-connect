@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { guestListToCsv, guestListFilename } from "@/lib/guestListCsv";
 
 type Tier = {
   id: string;
@@ -23,6 +24,8 @@ type Guest = {
   tier: string;
   is_member: boolean;
   checked_in_at: string | null;
+  // Returned by the orders route all along; the type just never said so.
+  paid_at: string | null;
 };
 
 type PromoCode = { id: string; code: string; label: string; redeemed: number | null };
@@ -34,6 +37,37 @@ type Summary = {
   currency: string;
   checked_in: number;
 };
+
+// Door staff read this off a phone, one-handed, in a room with the band already
+// playing. Both states are the same size so the row does not jump under the
+// thumb when a tap lands, and 44px is the smallest target worth aiming at.
+function CheckInButton({
+  guest,
+  onToggle,
+}: {
+  guest: Guest;
+  onToggle: (g: Guest) => void;
+}) {
+  const inHouse = !!guest.checked_in_at;
+  return (
+    <button
+      onClick={() => onToggle(guest)}
+      aria-pressed={inHouse}
+      title={inHouse ? "Tap to undo" : "Check in"}
+      className={`min-h-[44px] w-[5.5rem] shrink-0 rounded-lg px-3 text-xs font-medium transition-colors sm:min-h-0 sm:w-auto sm:py-1.5 ${
+        inHouse
+          ? "bg-green-100 text-green-700 hover:bg-green-200"
+          : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+      }`}
+    >
+      {inHouse ? "\u2713 In" : "Check in"}
+    </button>
+  );
+}
+
+// Local time on purpose: whoever reads this is standing at the door.
+const doorTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 const money = (cents: number, currency = "usd") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
@@ -60,7 +94,7 @@ export function TicketManagerSkeleton() {
   );
 }
 
-export default function TicketTierManager({ jamId }: { jamId: string }) {
+export default function TicketTierManager({ jamId, jamName }: { jamId: string; jamName?: string | null }) {
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -198,6 +232,16 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
     }
   }
 
+  function downloadCsv() {
+    const blob = new Blob([guestListToCsv(guests)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = guestListFilename(jamName);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const filtered = guests.filter((g) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -213,20 +257,22 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
   return (
     <div className="space-y-6">
       {summary && (
-        <div className="grid grid-cols-3 gap-3">
+        // Two up on a phone: at three, a gross of $1,234.00 ran straight into
+        // the next tile.
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-zinc-200 p-3">
             <p className="text-xs font-medium tracking-wide text-zinc-500">Tickets sold</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-zinc-900">{summary.tickets_sold}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">{summary.tickets_sold}</p>
           </div>
           <div className="rounded-xl border border-zinc-200 p-3">
             <p className="text-xs font-medium tracking-wide text-zinc-500">Gross</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-zinc-900">
+            <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">
               {money(summary.gross_cents, summary.currency)}
             </p>
           </div>
           <div className="rounded-xl border border-zinc-200 p-3">
             <p className="text-xs font-medium tracking-wide text-zinc-500">Checked in</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-zinc-900">
+            <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">
               {summary.checked_in}/{summary.tickets_sold}
             </p>
           </div>
@@ -400,23 +446,88 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold tracking-wide text-zinc-700">
-          Guest list {guests.length > 0 && <span className="font-normal text-zinc-400">({guests.length})</span>}
-        </h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-wide text-zinc-700">
+            Guest list {guests.length > 0 && <span className="font-normal text-zinc-400">({guests.length})</span>}
+          </h2>
+          {/* Desktop only: a downloaded file has nowhere useful to go on a
+              phone, and the door workflow there is search-and-tap, not export.
+              Always the whole list, never the current search — "download the
+              guest list" that quietly gave you four of forty would be a trap. */}
+          {guests.length > 0 && (
+            <button
+              onClick={downloadCsv}
+              className="hidden shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 sm:inline-flex"
+            >
+              Download CSV
+            </button>
+          )}
+        </div>
 
         {guests.length === 0 ? (
           <p className="text-sm text-zinc-500">No tickets sold yet.</p>
         ) : (
           <>
-            {/* Name/code search is the door workflow — no camera needed. */}
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, email or code"
-              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
-            />
-            <div className="overflow-x-auto">
+            {/* Name/code search is the door workflow — no camera needed. It
+                sticks to the top on a phone: with a full house you are scrolling
+                and searching in the same breath. Autocapitalise and autocorrect
+                off, or iOS mangles both a door code and an email address. */}
+            {/* top-[60px] parks this under SiteHeader, which is itself
+                sticky top-0 and 60px tall on mobile — measured, not guessed. A
+                lower z-index than the header's z-10 so it slides beneath rather
+                than over it if that height ever changes. */}
+            <div className="sticky top-[60px] z-[5] -mx-1 bg-slate-50 px-1 py-2 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, email or code"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="search"
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+              />
+            </div>
+            {/* A phone showed the Name column and nothing else — tier, door
+                code and the check-in button all sat off-screen behind a
+                horizontal scroll, which is everything the door actually needs.
+                Stacked cards below sm, the table from sm up. Same pattern as
+                SongHistoryTable. */}
+            <div className="space-y-2 sm:hidden">
+              {filtered.map((g) => (
+                <div
+                  key={g.ticket_id}
+                  className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium text-zinc-900">{g.name}</p>
+                      {!g.is_member && (
+                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
+                          guest
+                        </span>
+                      )}
+                    </div>
+                    {g.email && <p className="truncate text-xs text-zinc-400">{g.email}</p>}
+                    <p className="mt-1 truncate text-xs text-zinc-500">
+                      <span className="font-mono tracking-wider text-zinc-700">{g.code}</span>
+                      <span className="text-zinc-300"> · </span>
+                      {g.tier}
+                      {g.checked_in_at && (
+                        <>
+                          <span className="text-zinc-300"> · </span>
+                          <span className="text-green-700">in at {doorTime(g.checked_in_at)}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <CheckInButton guest={g} onToggle={toggleCheckIn} />
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="text-xs tracking-wide text-zinc-500">
@@ -441,26 +552,17 @@ export default function TicketTierManager({ jamId }: { jamId: string }) {
                       <td className="py-2 pr-3 text-zinc-600">{g.tier}</td>
                       <td className="py-2 pr-3 font-mono text-xs tracking-wider text-zinc-500">{g.code}</td>
                       <td className="py-2 text-right">
-                        <button
-                          onClick={() => toggleCheckIn(g)}
-                          className={
-                            g.checked_in_at
-                              ? "rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-200 transition-colors"
-                              : "rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
-                          }
-                          title={g.checked_in_at ? "Tap to undo" : "Check in"}
-                        >
-                          {g.checked_in_at ? "✓ In" : "Check in"}
-                        </button>
+                        <CheckInButton guest={g} onToggle={toggleCheckIn} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {filtered.length === 0 && (
-                <p className="py-3 text-sm text-zinc-500">No one matches “{search}”.</p>
-              )}
             </div>
+
+            {filtered.length === 0 && (
+              <p className="py-3 text-sm text-zinc-500">No one matches “{search}”.</p>
+            )}
           </>
         )}
       </section>
