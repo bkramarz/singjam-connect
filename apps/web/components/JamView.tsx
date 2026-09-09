@@ -35,6 +35,8 @@ export type JamViewData = {
   attendingCount: number;
   pendingInvite: boolean;
   isOfficial: boolean;
+  /** Whether the event has ticket tiers at all — decides where the map goes. */
+  hasTicketTiers: boolean;
   isHost: boolean;
   isCoHost: boolean;
   hasFullAccess: boolean;
@@ -63,6 +65,7 @@ export default function JamView({
     attendingCount,
     pendingInvite,
     isOfficial,
+    hasTicketTiers,
     isHost,
     isCoHost,
     canManage,
@@ -108,15 +111,31 @@ export default function JamView({
         }
       />
       {/* Official events sell tickets instead of taking RSVPs — showRsvp is false
-          for them. The panel renders nothing when the event has no tiers, so an
-          official event using an external tickets_url is unaffected.
-          Directly under the description on purpose: read the pitch, then buy. */}
-      {isOfficial && (
-        <TicketPurchasePanel
-          jamId={jamId}
-          isSignedIn={!!userId}
-          timezone={jamCardData.timezone}
-        />
+          for them. Directly under the description on purpose: read the pitch,
+          then buy.
+
+          The map rides along on the right at sm and up. The ticket column is
+          deliberately narrow, which left most of the page width empty next to
+          it, and "where" is the other thing someone weighs while deciding —
+          so it earns the space better than whitespace does. Below sm the two
+          stack, tickets first. */}
+      {isOfficial && hasTicketTiers && (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
+          <TicketPurchasePanel
+            jamId={jamId}
+            isSignedIn={!!userId}
+            timezone={jamCardData.timezone}
+          />
+          {/* mt-8 clears the "Tickets" heading (20px line-height + the panel's
+              12px space-y-3), so the map frame starts level with the first tier
+              rather than with the heading that labels only the left column.
+              items-stretch then takes the margin off the height, so the frame
+              still ends level with the Buy button. */}
+          <JamMap
+            jam={jamCardData}
+            className="h-52 w-full sm:mt-8 sm:h-auto sm:min-h-52 sm:flex-1"
+          />
+        </div>
       )}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
       {/* Official events show who's going too. Ticket buyers get an attending
@@ -133,7 +152,10 @@ export default function JamView({
           }}
         />
       )}
-      <JamMap jam={jamCardData} />
+      {/* Everything else — a community jam, or an official event selling
+          through tickets_url — has no ticket column for the map to sit beside,
+          so it keeps the full-width slot at the foot. */}
+      {!(isOfficial && hasTicketTiers) && <JamMap jam={jamCardData} />}
       {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
       {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>

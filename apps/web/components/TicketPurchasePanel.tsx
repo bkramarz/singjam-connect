@@ -30,7 +30,9 @@ const money = (cents: number, currency: string) =>
 
 // Every tier row and the button live in one narrow column rather than the
 // page's full 896px: a full-width Buy button reads as a banner, not a button.
-const COLUMN = "max-w-sm";
+// Full width on a phone, a fixed 384px from sm up so the map beside it gets a
+// predictable remainder instead of both fighting over the row.
+const COLUMN = "w-full sm:w-96 sm:shrink-0";
 
 // In the venue's timezone, not the reader's — a door time of "Oct 4" must not
 // say "Oct 3" to someone browsing from Chicago.

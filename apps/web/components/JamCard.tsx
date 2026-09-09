@@ -41,13 +41,16 @@ function locationView(jam: JamCardData) {
 }
 
 /**
- * The venue map. Rendered by JamView at the foot of the page rather than inside
- * this card: it used to sit between the description and the tickets, which put
- * a 260px iframe between reading about the event and being able to buy. It
- * stays on the page because "where exactly is this" is a real question — it is
- * just not the next thing anyone needs.
+ * The venue map. Placed by JamView rather than inside this card: it used to sit
+ * between the description and the tickets, which put a 260px iframe between
+ * reading about the event and being able to buy. It stays on the page because
+ * "where exactly is this" is a real question — it is just not the next thing
+ * anyone needs.
+ *
+ * The caller sizes it (`className`), because it has two homes: beside the
+ * ticket panel on a wide screen, and full width at the foot otherwise.
  */
-export function JamMap({ jam }: { jam: JamCardData }) {
+export function JamMap({ jam, className = "h-52" }: { jam: JamCardData; className?: string }) {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
   const { mapQuery, mapZoom } = locationView(jam);
   if (!key || !mapQuery) return null;
@@ -56,7 +59,7 @@ export function JamMap({ jam }: { jam: JamCardData }) {
     mapQuery
   )}&zoom=${mapZoom}`;
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200" style={{ height: 200 }}>
+    <div className={`overflow-hidden rounded-2xl border border-zinc-200 ${className}`}>
       <iframe
         src={src}
         title="Venue map"
