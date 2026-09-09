@@ -47,8 +47,10 @@ export function ticketTierAvailability(
 
   // On sale. The deadline is the whole point of an advance price, so it leads;
   // low stock is the other fact worth knowing and they can both be true.
+  // Capitalised to match "Available", "Sales closed" and "Sold out" — every
+  // note in this set opens with a capital.
   const parts: string[] = [];
-  if (tier.sales_end_at) parts.push(`through ${day(tier.sales_end_at, timezone)}`);
+  if (tier.sales_end_at) parts.push(`Through ${day(tier.sales_end_at, timezone)}`);
   if (tier.remaining !== null && tier.remaining <= LOW_STOCK) {
     parts.push(`${tier.remaining} left`);
   }

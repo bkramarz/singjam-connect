@@ -24,8 +24,8 @@ describe('ticketTierAvailability', () => {
     // Formatted in UTC this reads "Oct 4" and advertises the deadline a day
     // late — the bug this function exists to prevent.
     const advance = tier({ sales_end_at: '2026-10-04T06:59:59.000Z' });
-    expect(ticketTierAvailability(advance, LA)).toBe('through Oct 3');
-    expect(ticketTierAvailability(advance, 'UTC')).toBe('through Oct 4');
+    expect(ticketTierAvailability(advance, LA)).toBe('Through Oct 3');
+    expect(ticketTierAvailability(advance, 'UTC')).toBe('Through Oct 4');
   });
 
   it('dates a tier that has not opened yet', () => {
@@ -57,7 +57,7 @@ describe('ticketTierAvailability', () => {
     expect(ticketTierAvailability(tier({ remaining: 4 }), LA)).toBe('4 left');
     expect(
       ticketTierAvailability(tier({ remaining: 4, sales_end_at: '2026-10-04T06:59:59.000Z' }), LA)
-    ).toBe('through Oct 3 · 4 left');
+    ).toBe('Through Oct 3 · 4 left');
   });
 
   it('stays quiet about comfortable stock', () => {
@@ -67,6 +67,6 @@ describe('ticketTierAvailability', () => {
 
   it('falls back to the runtime zone when the jam has none recorded', () => {
     expect(ticketTierAvailability(tier({ sales_end_at: '2026-10-04T06:59:59.000Z' }), null))
-      .toMatch(/^through /);
+      .toMatch(/^Through /);
   });
 });
