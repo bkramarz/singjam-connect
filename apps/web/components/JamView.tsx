@@ -150,18 +150,41 @@ export default function JamView({
       />
       {/* Official events sell tickets instead of taking RSVPs — showRsvp is
           false for them. The panel sits directly under the date/location strip
-          so the tier list and its prices get the first screenful; then the
-          description, then the map, full width like every other event's. */}
+          either way, so the tier list and its prices get the first screenful.
+          Around it the map and the description trade places by breakpoint:
+
+            wide    tickets | map        narrow   tickets
+                    description                   description
+                                                  map
+
+          The split is at md, not sm: at 640px the map got squeezed to 192px
+          beside the 384px panel, too narrow to show any context.
+
+          One flex container with per-breakpoint `order` does that with a single
+          map in the DOM. Rendering it twice and hiding one would be simpler to
+          read and would cost a second Google Maps load on every desktop view,
+          which is billed. DOM order is the wide one; `order` rewrites it below
+          md. The panel carries no order class, so its implicit 0 keeps it first
+          in both. `basis-full` is what breaks the description onto its own
+          line when the row is wrapping. */}
       {showTicketPanel && (
-        <>
+        <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-stretch">
           <TicketPurchasePanel
             jamId={jamId}
             isSignedIn={!!userId}
             timezone={jamCardData.timezone}
           />
-          <JamDescription jam={jamCardData} />
-          <JamMap jam={jamCardData} />
-        </>
+          {/* mt-8 clears the "Tickets" heading (20px line-height + the panel's
+              12px space-y-3) so the frame starts level with the first tier
+              rather than the heading, which labels only the ticket column;
+              items-stretch then takes that margin back off the height, so it
+              still ends level with the Buy button. */}
+          <JamMap
+            jam={jamCardData}
+            className="order-3 h-[260px] w-full md:order-2 md:mt-8 md:h-auto md:min-h-52 md:w-auto md:flex-1"
+          />
+          <JamDescription jam={jamCardData} className="order-2 md:order-3 md:basis-full" />
+        </div>
       )}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
       {/* Official events that sell here show who's going too. Ticket buyers get

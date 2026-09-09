@@ -82,10 +82,16 @@ export function JamMap({ jam, className = "h-[260px]" }: { jam: JamCardData; cla
  * either side of it and Ben picked above, which puts the price list in the
  * first screenful and leaves the detail for whoever wants it.
  */
-export function JamDescription({ jam }: { jam: JamCardData }) {
+export function JamDescription({
+  jam,
+  className = "",
+}: {
+  jam: JamCardData;
+  className?: string;
+}) {
   if (!jam.notes) return null;
   return (
-    <div className="space-y-2">
+    <div className={`space-y-2 ${className}`}>
       <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
       <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
     </div>
