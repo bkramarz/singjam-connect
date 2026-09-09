@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
+import { jamTicketState, type JamTicketSummary } from "@singjam/core";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
+import TicketStateChip from "@/components/TicketStateChip";
 
 export type JamEventCardData = {
   id: string;
@@ -13,9 +15,20 @@ export type JamEventCardData = {
   image_url: string | null;
 };
 
-export default function JamEventCard({ jam }: { jam: JamEventCardData }) {
+export default function JamEventCard({
+  jam,
+  ticketSummary,
+}: {
+  jam: JamEventCardData;
+  ticketSummary?: JamTicketSummary | null;
+}) {
+  const ticketState = jamTicketState(jam.tickets_url, ticketSummary, { timezone: jam.timezone });
+
   return (
-    <div className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white">
+    <Link
+      href={`/jam/${jam.id}`}
+      className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white transition-colors hover:border-amber-300"
+    >
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
           <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" />
@@ -46,17 +59,12 @@ export default function JamEventCard({ jam }: { jam: JamEventCardData }) {
           </p>
         )}
         {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}
-        <div className="mt-2 flex flex-wrap gap-3">
-          <Link href={`/jam/${jam.id}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-700">
-            View details →
-          </Link>
-          {jam.tickets_url && (
-            <a href={jam.tickets_url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:text-amber-500">
-              Get tickets ↗
-            </a>
-          )}
-        </div>
+        {ticketState && (
+          <div className="mt-2">
+            <TicketStateChip state={ticketState} />
+          </div>
+        )}
       </div>
-    </div>
+    </Link>
   );
 }

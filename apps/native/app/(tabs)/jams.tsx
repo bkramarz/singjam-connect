@@ -6,7 +6,7 @@ import {
 import type { GestureResponderEvent } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchAllRows } from '@singjam/core';
+import { fetchAllRows, summarizeTicketTiers, type JamTicketTier } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { showOptionsSheet, anchorFrom } from '@/lib/actionSheet';
 import { readCache, writeCache } from '@/lib/cache';
@@ -156,7 +156,20 @@ export default function JamsScreen() {
       rsvp_status: rsvpMap.get(j.id)?.status ?? null,
       rsvp_waitlist_position: rsvpMap.get(j.id)?.waitlist_position ?? null,
       invite_status: inviteMap.get(j.id) ?? null,
+      ticket_summary: null,
     }));
+
+    // Ticket state is only shown on upcoming official events (web's
+    // JamsContent scopes the same call the same way).
+    const summaryNow = new Date().toISOString();
+    const officialIds = items
+      .filter(j => j.visibility === 'official' && (j.ends_at ?? j.starts_at ?? '') >= summaryNow)
+      .map(j => j.id);
+    if (officialIds.length) {
+      const { data: tiers } = await supabase.rpc('jam_ticket_tiers', { jam_ids: officialIds });
+      const byJam = summarizeTicketTiers(tiers as JamTicketTier[] | null);
+      for (const item of items) item.ticket_summary = byJam.get(item.id) ?? null;
+    }
 
     const uid = user?.id ?? null;
     writeCache('/jams', uid, items);
