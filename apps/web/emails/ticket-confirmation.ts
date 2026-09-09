@@ -142,7 +142,7 @@ export function ticketConfirmationHtml({
 
   ${isGuest && signUpUrl ? `
   <div style="margin-top:24px;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
-    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Help shape the night 🎶</p>
+    <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 6px">Help choose songs for this SingJam 🎶</p>
     <p style="font-size:13px;color:#52525b;margin:0 0 12px">
       You're on the guest list. Create an account to add songs to our set list and checkout
       faster next time.

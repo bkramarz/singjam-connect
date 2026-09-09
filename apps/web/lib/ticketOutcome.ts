@@ -35,9 +35,9 @@ export type TicketOutcome = {
   kind: "paid" | "pending" | "refunded" | "failed" | "missing";
   /**
    * True when Stripe confirmed the payment but our own fulfilment has not
-   * landed yet. The page reads the same as any other paid order — the copy
-   * already says the door code is "on its way" — but the poller stays mounted
-   * so the page picks up the ticket details as soon as they exist.
+   * landed yet. The page reads the same as any other paid order — its copy
+   * points at the email rather than promising anything already delivered —
+   * but the poller stays mounted so the ticket details fill in as they land.
    */
   awaitingFulfilment: boolean;
 };

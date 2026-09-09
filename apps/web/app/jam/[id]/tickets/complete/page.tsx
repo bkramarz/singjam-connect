@@ -89,7 +89,7 @@ export default async function TicketsCompletePage({
           </h1>
           <p className="text-sm text-zinc-600">
             See you at {jamName}. {ticketCount} ticket{ticketCount === 1 ? "" : "s"} ·{" "}
-            {money(mine.amount_cents, mine.currency)} — your door code is on its way to your email.
+            {money(mine.amount_cents, mine.currency)} — check your email for your ticket confirmation.
           </p>
         </>
       ) : outcome.kind === "pending" ? (
@@ -126,7 +126,7 @@ export default async function TicketsCompletePage({
           claims the order (claimGuestTickets) and turns it into attendance. */}
       {outcome.kind === "paid" && mine && isGuestOrder && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Help shape the night 🎶</h2>
+          <h2 className="text-sm font-semibold text-zinc-900">Help choose songs for this SingJam 🎶</h2>
           <p className="text-sm text-zinc-600">
             You&apos;re on the guest list. Create an account to add songs to our set list and
             checkout faster next time.
