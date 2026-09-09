@@ -116,7 +116,7 @@ export default function JamView({
           RSVP from the Stripe webhook, so the list is populated the same way —
           guests without an account are the one gap, which is what the sign-up
           nudge on the completion page is for. */}
-      <JamAttendeeList jamId={jamId} hostId={jam.host_user_id} isHost={isHost} />
+      <JamAttendeeList jamId={jamId} hostId={isOfficial ? null : jam.host_user_id} isHost={isHost} />
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={jamId}

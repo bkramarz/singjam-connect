@@ -67,7 +67,13 @@ function AttendeeRow({ profile, badge, action }: { profile: any; badge: ReactNod
   );
 }
 
-export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: string; hostId: string; isHost: boolean }) {
+/**
+ * `hostId` is null on official events: those belong to SingJam, so whoever
+ * created the row is not credited as host and is not counted as attending.
+ * They still appear as an ordinary "Going" row if they actually RSVP'd or
+ * bought a ticket. jams.host_user_id keeps driving authorization either way.
+ */
+export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: string; hostId: string | null; isHost: boolean }) {
   const [data, setData] = useState<AttendeeData | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const supabase = supabaseBrowser();
@@ -81,11 +87,13 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
           .eq("jam_id", jamId)
           .in("status", ["attending", "waitlist"])
           .order("created_at", { ascending: true }),
-        supabase
-          .from("profiles")
-          .select("id, display_name, last_name, username, singing_voice, instrument_levels")
-          .eq("id", hostId)
-          .single(),
+        hostId
+          ? supabase
+              .from("profiles")
+              .select("id, display_name, last_name, username, singing_voice, instrument_levels")
+              .eq("id", hostId)
+              .single()
+          : Promise.resolve({ data: null }),
         supabase.from("jam_cohosts").select("user_id").eq("jam_id", jamId),
         // Ticket buyers without an account. Served by an API route because
         // tickets is service_role-only, so the browser client can't see them.
@@ -102,7 +110,7 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
         .filter((uid: string) => uid !== hostId);
 
       const profileMap = new Map<string, any>();
-      if (hostProfile) profileMap.set(hostId, hostProfile);
+      if (hostId && hostProfile) profileMap.set(hostId, hostProfile);
 
       if (attendeeIds.length > 0) {
         const { data: profiles } = await supabase
@@ -125,7 +133,8 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
         attending,
         waitlist,
         guests,
-        totalGoing: 1 + attending.length + guestHeads,
+        // The host counts as going only when there is a host to count.
+        totalGoing: (hostId ? 1 : 0) + attending.length + guestHeads,
         cohostIds,
       });
     })();
@@ -160,14 +169,16 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
         Who's going <span className="text-sm font-normal text-zinc-400">({totalGoing})</span>
       </h2>
       <ul className="divide-y divide-zinc-100">
-        <AttendeeRow
-          profile={profileMap.get(hostId)}
-          badge={
-            <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-              Host
-            </span>
-          }
-        />
+        {hostId && (
+          <AttendeeRow
+            profile={profileMap.get(hostId)}
+            badge={
+              <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                Host
+              </span>
+            }
+          />
+        )}
         {attending.map((r: any) => {
           const isCohost = cohostIds.has(r.user_id);
           return (
@@ -216,6 +227,11 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
             </div>
           </li>
         ))}
+        {/* Reachable only since official events stopped seating their creator
+            as host — before that, row one always existed. */}
+        {totalGoing === 0 && waitlist.length === 0 && (
+          <li className="py-3 text-sm text-zinc-400">No one yet — be the first.</li>
+        )}
         {waitlist.map((r: any) => (
           <AttendeeRow
             key={r.user_id}
