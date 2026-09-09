@@ -169,9 +169,7 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, ticketSum
           </p>
         ))}
         {cta && (
-          // Above the stretched link below, so an outbound "Get tickets" stays
-          // clickable inside a card that is itself a link.
-          <div className="relative z-10 mt-2 flex flex-wrap gap-3">
+          <div className="mt-2 flex flex-wrap gap-3">
             <span className={`text-xs font-medium ${cta.hasTickets && !cta.externalUrl ? "text-amber-600 group-hover:text-amber-500" : "text-zinc-500 group-hover:text-zinc-700"}`}>
               {cta.label} →
             </span>
@@ -180,7 +178,7 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, ticketSum
                 href={cta.externalUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-medium text-amber-600 hover:text-amber-500"
+                className="relative z-10 text-xs font-medium text-amber-600 hover:text-amber-500"
               >
                 Get tickets ↗
               </a>

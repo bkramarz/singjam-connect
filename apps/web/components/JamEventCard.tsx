@@ -60,8 +60,7 @@ export default function JamEventCard({
           </p>
         )}
         {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}
-        {/* Above the stretched link so the outbound anchor stays clickable. */}
-        <div className="relative z-10 mt-2 flex flex-wrap gap-3">
+                <div className="mt-2 flex flex-wrap gap-3">
           <span className={`text-xs font-medium ${cta.hasTickets && !cta.externalUrl ? "text-amber-600 group-hover:text-amber-500" : "text-zinc-500 group-hover:text-zinc-700"}`}>
             {cta.label} →
           </span>
@@ -70,7 +69,7 @@ export default function JamEventCard({
               href={cta.externalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-amber-600 hover:text-amber-500"
+              className="relative z-10 text-xs font-medium text-amber-600 hover:text-amber-500"
             >
               Get tickets ↗
             </a>
