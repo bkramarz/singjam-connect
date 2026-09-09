@@ -1,6 +1,7 @@
 import { View, Text, Image, TouchableOpacity, Linking } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { jamTicketCta, type JamTicketSummary } from '@singjam/core';
 
 export type JamItem = {
   id: string;
@@ -21,6 +22,7 @@ export type JamItem = {
   rsvp_status: string | null;
   rsvp_waitlist_position: number | null;
   invite_status: string | null;
+  ticket_summary?: JamTicketSummary | null;
 };
 
 // Mirrors web's FormattedDate/FormattedTime (apps/web/components/FormattedTime.tsx):
@@ -56,7 +58,7 @@ function RsvpBadge({ status, waitlistPosition }: { status: string; waitlistPosit
 
 // Mirrors web's JamListCard (apps/web/components/JamsContent.tsx): poster image
 // or date block on the left, badge line, name + RSVP/Invited badge, date·time,
-// neighborhood, tags, hosted-by, and View details / Get tickets for official events.
+// neighborhood, tags, hosted-by, and the ticket-state chip for official events.
 export default function JamCard({ jam, myId, onPress, onManage }: {
   jam: JamItem;
   myId: string | null;
@@ -66,6 +68,13 @@ export default function JamCard({ jam, myId, onPress, onManage }: {
   const isOfficial = jam.visibility === 'official';
   const isHosting = !!myId && jam.host_id === myId;
   const isInvited = jam.invite_status === 'pending';
+
+  // Past events keep their card in the list, where a price or a ticket link
+  // would be nonsense — matches web's JamListCard.
+  const isPast = (jam.ends_at ?? jam.starts_at ?? '') < new Date().toISOString();
+  const cta = isOfficial && !isPast
+    ? jamTicketCta(jam.tickets_url, jam.ticket_summary, { timezone: jam.timezone })
+    : null;
 
   return (
     <View className="relative">
@@ -160,21 +169,23 @@ export default function JamCard({ jam, myId, onPress, onManage }: {
           </Text>
         ) : null)}
 
-        {isOfficial && (
+        {cta ? (
           <View className="mt-2 flex-row flex-wrap" style={{ gap: 12 }}>
             <TouchableOpacity onPress={onPress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text className="text-xs font-medium text-zinc-500">View details →</Text>
+              <Text className={`text-xs font-medium ${cta.hasTickets && !cta.externalUrl ? 'text-amber-600' : 'text-zinc-500'}`}>
+                {cta.label} →
+              </Text>
             </TouchableOpacity>
-            {jam.tickets_url ? (
+            {cta.externalUrl ? (
               <TouchableOpacity
-                onPress={() => Linking.openURL(jam.tickets_url!)}
+                onPress={() => Linking.openURL(cta.externalUrl!)}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Text className="text-xs font-medium text-amber-600">Get tickets ↗</Text>
               </TouchableOpacity>
             ) : null}
           </View>
-        )}
+        ) : null}
       </View>
     </TouchableOpacity>
     {isHosting && onManage ? (

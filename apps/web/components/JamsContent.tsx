@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { fetchAllRows } from "@singjam/core";
+import { fetchAllRows, jamTicketCta, summarizeTicketTiers, type JamTicketSummary, type JamTicketTier } from "@singjam/core";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -19,6 +19,7 @@ type JamsData = {
   genresByJam: Map<string, string[]>;
   themesByJam: Map<string, string[]>;
   profileById: Map<string, { label: string; username: string | null }>;
+  ticketSummaryByJam: Map<string, JamTicketSummary>;
 };
 
 const CACHE_KEY = "cache:/jams";
@@ -33,6 +34,7 @@ type JamsCache = {
   genresByJam: [string, string[]][];
   themesByJam: [string, string[]][];
   profileById: [string, { label: string; username: string | null }][];
+  ticketSummaryByJam: [string, JamTicketSummary][];
 };
 
 function RsvpBadge({ status, waitlistPosition }: { status: RsvpStatus; waitlistPosition?: number | null }) {
@@ -49,12 +51,13 @@ function RsvpBadge({ status, waitlistPosition }: { status: RsvpStatus; waitlistP
   return null;
 }
 
-function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isInvited, isHosting, onDeleted }: {
+function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, ticketSummary, rsvp, isInvited, isHosting, onDeleted }: {
   jam: any;
   tags: string[];
   hostLabel?: string | null;
   hostUsername?: string | null;
   isOfficial: boolean;
+  ticketSummary?: JamTicketSummary | null;
   rsvp?: { status: RsvpStatus; waitlist_position?: number | null } | null;
   isInvited?: boolean;
   isHosting?: boolean;
@@ -64,6 +67,14 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Past events keep their card in the list, where a price or a ticket link
+  // would be nonsense — the summary is only fetched for upcoming ones, but
+  // tickets_url alone would otherwise still render a chip.
+  const isPast = (jam.ends_at ?? jam.starts_at) < new Date().toISOString();
+  const cta = isOfficial && !isPast
+    ? jamTicketCta(jam.tickets_url, ticketSummary, { timezone: jam.timezone })
+    : null;
 
   useEffect(() => {
     if (!isHosting) return;
@@ -88,7 +99,7 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
   }
 
   const cardBody = (
-    <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
+    <div className={`group relative flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
           <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" />
@@ -157,25 +168,37 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, rsvp, isI
             {hostUsername && <span className="ml-1">@{hostUsername}</span>}
           </p>
         ))}
-        {isOfficial && (
+        {cta && (
           <div className="mt-2 flex flex-wrap gap-3">
-            <Link href={`/jam/${jam.id}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-700">
-              View details →
-            </Link>
-            {jam.tickets_url && (
-              <a href={jam.tickets_url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-amber-600 hover:text-amber-500">
+            <span className={`text-xs font-medium ${cta.hasTickets && !cta.externalUrl ? "text-amber-600 group-hover:text-amber-500" : "text-zinc-500 group-hover:text-zinc-700"}`}>
+              {cta.label} →
+            </span>
+            {cta.externalUrl && (
+              <a
+                href={cta.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative z-10 text-xs font-medium text-amber-600 hover:text-amber-500"
+              >
                 Get tickets ↗
               </a>
             )}
           </div>
         )}
       </div>
+      {/* Stretched link rather than a wrapping <a>: the whole card goes to the
+          detail page while the outbound ticket link keeps its own anchor. Last
+          in the DOM so it paints over the poster image, which needs its own
+          `relative` for next/image fill. */}
+      <Link
+        href={`/jam/${jam.id}`}
+        className="absolute inset-0 z-0"
+        aria-label={jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
+      />
     </div>
   );
 
-  const wrapped = isOfficial
-    ? <div>{cardBody}</div>
-    : <Link href={`/jam/${jam.id}`} className="block">{cardBody}</Link>;
+  const wrapped = cardBody;
 
   if (!isHosting) return wrapped;
 
@@ -266,6 +289,7 @@ export default function JamsContent() {
         genresByJam: new Map(c.genresByJam),
         themesByJam: new Map(c.themesByJam),
         profileById: new Map(c.profileById),
+        ticketSummaryByJam: new Map(c.ticketSummaryByJam ?? []),
       });
     } catch {}
   }, []);
@@ -333,6 +357,17 @@ export default function JamsContent() {
     const invitesEnabled = flagRes.data?.enabled ?? true;
     const isAdmin = (adminRes.data as any)?.role === "admin";
 
+    // Ticket state is only shown on upcoming official events, so the summary
+    // call is scoped to those — one round trip for the section, not per tier.
+    const listNow = new Date().toISOString();
+    const officialIds = allJams
+      .filter((j) => j.visibility === "official" && (j.ends_at ?? j.starts_at) >= listNow)
+      .map((j) => j.id);
+    const { data: tiers } = officialIds.length
+      ? await supabase.rpc("jam_ticket_tiers", { jam_ids: officialIds })
+      : { data: [] };
+    const ticketSummaryByJam = summarizeTicketTiers(tiers as JamTicketTier[] | null);
+
     setData({
       userId,
       invitesEnabled,
@@ -343,6 +378,7 @@ export default function JamsContent() {
       genresByJam,
       themesByJam,
       profileById,
+      ticketSummaryByJam,
     });
 
     try {
@@ -356,6 +392,7 @@ export default function JamsContent() {
         genresByJam: Array.from(genresByJam.entries()),
         themesByJam: Array.from(themesByJam.entries()),
         profileById: Array.from(profileById.entries()),
+        ticketSummaryByJam: Array.from(ticketSummaryByJam.entries()),
       };
       sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
     } catch {}
@@ -392,7 +429,7 @@ export default function JamsContent() {
     );
   }
 
-  const { userId, invitesEnabled, isAdmin, allJams, rsvpByJam, inviteByJam, genresByJam, themesByJam, profileById } = data;
+  const { userId, invitesEnabled, isAdmin, allJams, rsvpByJam, inviteByJam, genresByJam, themesByJam, profileById, ticketSummaryByJam } = data;
 
   function cardProps(jam: any, opts: { isOfficial?: boolean; isHosting?: boolean } = {}) {
     return {
@@ -401,6 +438,7 @@ export default function JamsContent() {
       hostLabel: profileById.get(jam.host_user_id)?.label ?? null,
       hostUsername: profileById.get(jam.host_user_id)?.username ?? null,
       isOfficial: opts.isOfficial ?? false,
+      ticketSummary: ticketSummaryByJam.get(jam.id) ?? null,
       isHosting: opts.isHosting ?? (!!userId && jam.host_user_id === userId),
       rsvp: (rsvpByJam.get(jam.id) as any) ?? null,
       isInvited: (inviteByJam.get(jam.id) as any)?.status === "pending",

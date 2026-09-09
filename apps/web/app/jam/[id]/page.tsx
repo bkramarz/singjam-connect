@@ -32,7 +32,12 @@ export async function generateMetadata({
   const jam = await getJam(id);
   if (!jam) return { title: "Jam" };
   const name = jam.name ?? "Jam";
-  const host = jam.profiles?.display_name ?? jam.profiles?.username ?? null;
+  // Official events are the org's, so a shared link credits SingJam rather
+  // than whoever created the row.
+  const host =
+    jam.visibility === "official"
+      ? "SingJam"
+      : jam.profiles?.display_name ?? jam.profiles?.username ?? null;
   const date = formatJamDate(jam.starts_at, jam.timezone);
   const parts = [date, jam.neighborhood, host ? `Hosted by ${host}` : null].filter(Boolean);
   const description = parts.length
