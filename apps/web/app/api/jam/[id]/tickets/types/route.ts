@@ -30,6 +30,21 @@ async function canManage(jamId: string, userId: string) {
     : { ok: false as const, status: 403 };
 }
 
+// Sales windows. The table has a check constraint that an end must follow its
+// start, but a violated constraint reaches the host as a raw Postgres string —
+// so the same rule is stated here, where it can be a sentence. A null on either
+// side means "no limit" and is always valid.
+function windowError(start: unknown, end: unknown): string | null {
+  for (const [label, v] of [["start", start], ["end", end]] as const) {
+    if (v == null) continue;
+    if (typeof v !== "string" || Number.isNaN(new Date(v).getTime())) {
+      return `Sales ${label} isn't a valid date and time`;
+    }
+  }
+  if (typeof start !== "string" || typeof end !== "string") return null;
+  return new Date(end) > new Date(start) ? null : "Sales must end after they start";
+}
+
 // Availability uses the same function the reservation path uses, so what a buyer
 // is offered matches what the oversell guard will actually allow.
 //
@@ -114,6 +129,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Quantity must be a positive whole number" }, { status: 400 });
   }
 
+  const badWindow = windowError(body?.sales_start_at || null, body?.sales_end_at || null);
+  if (badWindow) return NextResponse.json({ error: badWindow }, { status: 400 });
+
   const admin = supabaseAdmin();
   const { data, error } = await admin
     .from("ticket_types")
@@ -172,6 +190,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const patch: Record<string, unknown> = {};
   for (const f of ["name", "description", "price_cents", "quantity", "sales_start_at", "sales_end_at", "sort_order"]) {
     if (f in body) patch[f] = body[f];
+  }
+
+  if (typeof patch.name === "string") {
+    patch.name = patch.name.trim();
+    if (!patch.name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+  if ("price_cents" in patch && (!Number.isInteger(patch.price_cents) || (patch.price_cents as number) < 0)) {
+    return NextResponse.json({ error: "Price must be a whole number of cents" }, { status: 400 });
+  }
+
+  // A partial update has to be checked against what the row already holds:
+  // moving only the start can still put it past a stored end.
+  if ("sales_start_at" in patch || "sales_end_at" in patch) {
+    const { data: current } = await admin
+      .from("ticket_types")
+      .select("sales_start_at, sales_end_at")
+      .eq("id", body.id)
+      .eq("jam_id", jamId)
+      .maybeSingle();
+    const effective = { ...(current ?? {}), ...patch } as Record<string, unknown>;
+    const badWindow = windowError(effective.sales_start_at ?? null, effective.sales_end_at ?? null);
+    if (badWindow) return NextResponse.json({ error: badWindow }, { status: 400 });
   }
 
   const { error } = await admin

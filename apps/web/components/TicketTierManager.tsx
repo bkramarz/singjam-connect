@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { isoToZonedInput, zonedInputToIso, zoneAbbreviation } from "@singjam/core";
 import { guestListToCsv, guestListFilename } from "@/lib/guestListCsv";
 
 type Tier = {
@@ -10,11 +11,35 @@ type Tier = {
   price_cents: number;
   currency: string;
   quantity: number | null;
+  sales_start_at: string | null;
+  sales_end_at: string | null;
   sold: number;
   held: number;
   remaining: number | null;
   on_sale: boolean;
 };
+
+/** What a tier form holds while it is being edited. */
+type TierDraft = {
+  name: string;
+  price: string;
+  quantity: string;
+  /** `datetime-local` values, read as wall clocks in the event's timezone. */
+  salesStart: string;
+  salesEnd: string;
+};
+
+const EMPTY_DRAFT: TierDraft = { name: "", price: "", quantity: "", salesStart: "", salesEnd: "" };
+
+function draftFromTier(t: Tier, zone: string): TierDraft {
+  return {
+    name: t.name,
+    price: (t.price_cents / 100).toFixed(2),
+    quantity: t.quantity === null ? "" : String(t.quantity),
+    salesStart: isoToZonedInput(t.sales_start_at, zone),
+    salesEnd: isoToZonedInput(t.sales_end_at, zone),
+  };
+}
 
 type Guest = {
   ticket_id: string;
@@ -76,6 +101,102 @@ const money = (cents: number, currency = "usd") =>
 // truncating means 19.99 doesn't silently become 19.98 through float error.
 const toCents = (dollars: string) => Math.round(parseFloat(dollars || "0") * 100);
 
+const INPUT_CLASS =
+  "rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none";
+
+// A sales window as the host set it, in the event's own timezone.
+function windowLabel(t: Tier, zone: string): string | null {
+  const at = (iso: string) =>
+    new Date(iso).toLocaleString("en-US", {
+      timeZone: zone,
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  if (t.sales_start_at && t.sales_end_at) return `On sale ${at(t.sales_start_at)} – ${at(t.sales_end_at)}`;
+  if (t.sales_start_at) return `On sale from ${at(t.sales_start_at)}`;
+  if (t.sales_end_at) return `On sale until ${at(t.sales_end_at)}`;
+  return null;
+}
+
+/**
+ * Name, price, cap and sales window for one tier. Shared by the add form and
+ * the per-tier edit form so both write a window the same way.
+ *
+ * Times are wall clocks in the event's timezone, which is the only reading a
+ * host means: "advance sales end Oct 3 at 11:59pm" is 11:59pm at the venue,
+ * whether the host is typing it from Berkeley or from a tour bus in Ohio.
+ */
+function TierFields({
+  draft,
+  onChange,
+  idPrefix,
+}: {
+  draft: TierDraft;
+  onChange: (patch: Partial<TierDraft>) => void;
+  idPrefix: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <input
+          aria-label="Tier name"
+          value={draft.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          placeholder="General"
+          required
+          className={INPUT_CLASS}
+        />
+        <input
+          aria-label="Price in dollars"
+          value={draft.price}
+          onChange={(e) => onChange({ price: e.target.value })}
+          placeholder="15.00"
+          inputMode="decimal"
+          required
+          className={INPUT_CLASS}
+        />
+        <input
+          aria-label="Quantity, blank for unlimited"
+          value={draft.quantity}
+          onChange={(e) => onChange({ quantity: e.target.value })}
+          placeholder="Qty (blank = ∞)"
+          inputMode="numeric"
+          className={INPUT_CLASS}
+        />
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label htmlFor={`${idPrefix}-start`} className="block text-xs font-medium text-zinc-600">
+            On sale from
+          </label>
+          <input
+            id={`${idPrefix}-start`}
+            type="datetime-local"
+            value={draft.salesStart}
+            onChange={(e) => onChange({ salesStart: e.target.value })}
+            className={`w-full ${INPUT_CLASS}`}
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor={`${idPrefix}-end`} className="block text-xs font-medium text-zinc-600">
+            On sale until
+          </label>
+          <input
+            id={`${idPrefix}-end`}
+            type="datetime-local"
+            value={draft.salesEnd}
+            onChange={(e) => onChange({ salesEnd: e.target.value })}
+            className={`w-full ${INPUT_CLASS}`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TicketManagerSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true">
@@ -94,7 +215,21 @@ export function TicketManagerSkeleton() {
   );
 }
 
-export default function TicketTierManager({ jamId, jamName }: { jamId: string; jamName?: string | null }) {
+export default function TicketTierManager({
+  jamId,
+  jamName,
+  timezone,
+}: {
+  jamId: string;
+  jamName?: string | null;
+  /** The event's timezone. Sales windows are entered and shown in it. */
+  timezone?: string | null;
+}) {
+  // Every official event stores a timezone, so the fallback is a safety net
+  // rather than a path — but a null one must not become UTC, which would move
+  // an evening window onto the next day.
+  const zone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const [tiers, setTiers] = useState<Tier[] | null>(null);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -107,10 +242,10 @@ export default function TicketTierManager({ jamId, jamName }: { jamId: string; j
   const [promoValue, setPromoValue] = useState("");
   const [promoError, setPromoError] = useState<string | null>(null);
 
-  // Draft state for the add form
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [quantity, setQuantity] = useState("");
+  // Draft state for the add form, and for whichever tier is open for editing.
+  const [draft, setDraft] = useState<TierDraft>(EMPTY_DRAFT);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<TierDraft>(EMPTY_DRAFT);
 
   const load = useCallback(async () => {
     const [tRes, oRes, pRes] = await Promise.all([
@@ -145,19 +280,42 @@ export default function TicketTierManager({ jamId, jamName }: { jamId: string; j
     return true;
   }
 
+  // The window is entered as a wall clock and stored as an instant. An end time
+  // takes the whole minute (…:59) so "until 11:59pm" doesn't leave a minute of
+  // dead air before the next tier opens at midnight.
+  function windowFields(d: TierDraft) {
+    return {
+      sales_start_at: zonedInputToIso(d.salesStart, zone),
+      sales_end_at: zonedInputToIso(d.salesEnd, zone, 59),
+    };
+  }
+
+  function tierFields(d: TierDraft) {
+    return {
+      name: d.name.trim(),
+      price_cents: toCents(d.price),
+      quantity: d.quantity.trim() === "" ? null : Number(d.quantity),
+      ...windowFields(d),
+    };
+  }
+
   async function addTier(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await send("POST", {
-      name: name.trim(),
-      price_cents: toCents(price),
-      quantity: quantity.trim() === "" ? null : Number(quantity),
-      sort_order: tiers?.length ?? 0,
-    });
-    if (ok) {
-      setName("");
-      setPrice("");
-      setQuantity("");
-    }
+    const ok = await send("POST", { ...tierFields(draft), sort_order: tiers?.length ?? 0 });
+    if (ok) setDraft(EMPTY_DRAFT);
+  }
+
+  function startEditing(t: Tier) {
+    setError(null);
+    setEditingId(t.id);
+    setEditDraft(draftFromTier(t, zone));
+  }
+
+  async function saveTier(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    const ok = await send("PATCH", { id: editingId, ...tierFields(editDraft) });
+    if (ok) setEditingId(null);
   }
 
   async function addPromo(e: React.FormEvent) {
@@ -288,77 +446,117 @@ export default function TicketTierManager({ jamId, jamName }: { jamId: string; j
       <section className="space-y-3">
         <h2 className="text-sm font-semibold tracking-wide text-zinc-700">Ticket tiers</h2>
 
+        {/* Said once for the section rather than inside each form, which put the
+            same sentence on screen twice whenever a tier was open for editing. */}
+        <p className="text-xs text-zinc-400">
+          Sales times are {zone.replace(/_/g, " ")} ({zoneAbbreviation(zone)}) — the event&apos;s
+          timezone, not yours. Leave one blank for no limit; an end time runs through the end of
+          that minute.
+        </p>
+
         {tiers.length === 0 && (
           <p className="text-sm text-zinc-500">
             No tiers yet. Add one below and it appears on the event page immediately.
           </p>
         )}
 
-        {tiers.map((t) => (
-          <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-zinc-900">{t.name}</p>
-              <p className="text-xs text-zinc-500">
-                {money(t.price_cents, t.currency)} · {t.sold} sold
-                {t.quantity !== null ? ` of ${t.quantity}` : " · unlimited"}
-                {t.remaining === 0 ? " · sold out" : ""}
-              </p>
-              {/* A hold is a checkout in progress, not a sale. Shown separately
-                  so an abandoned cart doesn't read as revenue. */}
-              {t.held > 0 && (
-                <p className="text-xs text-amber-600">
-                  {t.held} held in checkout · frees up if unpaid
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => send("DELETE", undefined, `?type_id=${t.id}`)}
-              disabled={busy || t.sold > 0}
-              title={
-                t.sold > 0
-                  ? "Tiers with sales can't be deleted"
-                  : t.held > 0
-                  ? "Someone is checking out — this may fail until their hold clears"
-                  : "Delete tier"
-              }
-              className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 transition-colors"
+        {tiers.map((t) =>
+          editingId === t.id ? (
+            <form
+              key={t.id}
+              onSubmit={saveTier}
+              className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/40 p-3"
             >
-              Delete
-            </button>
-          </div>
-        ))}
+              <TierFields
+                draft={editDraft}
+                onChange={(patch) => setEditDraft((d) => ({ ...d, ...patch }))}
+                idPrefix={`tier-${t.id}`}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={busy || !editDraft.name.trim() || editDraft.price.trim() === ""}
+                  className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                >
+                  {busy ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingId(null)}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div
+              key={t.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-zinc-900">{t.name}</p>
+                <p className="text-xs text-zinc-500">
+                  {money(t.price_cents, t.currency)} · {t.sold} sold
+                  {t.quantity !== null ? ` of ${t.quantity}` : " · unlimited"}
+                  {t.remaining === 0 ? " · sold out" : ""}
+                </p>
+                {/* The window in the event's timezone, so a host reading this
+                    from elsewhere sees the hours buyers will actually get. */}
+                {windowLabel(t, zone) && (
+                  <p className="text-xs text-zinc-400">
+                    {windowLabel(t, zone)}
+                    {!t.on_sale && t.remaining !== 0 ? " · not on sale now" : ""}
+                  </p>
+                )}
+                {/* A hold is a checkout in progress, not a sale. Shown separately
+                    so an abandoned cart doesn't read as revenue. */}
+                {t.held > 0 && (
+                  <p className="text-xs text-amber-600">
+                    {t.held} held in checkout · frees up if unpaid
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                {/* Editable even once a tier has sales: a price or window
+                    correction has to be possible mid-sale, and past orders keep
+                    the amount they were charged. */}
+                <button
+                  onClick={() => startEditing(t)}
+                  disabled={busy}
+                  title="Edit name, price, cap and sales window"
+                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => send("DELETE", undefined, `?type_id=${t.id}`)}
+                  disabled={busy || t.sold > 0}
+                  title={
+                    t.sold > 0
+                      ? "Tiers with sales can't be deleted"
+                      : t.held > 0
+                      ? "Someone is checking out — this may fail until their hold clears"
+                      : "Delete tier"
+                  }
+                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )
+        )}
 
         <form onSubmit={addTier} className="space-y-2 rounded-xl border border-dashed border-zinc-300 p-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <input
-              aria-label="Tier name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="General"
-              required
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
-            />
-            <input
-              aria-label="Price in dollars"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="15.00"
-              inputMode="decimal"
-              required
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
-            />
-            <input
-              aria-label="Quantity, blank for unlimited"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Qty (blank = ∞)"
-              inputMode="numeric"
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
-            />
-          </div>
+          <TierFields
+            draft={draft}
+            onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+            idPrefix="new-tier"
+          />
           <button
             type="submit"
-            disabled={busy || !name.trim() || price.trim() === ""}
+            disabled={busy || !draft.name.trim() || draft.price.trim() === ""}
             className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
           >
             Add tier

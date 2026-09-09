@@ -19,7 +19,7 @@ export default async function ManageTicketsPage({ params }: { params: Promise<{ 
   const admin = supabaseAdmin();
   const { data: jam } = await admin
     .from("jams")
-    .select("id, name, visibility, host_user_id")
+    .select("id, name, visibility, host_user_id, timezone")
     .eq("id", id)
     .maybeSingle();
 
@@ -51,7 +51,8 @@ export default async function ManageTicketsPage({ params }: { params: Promise<{ 
         </p>
       )}
 
-      <TicketTierManager jamId={id} jamName={jam.name} />
+      {/* Sales windows are entered in the event's timezone, not the host's. */}
+      <TicketTierManager jamId={id} jamName={jam.name} timezone={jam.timezone} />
     </div>
   );
 }
