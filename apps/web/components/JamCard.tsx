@@ -26,20 +26,48 @@ export type JamCardData = {
 };
 
 
-function MapEmbed({ query, zoom }: { query: string; zoom: number }) {
+// How much of the address this viewer gets, and what to point the map at.
+// Shared with JamMap below, which renders further down the page than this card
+// and would otherwise have to restate the rules.
+function locationView(jam: JamCardData) {
+  const isTbd = (jam.neighborhood === "TBD" && !jam.full_address) || jam.full_address === "TBD";
+  const showFullAddress =
+    (jam.hasFullAccess || jam.visibility === "private") && !!jam.full_address && !isTbd;
+  return {
+    showFullAddress,
+    mapQuery: isTbd ? null : showFullAddress ? jam.full_address! : jam.neighborhood,
+    mapZoom: showFullAddress ? 16 : 13,
+  };
+}
+
+/**
+ * The venue map. Rendered by JamView at the foot of the page rather than inside
+ * this card: it used to sit between the description and the tickets, which put
+ * a 260px iframe between reading about the event and being able to buy. It
+ * stays on the page because "where exactly is this" is a real question — it is
+ * just not the next thing anyone needs.
+ */
+export function JamMap({ jam }: { jam: JamCardData }) {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
-  if (!key || !query) return null;
-  const src = `https://www.google.com/maps/embed/v1/place?key=${key}&q=${encodeURIComponent(query)}&zoom=${zoom}`;
+  const { mapQuery, mapZoom } = locationView(jam);
+  if (!key || !mapQuery) return null;
+
+  const src = `https://www.google.com/maps/embed/v1/place?key=${key}&q=${encodeURIComponent(
+    mapQuery
+  )}&zoom=${mapZoom}`;
   return (
-    <iframe
-      src={src}
-      width="100%"
-      height="100%"
-      style={{ border: 0 }}
-      allowFullScreen
-      loading="lazy"
-      referrerPolicy="no-referrer-when-downgrade"
-    />
+    <div className="overflow-hidden rounded-2xl border border-zinc-200" style={{ height: 200 }}>
+      <iframe
+        src={src}
+        title="Venue map"
+        width="100%"
+        height="100%"
+        style={{ border: 0 }}
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
   );
 }
 
@@ -47,10 +75,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
 
-  const isTbd = jam.neighborhood === "TBD" && !jam.full_address || jam.full_address === "TBD";
-  const showFullAddress = (jam.hasFullAccess || jam.visibility === "private") && jam.full_address && !isTbd;
-  const mapQuery = isTbd ? null : (showFullAddress ? jam.full_address! : jam.neighborhood);
-  const mapZoom = showFullAddress ? 16 : 13;
+  const { showFullAddress } = locationView(jam);
 
   return (
     <div>
@@ -211,18 +236,11 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
           </div>
         )}
 
-        {/* Description */}
+        {/* Description. Last thing in the card: tickets follow it directly. */}
         {jam.notes && (
           <div className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
             <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
-          </div>
-        )}
-
-        {/* Map */}
-        {mapQuery && (
-          <div className="overflow-hidden rounded-2xl border border-zinc-200" style={{ height: 260 }}>
-            <MapEmbed query={mapQuery} zoom={mapZoom} />
           </div>
         )}
       </div>

@@ -18,6 +18,8 @@ export type TicketType = {
   currency: string;
   quantity: number | null;
   remaining: number | null;
+  sales_start_at: string | null;
+  sales_end_at: string | null;
   on_sale: boolean;
   not_yet_open: boolean;
   closed: boolean;
@@ -25,6 +27,19 @@ export type TicketType = {
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
+
+// Every tier row and the button live in one narrow column rather than the
+// page's full 896px: a full-width Buy button reads as a banner, not a button.
+const COLUMN = "max-w-sm";
+
+// In the venue's timezone, not the reader's — a door time of "Oct 4" must not
+// say "Oct 3" to someone browsing from Chicago.
+const onSaleDate = (iso: string, timezone?: string | null) =>
+  new Date(iso).toLocaleDateString("en-US", {
+    timeZone: timezone ?? undefined,
+    month: "short",
+    day: "numeric",
+  });
 
 // Buyers can't take the whole allocation in one order by accident, and it keeps
 // the stepper bounded when a tier is uncapped.
@@ -68,7 +83,7 @@ function Stepper({
 
 export function TicketPurchaseSkeleton() {
   return (
-    <div className="space-y-3" aria-busy="true">
+    <div className={`space-y-3 ${COLUMN}`} aria-busy="true">
       <div className="h-4 w-24 animate-pulse rounded bg-zinc-200" />
       {[0, 1].map((i) => (
         <div key={i} className="flex items-center justify-between rounded-xl border border-zinc-200 p-3">
@@ -87,9 +102,12 @@ export function TicketPurchaseSkeleton() {
 export default function TicketPurchasePanel({
   jamId,
   isSignedIn,
+  timezone,
 }: {
   jamId: string;
   isSignedIn: boolean;
+  /** The event's timezone, for dating a tier that hasn't opened yet. */
+  timezone?: string | null;
 }) {
   const [types, setTypes] = useState<TicketType[] | null>(null);
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -233,7 +251,7 @@ export default function TicketPurchasePanel({
 
   if (clientSecret) {
     return (
-      <div className="space-y-3">
+      <div className={`space-y-3 ${COLUMN}`}>
         <h3 className="text-sm font-semibold tracking-wide text-zinc-700">Payment</h3>
         <CheckoutElementsProvider stripe={stripePromise} options={{ clientSecret }}>
           <TicketCheckoutForm onBack={() => setClientSecret(null)} />
@@ -245,10 +263,14 @@ export default function TicketPurchasePanel({
     );
   }
 
-  const soldOut = types.every((t) => !t.on_sale);
+  // Nothing buyable right now. Kept apart from "sold out" because a tier that
+  // is merely outside its sales window still has stock, and telling a buyer an
+  // event sold out when it hasn't costs a sale.
+  const nothingOnSale = types.every((t) => !t.on_sale);
+  const soldOut = nothingOnSale && types.every((t) => t.remaining === 0);
 
   return (
-    <div className="space-y-3">
+    <div className={`space-y-3 ${COLUMN}`}>
       <h3 className="text-sm font-semibold tracking-wide text-zinc-700">Tickets</h3>
 
       {types.map((t) => {
@@ -256,15 +278,22 @@ export default function TicketPurchasePanel({
         return (
           <div
             key={t.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3"
+            // Dimmed when it can't be bought, so the tiers that can be read as
+            // the live ones at a glance.
+            className={`flex items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3 ${
+              t.on_sale ? "" : "opacity-60"
+            }`}
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-zinc-900">{t.name}</p>
               {t.description && <p className="truncate text-xs text-zinc-500">{t.description}</p>}
               <p className="text-xs text-zinc-500">
                 {money(t.price_cents, t.currency)}
+                {/* A date answers the question "not yet" raises. */}
                 {t.not_yet_open
-                  ? " · Not on sale yet"
+                  ? t.sales_start_at
+                    ? ` · Available ${onSaleDate(t.sales_start_at, timezone)}`
+                    : " · Not on sale yet"
                   : t.closed
                   ? " · Sales closed"
                   : t.remaining === 0
@@ -427,7 +456,7 @@ export default function TicketPurchasePanel({
       {/* Last thing before paying, and deliberately after the promo block: the
           amount depends on the discounted total, so it has to be read where the
           buyer can already see what they are actually paying. */}
-      {count > 0 && !soldOut && (
+      {count > 0 && !nothingOnSale && (
         <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
           <input
             type="checkbox"
@@ -444,11 +473,13 @@ export default function TicketPurchasePanel({
 
       <button
         onClick={startCheckout}
-        disabled={busy || count === 0 || soldOut || (!isSignedIn && !emailLooksValid)}
+        disabled={busy || count === 0 || nothingOnSale || (!isSignedIn && !emailLooksValid)}
         className="w-full rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50 transition-colors"
       >
         {soldOut
           ? "Sold out"
+          : nothingOnSale
+          ? "Sales closed"
           : busy
           ? "Starting checkout…"
           : count === 0

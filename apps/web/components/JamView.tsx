@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import JamCard, { type JamCardData } from "@/components/JamCard";
+import JamCard, { JamMap, type JamCardData } from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
 import JamInvitePanel, { type NewInviteEntry } from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
@@ -109,8 +109,15 @@ export default function JamView({
       />
       {/* Official events sell tickets instead of taking RSVPs — showRsvp is false
           for them. The panel renders nothing when the event has no tiers, so an
-          official event using an external tickets_url is unaffected. */}
-      {isOfficial && <TicketPurchasePanel jamId={jamId} isSignedIn={!!userId} />}
+          official event using an external tickets_url is unaffected.
+          Directly under the description on purpose: read the pitch, then buy. */}
+      {isOfficial && (
+        <TicketPurchasePanel
+          jamId={jamId}
+          isSignedIn={!!userId}
+          timezone={jamCardData.timezone}
+        />
+      )}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
       {/* Official events show who's going too. Ticket buyers get an attending
           RSVP from the Stripe webhook, so the list is populated the same way —
@@ -126,6 +133,7 @@ export default function JamView({
           }}
         />
       )}
+      <JamMap jam={jamCardData} />
       {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
       {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
