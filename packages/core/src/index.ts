@@ -4,6 +4,7 @@ export * from './utils/fetchAllRows';
 export * from './utils/formatComposers';
 export * from './utils/formatJamTime';
 export * from './utils/generateSlug';
+export * from './utils/googleMapsUrl';
 export * from './utils/jamTicketState';
 export * from './utils/mergeSuggestionsById';
 export * from './utils/normalizeSearch';

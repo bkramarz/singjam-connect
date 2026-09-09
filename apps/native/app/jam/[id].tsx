@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Image, Modal, TextInput, FlatList,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { formatJamTime } from '@singjam/core';
+import { formatJamTime, googleMapsUrl } from '@singjam/core';
 import { supabase } from '@/lib/supabase';
 import { duplicateJam } from '@/lib/jams';
 import ContentContainer from '@/components/ContentContainer';
@@ -228,6 +228,28 @@ function InviteUsersModal({
         )}
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+// Wraps the venue lines in a tap target when there is somewhere to send
+// people, and passes them straight through when there is not (a TBD venue), so
+// an unlinkable location gets no misleading press feedback.
+function MaybeMapsLink({ query, children }: { query: string | null; children: React.ReactNode }) {
+  const url = googleMapsUrl(query);
+  if (!url) return <>{children}</>;
+  return (
+    <TouchableOpacity
+      onPress={() =>
+        Linking.openURL(url).catch(() =>
+          Alert.alert('Could not open Maps', 'No maps app or browser is available.')
+        )
+      }
+      accessibilityRole="link"
+      accessibilityLabel="Open this location in Maps"
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+    >
+      {children}
+    </TouchableOpacity>
   );
 }
 
@@ -636,14 +658,21 @@ export default function JamDetailScreen() {
 
           {jam.neighborhood || jam.full_address ? (
             <InfoRow icon="📍">
-              {jam.neighborhood ? (
-                <Text className="text-zinc-700 font-medium">{jam.neighborhood}</Text>
-              ) : null}
-              {jam.full_address && hasFullAccess ? (
-                <Text className="text-zinc-400 text-sm mt-0.5">{jam.full_address}</Text>
-              ) : jam.full_address && !hasFullAccess ? (
-                <Text className="text-zinc-400 text-sm mt-0.5 italic">Full address shown after RSVP</Text>
-              ) : null}
+              {/* Tapping the venue opens Maps, matching mobile web. Pointed at
+                  the most precise line this viewer is actually shown, so it
+                  cannot leak an address the screen withholds until RSVP. */}
+              <MaybeMapsLink
+                query={hasFullAccess ? jam.full_address ?? jam.neighborhood : jam.neighborhood}
+              >
+                {jam.neighborhood ? (
+                  <Text className="text-zinc-700 font-medium">{jam.neighborhood}</Text>
+                ) : null}
+                {jam.full_address && hasFullAccess ? (
+                  <Text className="text-zinc-400 text-sm mt-0.5">{jam.full_address}</Text>
+                ) : jam.full_address && !hasFullAccess ? (
+                  <Text className="text-zinc-400 text-sm mt-0.5 italic">Full address shown after RSVP</Text>
+                ) : null}
+              </MaybeMapsLink>
             </InfoRow>
           ) : null}
 

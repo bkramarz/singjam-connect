@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
+import { googleMapsUrl } from "@singjam/core";
 import AddToCalendarButton from "@/components/AddToCalendarButton";
 
 export type JamCardData = {
@@ -75,6 +76,28 @@ export function JamMap({ jam, className = "h-[260px]" }: { jam: JamCardData; cla
   );
 }
 
+/**
+ * The venue line. A link when we have somewhere to point at, plain text
+ * otherwise (a TBD venue), so the styling is identical either way and only the
+ * affordance appears.
+ */
+function LocationText({ query, children }: { query: string | null; children: ReactNode }) {
+  const className = "text-sm font-medium text-zinc-800";
+  if (!query) return <p className={className}>{children}</p>;
+  return (
+    <a
+      href={query}
+      target="_blank"
+      rel="noopener noreferrer"
+      // Opens a new tab, which a screen reader has no other way to know.
+      aria-label={`Open ${typeof children === "string" ? children : "this location"} in Google Maps (new tab)`}
+      className={`${className} hover:underline`}
+    >
+      {children}
+    </a>
+  );
+}
+
 export default function JamCard({
   jam,
   actions,
@@ -92,7 +115,8 @@ export default function JamCard({
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
 
-  const { showFullAddress } = locationView(jam);
+  const { showFullAddress, mapQuery } = locationView(jam);
+  const mapsUrl = googleMapsUrl(mapQuery);
 
   return (
     <div>
@@ -189,15 +213,16 @@ export default function JamCard({
                 </svg>
               </div>
               <div className="min-w-0">
-                {showFullAddress ? (
-                  <p className="text-sm font-medium text-zinc-800">{jam.full_address}</p>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-zinc-800">{jam.neighborhood}</p>
-                    {!isOfficial && jam.neighborhood !== "TBD" && (
-                      <p className="text-xs text-zinc-400 mt-0.5">Full address shown after RSVP</p>
-                    )}
-                  </>
+                {/* The location links out to Maps. Pointed at the same mapQuery
+                    the embed uses, so the link and the map can never disagree —
+                    and so a jam that only reveals its address after RSVP links
+                    to the neighbourhood, not the street. Null for a TBD venue,
+                    which falls back to plain text. */}
+                <LocationText query={mapsUrl}>
+                  {showFullAddress ? jam.full_address : jam.neighborhood}
+                </LocationText>
+                {!showFullAddress && !isOfficial && jam.neighborhood !== "TBD" && (
+                  <p className="text-xs text-zinc-400 mt-0.5">Full address shown after RSVP</p>
                 )}
               </div>
             </div>
