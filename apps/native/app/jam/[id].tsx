@@ -647,7 +647,16 @@ export default function JamDetailScreen() {
             </InfoRow>
           ) : null}
 
-          {!isHosting && (jam.host_display_name || jam.host_username) ? (
+          {/* Official events belong to SingJam, so whoever created the row is
+              never credited personally — mirrors web's JamCard. Shown to the
+              creator too, unlike the personal case below. */}
+          {jam.visibility === 'official' ? (
+            <InfoRow icon="🎤">
+              <Text className="text-zinc-700">
+                Hosted by <Text className="font-medium">SingJam</Text>
+              </Text>
+            </InfoRow>
+          ) : !isHosting && (jam.host_display_name || jam.host_username) ? (
             <InfoRow icon="🎤">
               <Text className="text-zinc-700">
                 Hosted by{' '}
