@@ -89,6 +89,17 @@ export default function JamView({
   const attendanceLandsHere = !isOfficial || hasTicketTiers;
   const showAttendees = attendanceLandsHere || attendingCount > 0;
 
+  // Either route to a ticket counts: on our own tiers or off to someone else's
+  // checkout, you still don't have one yet.
+  const sellsTickets = hasTicketTiers || !!jamCardData.tickets_url;
+
+  // Passed as undefined rather than an empty fragment when there is nothing to
+  // put in it: JamCard tests this to decide whether to render the actions row
+  // at all, and a fragment is truthy even when it renders nothing — which would
+  // leave an empty row and its gap behind on a ticketed event, where the
+  // calendar button was the row's only occupant.
+  const hasActions = showRsvp || (!userId && !isOfficial);
+
   const [rsvpStatus, setRsvpStatus] = useState(data.rsvpStatus);
   const [hasFullAccess, setHasFullAccess] = useState(data.hasFullAccess);
   const [inviteList, setInviteList] = useState(data.inviteList);
@@ -98,6 +109,7 @@ export default function JamView({
       {pendingInvite && rsvpStatus !== "attending" && !isHost && <JamInviteResponse jamId={jamId} />}
       <JamCard
         jam={jamCardData}
+        sellsTickets={sellsTickets}
         // No ticket column to sit beside — a community or private jam, or an
         // official event selling through tickets_url. The map stays inside the
         // card exactly where it has always been, on the card's own spacing:
@@ -106,6 +118,7 @@ export default function JamView({
           !(isOfficial && hasTicketTiers) ? <JamMap jam={jamCardData} /> : undefined
         }
         actions={
+          hasActions ? (
           <>
             {showRsvp && (
               <JamRsvpButton
@@ -129,6 +142,7 @@ export default function JamView({
               </Link>
             )}
           </>
+          ) : undefined
         }
       />
       {/* Official events sell tickets instead of taking RSVPs — showRsvp is false

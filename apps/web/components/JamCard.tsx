@@ -102,9 +102,17 @@ export default function JamCard({
   jam,
   actions,
   belowDescription,
+  sellsTickets = false,
 }: {
   jam: JamCardData;
   actions?: ReactNode;
+  /**
+   * The event sells tickets, by our own tiers or an external link. Such an
+   * event hides "Add to calendar": you should not be blocking out an evening
+   * you have not got a ticket for yet, and on a ticketed page the button was
+   * the only thing above the tier list, which read as the primary action.
+   */
+  sellsTickets?: boolean;
   /**
    * Sits inside the card under the description, on the card's own spacing.
    * This is where the map used to be hard-coded, and where it still goes for
@@ -117,6 +125,7 @@ export default function JamCard({
 
   const { showFullAddress, mapQuery } = locationView(jam);
   const mapsUrl = googleMapsUrl(mapQuery);
+  const showCalendar = !!jam.starts_at && !sellsTickets;
 
   return (
     <div>
@@ -252,7 +261,7 @@ export default function JamCard({
         )}
 
         {/* Actions */}
-        {(jam.tickets_url || jam.starts_at || actions) && (
+        {(jam.tickets_url || showCalendar || actions) && (
           <div className="flex flex-wrap gap-3 items-center">
             {jam.tickets_url && (
               <a
@@ -264,7 +273,7 @@ export default function JamCard({
                 Get tickets ↗
               </a>
             )}
-            {jam.starts_at && (
+            {jam.starts_at && !sellsTickets && (
               <AddToCalendarButton
                 title={jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
                 startsAt={jam.starts_at}
