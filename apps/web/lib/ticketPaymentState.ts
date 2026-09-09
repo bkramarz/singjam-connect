@@ -24,17 +24,64 @@ export type PaymentOrder = {
   expires_at: string;
 };
 
+/** One row of the order summary. */
+export type PaymentLine = { label: string; quantity: number; amountCents: number };
+
+/** The shape of a Stripe line item, as much of it as the summary needs. */
+export type SessionLineItem = {
+  description?: string | null;
+  quantity?: number | null;
+  amount_total?: number | null;
+};
+
 /** The Checkout Session fields this needs, or null when it could not be read. */
 export type PaymentSession = {
   status: string | null;
   client_secret: string | null;
   /** What Stripe will actually charge, in the smallest currency unit. */
   amount_total: number | null;
+  /** Requires expand: ['line_items'] on retrieve. */
+  line_items?: SessionLineItem[] | null;
+  /** Session-level discount, which is where a promotion code lands. */
+  discount_cents?: number | null;
 } | null;
+
+/**
+ * The order summary, read off the session rather than rebuilt from our own
+ * tables, so it cannot disagree with the amount being charged. Stripe holds the
+ * promotion-code discount and the processing-fee line, neither of which is
+ * recoverable from ticket_orders alone.
+ *
+ * Line names are created as "<event> — <tier>", which is right in a Stripe
+ * receipt but repeats the event name down every row here. The prefix is only
+ * removed when it matches the event name exactly — no guessing at a separator.
+ */
+export function summarisePaymentLines(
+  items: SessionLineItem[] | null | undefined,
+  eventName?: string | null
+): PaymentLine[] {
+  const prefix = eventName ? `${eventName} — ` : null;
+  return (items ?? []).map((item) => {
+    const raw = (item.description ?? "").trim();
+    const label = prefix && raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+    return {
+      label: label || "Ticket",
+      quantity: item.quantity ?? 1,
+      amountCents: item.amount_total ?? 0,
+    };
+  });
+}
 
 export type TicketPaymentState =
   /** Mount the Payment Element with this secret. */
-  | { kind: "pay"; clientSecret: string; amountCents: number; currency: string }
+  | {
+      kind: "pay";
+      clientSecret: string;
+      amountCents: number;
+      currency: string;
+      lines: PaymentLine[];
+      discountCents: number;
+    }
   /** Already paid, or Stripe says the session completed — show the receipt. */
   | { kind: "done" }
   /** The hold or the session lapsed; the buyer has to start again. */
@@ -43,7 +90,8 @@ export type TicketPaymentState =
 export function resolveTicketPaymentState(
   order: PaymentOrder,
   session: PaymentSession,
-  now: Date = new Date()
+  now: Date = new Date(),
+  eventName?: string | null
 ): TicketPaymentState {
   // A paid order is finished whatever Stripe currently says about the session.
   if (order.status === "paid" || order.status === "refunded") return { kind: "done" };
@@ -76,5 +124,7 @@ export function resolveTicketPaymentState(
     // the order here put two different prices on one screen.
     amountCents: session.amount_total ?? order.amount_cents,
     currency: order.currency,
+    lines: summarisePaymentLines(session.line_items, eventName),
+    discountCents: session.discount_cents ?? 0,
   };
 }

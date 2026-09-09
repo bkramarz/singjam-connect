@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { resolveTicketPaymentState, type PaymentOrder } from "./ticketPaymentState";
+import {
+  resolveTicketPaymentState,
+  summarisePaymentLines,
+  type PaymentOrder,
+} from "./ticketPaymentState";
 
 const NOW = new Date("2026-09-09T21:00:00Z");
 const LATER = "2026-09-09T21:30:00Z"; // hold still live
@@ -23,6 +27,8 @@ describe("resolveTicketPaymentState", () => {
       clientSecret: "cs_test_abc_secret_xyz",
       amountCents: 1576,
       currency: "usd",
+      lines: [],
+      discountCents: 0,
     });
   });
 
@@ -101,5 +107,65 @@ describe("resolveTicketPaymentState", () => {
     expect(
       resolveTicketPaymentState(order(), { status: "open", client_secret: null, amount_total: 1576 }, NOW).kind
     ).toBe("expired");
+  });
+});
+
+describe("summarisePaymentLines", () => {
+  const EVENT = "SingJam at the Starry Plough";
+
+  it("strips the event-name prefix Stripe line names carry", () => {
+    expect(
+      summarisePaymentLines(
+        [{ description: `${EVENT} — Advance`, quantity: 2, amount_total: 3000 }],
+        EVENT
+      )
+    ).toEqual([{ label: "Advance", quantity: 2, amountCents: 3000 }]);
+  });
+
+  it("leaves a line that does not carry the prefix alone", () => {
+    // The processing fee is its own line and was never prefixed.
+    expect(
+      summarisePaymentLines([{ description: "Processing fee", quantity: 1, amount_total: 76 }], EVENT)
+    ).toEqual([{ label: "Processing fee", quantity: 1, amountCents: 76 }]);
+  });
+
+  it("only strips an exact match, never a partial one", () => {
+    const lines = summarisePaymentLines(
+      [{ description: "SingJam at the Oakland Grove — Advance", quantity: 1, amount_total: 1500 }],
+      EVENT
+    );
+    expect(lines[0].label).toBe("SingJam at the Oakland Grove — Advance");
+  });
+
+  it("keeps the full name when the event name is unknown", () => {
+    const lines = summarisePaymentLines(
+      [{ description: `${EVENT} — Advance`, quantity: 1, amount_total: 1500 }],
+      null
+    );
+    expect(lines[0].label).toBe(`${EVENT} — Advance`);
+  });
+
+  it("fills in for a missing description, quantity or amount", () => {
+    expect(summarisePaymentLines([{}], EVENT)).toEqual([
+      { label: "Ticket", quantity: 1, amountCents: 0 },
+    ]);
+  });
+
+  it("returns nothing when line items were not expanded", () => {
+    expect(summarisePaymentLines(null, EVENT)).toEqual([]);
+    expect(summarisePaymentLines(undefined, EVENT)).toEqual([]);
+  });
+
+  it("keeps several tiers in the order Stripe returned them", () => {
+    const lines = summarisePaymentLines(
+      [
+        { description: `${EVENT} — Advance`, quantity: 2, amount_total: 3000 },
+        { description: `${EVENT} — Supporter`, quantity: 1, amount_total: 3600 },
+        { description: "Processing fee", quantity: 1, amount_total: 222 },
+      ],
+      EVENT
+    );
+    expect(lines.map((l) => l.label)).toEqual(["Advance", "Supporter", "Processing fee"]);
+    expect(lines.reduce((sum, l) => sum + l.amountCents, 0)).toBe(6822);
   });
 });

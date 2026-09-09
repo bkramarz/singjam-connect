@@ -37,6 +37,10 @@ export default async function TicketPaymentPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   const admin = supabaseAdmin();
+  // Only for the summary: the event name lets the per-tier line names shed the
+  // "<event> — " prefix Stripe carries, and orients a page that otherwise shows
+  // nothing about what is being bought.
+  const { data: jam } = await admin.from("jams").select("name").eq("id", jamId).maybeSingle();
   const { data: order } = await admin
     .from("ticket_orders")
     .select("id, jam_id, status, amount_cents, currency, buyer_user_id, stripe_checkout_session_id, expires_at")
@@ -57,8 +61,17 @@ export default async function TicketPaymentPage({
   let session: PaymentSession = null;
   if (mine.stripe_checkout_session_id) {
     try {
-      const s = await stripe().checkout.sessions.retrieve(mine.stripe_checkout_session_id);
-      session = { status: s.status, client_secret: s.client_secret, amount_total: s.amount_total };
+      // line_items has to be expanded; total_details comes back by default.
+      const s = await stripe().checkout.sessions.retrieve(mine.stripe_checkout_session_id, {
+        expand: ["line_items"],
+      });
+      session = {
+        status: s.status,
+        client_secret: s.client_secret,
+        amount_total: s.amount_total,
+        line_items: s.line_items?.data ?? null,
+        discount_cents: s.total_details?.amount_discount ?? 0,
+      };
     } catch {
       // A key in the wrong mode, a deleted session, Stripe being down. Falls
       // through to "expired", which offers to start again — never a card form.
@@ -66,7 +79,7 @@ export default async function TicketPaymentPage({
     }
   }
 
-  const state = resolveTicketPaymentState(mine as any, session);
+  const state = resolveTicketPaymentState(mine as any, session, new Date(), jam?.name ?? null);
 
   if (state.kind === "done") {
     redirect(`/jam/${jamId}/tickets/complete?order_id=${mine.id}`);
@@ -95,6 +108,9 @@ export default async function TicketPaymentPage({
       clientSecret={state.clientSecret}
       amountCents={state.amountCents}
       currency={state.currency}
+      lines={state.lines}
+      discountCents={state.discountCents}
+      eventName={jam?.name ?? null}
       backHref={backToEvent}
     />
   );
