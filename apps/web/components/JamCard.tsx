@@ -41,16 +41,17 @@ function locationView(jam: JamCardData) {
 }
 
 /**
- * The venue map. Placed by JamView rather than inside this card: it used to sit
- * between the description and the tickets, which put a 260px iframe between
- * reading about the event and being able to buy. It stays on the page because
- * "where exactly is this" is a real question — it is just not the next thing
- * anyone needs.
+ * The venue map. Lifted out of this card so JamView can place it, because on a
+ * ticketed event it belongs beside the ticket column rather than above it — it
+ * used to sit between the description and the tickets, which put a 260px
+ * iframe between reading about the event and being able to buy.
  *
- * The caller sizes it (`className`), because it has two homes: beside the
- * ticket panel on a wide screen, and full width at the foot otherwise.
+ * Everywhere else it keeps its original spot and size, directly below the
+ * description: an event with nothing to buy has no purchase path for it to
+ * block, so there is nothing to fix. The caller sizes it, since the column
+ * beside the tickets is a different shape from the full-width slot.
  */
-export function JamMap({ jam, className = "h-52" }: { jam: JamCardData; className?: string }) {
+export function JamMap({ jam, className = "h-[260px]" }: { jam: JamCardData; className?: string }) {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
   const { mapQuery, mapZoom } = locationView(jam);
   if (!key || !mapQuery) return null;
@@ -74,7 +75,20 @@ export function JamMap({ jam, className = "h-52" }: { jam: JamCardData; classNam
   );
 }
 
-export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: ReactNode }) {
+export default function JamCard({
+  jam,
+  actions,
+  belowDescription,
+}: {
+  jam: JamCardData;
+  actions?: ReactNode;
+  /**
+   * Sits inside the card under the description, on the card's own spacing.
+   * This is where the map used to be hard-coded, and where it still goes for
+   * an event with no ticket column to sit beside.
+   */
+  belowDescription?: ReactNode;
+}) {
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
 
@@ -239,13 +253,16 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
           </div>
         )}
 
-        {/* Description. Last thing in the card: tickets follow it directly. */}
+        {/* Description. Last thing in the card on a ticketed event, so the
+            ticket panel follows it directly. */}
         {jam.notes && (
           <div className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
             <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
           </div>
         )}
+
+        {belowDescription}
       </div>
     </div>
   );

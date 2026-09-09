@@ -84,6 +84,13 @@ export default function JamView({
       {pendingInvite && rsvpStatus !== "attending" && !isHost && <JamInviteResponse jamId={jamId} />}
       <JamCard
         jam={jamCardData}
+        // No ticket column to sit beside — a community or private jam, or an
+        // official event selling through tickets_url. The map stays inside the
+        // card exactly where it has always been, on the card's own spacing:
+        // there is no purchase path here for it to have been in the way of.
+        belowDescription={
+          !(isOfficial && hasTicketTiers) ? <JamMap jam={jamCardData} /> : undefined
+        }
         actions={
           <>
             {showRsvp && (
@@ -152,10 +159,6 @@ export default function JamView({
           }}
         />
       )}
-      {/* Everything else — a community jam, or an official event selling
-          through tickets_url — has no ticket column for the map to sit beside,
-          so it keeps the full-width slot at the foot. */}
-      {!(isOfficial && hasTicketTiers) && <JamMap jam={jamCardData} />}
       {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
       {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
