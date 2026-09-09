@@ -3,9 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { fetchAllRows, jamTicketState, summarizeTicketTiers, type JamTicketSummary, type JamTicketTier } from "@singjam/core";
+import { fetchAllRows, jamTicketCta, summarizeTicketTiers, type JamTicketSummary, type JamTicketTier } from "@singjam/core";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
-import TicketStateChip from "@/components/TicketStateChip";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type RsvpStatus = "attending" | "waitlist" | "cancelled";
@@ -73,8 +72,8 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, ticketSum
   // would be nonsense — the summary is only fetched for upcoming ones, but
   // tickets_url alone would otherwise still render a chip.
   const isPast = (jam.ends_at ?? jam.starts_at) < new Date().toISOString();
-  const ticketState = isOfficial && !isPast
-    ? jamTicketState(jam.tickets_url, ticketSummary, { timezone: jam.timezone })
+  const cta = isOfficial && !isPast
+    ? jamTicketCta(jam.tickets_url, ticketSummary, { timezone: jam.timezone })
     : null;
 
   useEffect(() => {
@@ -100,7 +99,7 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, ticketSum
   }
 
   const cardBody = (
-    <div className={`flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
+    <div className={`group flex overflow-hidden rounded-2xl border bg-white transition-colors ${isOfficial ? "border-amber-200 hover:border-amber-300" : "border-zinc-200 hover:border-zinc-300"}`}>
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
           <Image src={jam.image_url} alt={jam.name ?? "Event"} fill className="object-contain" sizes="128px" />
@@ -169,10 +168,10 @@ function JamListCard({ jam, tags, hostLabel, hostUsername, isOfficial, ticketSum
             {hostUsername && <span className="ml-1">@{hostUsername}</span>}
           </p>
         ))}
-        {ticketState && (
-          <div className="mt-2">
-            <TicketStateChip state={ticketState} />
-          </div>
+        {cta && (
+          <p className={`mt-2 text-xs font-medium ${cta.hasTickets ? "text-amber-600 group-hover:text-amber-500" : "text-zinc-500 group-hover:text-zinc-700"}`}>
+            {cta.label} →
+          </p>
         )}
       </div>
     </div>

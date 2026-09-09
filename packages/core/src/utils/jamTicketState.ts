@@ -105,8 +105,14 @@ export type JamTicketState = {
   label: string;
   /** Set only for events selling off-site; the caller opens it externally. */
   url: string | null;
-  /** True for states that report a fact rather than invite a click. */
-  muted: boolean;
+  /**
+   * How to render it. A price is information, so it reads as plain bold text —
+   * the pattern Eventbrite uses, and the reason this is not a filled pill: a
+   * solid primary-colour chip looks like a button and the card is the button.
+   * The other kinds are status, which get soft-tinted pills the way Luma's
+   * "Waitlist" / "Near Capacity" and this app's own RsvpBadge already do.
+   */
+  kind: "price" | "external" | "pending" | "unavailable";
 };
 
 function money(cents: number, currency: string | null): string {
@@ -120,19 +126,19 @@ export function jamTicketState(
   summary: JamTicketSummary | null | undefined,
   opts: { timezone?: string | null; now?: Date } = {}
 ): JamTicketState | null {
-  if (ticketsUrl) return { label: "Tickets", url: ticketsUrl, muted: false };
+  if (ticketsUrl) return { label: "Tickets", url: ticketsUrl, kind: "external" };
   if (!summary || summary.tier_count === 0) return null;
 
-  if (summary.sold_out) return { label: "Sold out", url: null, muted: true };
+  if (summary.sold_out) return { label: "Sold out", url: null, kind: "unavailable" };
 
   if (summary.on_sale_count > 0) {
     const cents = summary.min_price_cents ?? 0;
-    if (cents === 0) return { label: "Free", url: null, muted: false };
+    if (cents === 0) return { label: "Free", url: null, kind: "price" };
     const price = money(cents, summary.currency);
     return {
       label: summary.tier_count > 1 ? `From ${price}` : price,
       url: null,
-      muted: false,
+      kind: "price",
     };
   }
 
@@ -146,8 +152,30 @@ export function jamTicketState(
       timeZone: opts.timezone ?? undefined,
       ...(soon ? { weekday: "short" } : { month: "short", day: "numeric" }),
     });
-    return { label: `Tickets open ${when}`, url: null, muted: true };
+    return { label: `Tickets open ${when}`, url: null, kind: "pending" };
   }
 
-  return { label: "Sales closed", url: null, muted: true };
+  return { label: "Sales closed", url: null, kind: "unavailable" };
+}
+
+/**
+ * The single call-to-action line an official event's listing card shows.
+ *
+ * Listing cards say what you can do, not what it costs — price and tiers live
+ * on the detail page where you actually buy. The one ticket fact worth
+ * surfacing in a list is that there is nothing left to buy, because sending
+ * someone to a checkout that will refuse them is worse than saying nothing.
+ * The caller appends the arrow.
+ */
+export function jamTicketCta(
+  ticketsUrl: string | null | undefined,
+  summary: JamTicketSummary | null | undefined,
+  opts: { timezone?: string | null; now?: Date } = {}
+): { label: string; hasTickets: boolean } {
+  const state = jamTicketState(ticketsUrl, summary, opts);
+  if (!state) return { label: "View details", hasTickets: false };
+  if (state.kind === "unavailable") {
+    return { label: `${state.label} — view details`, hasTickets: false };
+  }
+  return { label: "Details and tickets", hasTickets: true };
 }

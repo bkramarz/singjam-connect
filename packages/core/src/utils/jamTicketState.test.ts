@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  jamTicketCta,
   jamTicketState,
   summarizeTicketTiers,
   type JamTicketSummary,
@@ -26,7 +27,7 @@ describe('jamTicketState', () => {
     expect(jamTicketState('https://tickets.example.com', summary(), { now: NOW })).toEqual({
       label: 'Tickets',
       url: 'https://tickets.example.com',
-      muted: false,
+      kind: 'external',
     });
   });
 
@@ -55,7 +56,7 @@ describe('jamTicketState', () => {
     expect(jamTicketState(null, summary({ sold_out: true, on_sale_count: 0 }), { now: NOW })).toEqual({
       label: 'Sold out',
       url: null,
-      muted: true,
+      kind: 'unavailable',
     });
   });
 
@@ -65,7 +66,7 @@ describe('jamTicketState', () => {
       summary({ on_sale_count: 0, min_price_cents: null, next_sales_start_at: '2026-09-11T17:00:00Z' }),
       { timezone: 'America/Los_Angeles', now: NOW }
     );
-    expect(state).toEqual({ label: 'Tickets open Fri', url: null, muted: true });
+    expect(state).toEqual({ label: 'Tickets open Fri', url: null, kind: 'pending' });
   });
 
   it('names a date when sales open further out', () => {
@@ -87,7 +88,7 @@ describe('jamTicketState', () => {
 
   it('falls back to sales closed when nothing is on sale and nothing reopens', () => {
     const state = jamTicketState(null, summary({ on_sale_count: 0, min_price_cents: null }), { now: NOW });
-    expect(state).toEqual({ label: 'Sales closed', url: null, muted: true });
+    expect(state).toEqual({ label: 'Sales closed', url: null, kind: 'unavailable' });
   });
 });
 
@@ -193,5 +194,60 @@ describe('summarizeTicketTiers', () => {
       tier({ ticket_type_id: 't2', price_cents: 3600 }),
     ]);
     expect(jamTicketState(null, byJam.get('j1'), { now: NOW })?.label).toBe('From $15');
+  });
+});
+
+// A price is information, not an action: it must never come back as something a
+// component would style like a button. Everything else is status.
+describe('jamTicketState kinds', () => {
+  it('classifies a price as price and the rest as status', () => {
+    expect(jamTicketState(null, summary(), { now: NOW })?.kind).toBe('price');
+    expect(jamTicketState(null, summary({ min_price_cents: 0 }), { now: NOW })?.kind).toBe('price');
+    expect(jamTicketState(null, summary({ sold_out: true }), { now: NOW })?.kind).toBe('unavailable');
+    expect(jamTicketState('https://x.test', null, { now: NOW })?.kind).toBe('external');
+  });
+
+  it('only the external kind carries a url', () => {
+    for (const state of [
+      jamTicketState(null, summary(), { now: NOW }),
+      jamTicketState(null, summary({ sold_out: true }), { now: NOW }),
+      jamTicketState(null, summary({ on_sale_count: 0, min_price_cents: null }), { now: NOW }),
+    ]) {
+      expect(state?.url).toBeNull();
+    }
+    expect(jamTicketState('https://x.test', null, { now: NOW })?.url).toBe('https://x.test');
+  });
+});
+
+describe('jamTicketCta', () => {
+  it('offers tickets when there is something to buy', () => {
+    expect(jamTicketCta(null, summary(), { now: NOW })).toEqual({
+      label: 'Details and tickets',
+      hasTickets: true,
+    });
+    expect(jamTicketCta('https://x.test', null, { now: NOW }).label).toBe('Details and tickets');
+    expect(jamTicketCta(null, summary({ min_price_cents: 0 }), { now: NOW }).label).toBe('Details and tickets');
+  });
+
+  it('falls back to plain details when the event has no ticketing', () => {
+    expect(jamTicketCta(null, null, { now: NOW })).toEqual({
+      label: 'View details',
+      hasTickets: false,
+    });
+  });
+
+  // Pointing someone at a checkout that will refuse them is worse than silence.
+  it('says so when there is nothing left to buy', () => {
+    expect(jamTicketCta(null, summary({ sold_out: true, on_sale_count: 0 }), { now: NOW })).toEqual({
+      label: 'Sold out — view details',
+      hasTickets: false,
+    });
+    expect(jamTicketCta(null, summary({ on_sale_count: 0, min_price_cents: null }), { now: NOW }).label)
+      .toBe('Sales closed — view details');
+  });
+
+  it('still invites a click while sales are only pending', () => {
+    const pending = summary({ on_sale_count: 0, min_price_cents: null, next_sales_start_at: '2026-09-11T17:00:00Z' });
+    expect(jamTicketCta(null, pending, { timezone: 'UTC', now: NOW }).label).toBe('Details and tickets');
   });
 });

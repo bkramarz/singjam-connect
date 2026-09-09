@@ -1,13 +1,7 @@
 import { View, Text, Image, TouchableOpacity, Linking } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { jamTicketState, type JamTicketSummary } from '@singjam/core';
-
-// Web's listing chip is inert because its detail page carries the real ticket
-// button. The native detail page cannot sell tickets — Stripe checkout is
-// web-only — so here the chip is the ticket path: out to the external seller,
-// or to the event's web page where checkout lives.
-const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
+import { jamTicketCta, type JamTicketSummary } from '@singjam/core';
 
 export type JamItem = {
   id: string;
@@ -78,8 +72,8 @@ export default function JamCard({ jam, myId, onPress, onManage }: {
   // Past events keep their card in the list, where a price or a ticket link
   // would be nonsense — matches web's JamListCard.
   const isPast = (jam.ends_at ?? jam.starts_at ?? '') < new Date().toISOString();
-  const ticketState = isOfficial && !isPast
-    ? jamTicketState(jam.tickets_url, jam.ticket_summary, { timezone: jam.timezone })
+  const cta = isOfficial && !isPast
+    ? jamTicketCta(jam.tickets_url, jam.ticket_summary, { timezone: jam.timezone })
     : null;
 
   return (
@@ -175,22 +169,22 @@ export default function JamCard({ jam, myId, onPress, onManage }: {
           </Text>
         ) : null)}
 
-        {ticketState ? (
-          <View className="mt-2 flex-row">
-            {ticketState.muted ? (
-              <View className="rounded-full bg-zinc-100 px-2.5 py-0.5">
-                <Text className="text-xs font-semibold text-zinc-500">{ticketState.label}</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                onPress={() => Linking.openURL(ticketState.url ?? `${WEB_URL}/jam/${jam.id}`)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                className="rounded-full bg-amber-500 px-2.5 py-0.5"
-              >
-                <Text className="text-xs font-semibold text-white">{ticketState.label} ↗</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Off-site ticketing is the one thing the native detail screen cannot
+            reach — no Stripe checkout there, and it never renders tickets_url —
+            so an external event's CTA opens the seller rather than dead-ending. */}
+        {cta ? (
+          jam.tickets_url ? (
+            <TouchableOpacity
+              onPress={() => Linking.openURL(jam.tickets_url!)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text className="mt-2 text-xs font-medium text-amber-600">{cta.label} ↗</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text className={`mt-2 text-xs font-medium ${cta.hasTickets ? 'text-amber-600' : 'text-zinc-500'}`}>
+              {cta.label} →
+            </Text>
+          )
         ) : null}
       </View>
     </TouchableOpacity>

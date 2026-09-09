@@ -1,8 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { jamTicketState, type JamTicketSummary } from "@singjam/core";
+import { jamTicketCta, type JamTicketSummary } from "@singjam/core";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
-import TicketStateChip from "@/components/TicketStateChip";
 
 export type JamEventCardData = {
   id: string;
@@ -22,12 +21,12 @@ export default function JamEventCard({
   jam: JamEventCardData;
   ticketSummary?: JamTicketSummary | null;
 }) {
-  const ticketState = jamTicketState(jam.tickets_url, ticketSummary, { timezone: jam.timezone });
+  const cta = jamTicketCta(jam.tickets_url, ticketSummary, { timezone: jam.timezone });
 
   return (
     <Link
       href={`/jam/${jam.id}`}
-      className="flex overflow-hidden rounded-2xl border border-amber-200 bg-white transition-colors hover:border-amber-300"
+      className="group flex overflow-hidden rounded-2xl border border-amber-200 bg-white transition-colors hover:border-amber-300"
     >
       {jam.image_url ? (
         <div className="relative shrink-0 w-24 sm:w-32 overflow-hidden bg-black">
@@ -59,11 +58,11 @@ export default function JamEventCard({
           </p>
         )}
         {jam.neighborhood && <p className="text-xs text-zinc-400 mt-0.5">{jam.neighborhood}</p>}
-        {ticketState && (
-          <div className="mt-2">
-            <TicketStateChip state={ticketState} />
-          </div>
-        )}
+        {/* Not a link: the card is the link, so a nested anchor to the same
+            place would be invalid markup. It is the card's affordance. */}
+        <p className={`mt-2 text-xs font-medium ${cta.hasTickets ? "text-amber-600 group-hover:text-amber-500" : "text-zinc-500 group-hover:text-zinc-700"}`}>
+          {cta.label} →
+        </p>
       </div>
     </Link>
   );
