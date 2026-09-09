@@ -75,6 +75,20 @@ export default function JamView({
     alreadyInvitedIds,
   } = data;
 
+  // An official event with no on-site tiers sells through an external link, so
+  // its attendance is recorded over there and this list can never fill. Worse
+  // than useless: the empty state reads "No one yet — be the first", inviting
+  // an RSVP that official events don't offer in the first place.
+  //
+  // Gated on tiers rather than on tickets_url, because those two are not
+  // mutually exclusive in practice however much the copy elsewhere assumes it:
+  // the 2026-07-26 event carries both. Such an event does sell here, so its
+  // host still needs the door list, and keying off tickets_url would take it
+  // away. Also gated on the count, so a stray row stays visible — an event
+  // converted from a community jam would have real attendees on it.
+  const attendanceLandsHere = !isOfficial || hasTicketTiers;
+  const showAttendees = attendanceLandsHere || attendingCount > 0;
+
   const [rsvpStatus, setRsvpStatus] = useState(data.rsvpStatus);
   const [hasFullAccess, setHasFullAccess] = useState(data.hasFullAccess);
   const [inviteList, setInviteList] = useState(data.inviteList);
@@ -145,11 +159,14 @@ export default function JamView({
         </div>
       )}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
-      {/* Official events show who's going too. Ticket buyers get an attending
-          RSVP from the Stripe webhook, so the list is populated the same way —
-          guests without an account are the one gap, which is what the sign-up
-          nudge on the completion page is for. */}
-      <JamAttendeeList jamId={jamId} hostId={isOfficial ? null : jam.host_user_id} isHost={isHost} />
+      {/* Official events that sell here show who's going too. Ticket buyers get
+          an attending RSVP from the Stripe webhook, so the list is populated the
+          same way — guests without an account are the one gap, which is what the
+          sign-up nudge on the completion page is for. See showAttendees above for
+          why an externally-ticketed event gets no list at all. */}
+      {showAttendees && (
+        <JamAttendeeList jamId={jamId} hostId={isOfficial ? null : jam.host_user_id} isHost={isHost} />
+      )}
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={jamId}
