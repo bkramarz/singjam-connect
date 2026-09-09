@@ -31,9 +31,8 @@ const money = (cents: number, currency: string) =>
 
 // Every tier row and the button live in one narrow column rather than the
 // page's full 896px: a full-width Buy button reads as a banner, not a button.
-// Full width on a phone, a fixed 384px from sm up so the map beside it gets a
-// predictable remainder instead of both fighting over the row.
-const COLUMN = "w-full sm:w-96 sm:shrink-0";
+// Full width on a phone, a fixed 384px from sm up.
+const COLUMN = "w-full sm:w-96";
 
 
 // Buyers can't take the whole allocation in one order by accident, and it keeps

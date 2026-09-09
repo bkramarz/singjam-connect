@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import JamCard, { JamMap, type JamCardData } from "@/components/JamCard";
+import JamCard, { JamDescription, JamMap, type JamCardData } from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
 import JamInvitePanel, { type NewInviteEntry } from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
@@ -89,6 +89,11 @@ export default function JamView({
   const attendanceLandsHere = !isOfficial || hasTicketTiers;
   const showAttendees = attendanceLandsHere || attendingCount > 0;
 
+  // Whether the ticket panel renders. Drives three placements: the panel row
+  // itself, the map (beside it rather than in the card), and the description
+  // (below it rather than above).
+  const showTicketPanel = isOfficial && hasTicketTiers;
+
   // Either route to a ticket counts: on our own tiers or off to someone else's
   // checkout, you still don't have one yet.
   const sellsTickets = hasTicketTiers || !!jamCardData.tickets_url;
@@ -110,13 +115,11 @@ export default function JamView({
       <JamCard
         jam={jamCardData}
         sellsTickets={sellsTickets}
-        // No ticket column to sit beside — a community or private jam, or an
-        // official event selling through tickets_url. The map stays inside the
-        // card exactly where it has always been, on the card's own spacing:
-        // there is no purchase path here for it to have been in the way of.
-        belowDescription={
-          !(isOfficial && hasTicketTiers) ? <JamMap jam={jamCardData} /> : undefined
-        }
+        // When no panel follows — a community or private jam, or an official
+        // event selling through tickets_url — the description and the map both
+        // stay inside the card exactly where they have always been: there is no
+        // purchase path here for either of them to have been in the way of.
+        ticketPanelFollows={showTicketPanel}
         actions={
           hasActions ? (
           <>
@@ -145,32 +148,20 @@ export default function JamView({
           ) : undefined
         }
       />
-      {/* Official events sell tickets instead of taking RSVPs — showRsvp is false
-          for them. Directly under the description on purpose: read the pitch,
-          then buy.
-
-          The map rides along on the right at sm and up. The ticket column is
-          deliberately narrow, which left most of the page width empty next to
-          it, and "where" is the other thing someone weighs while deciding —
-          so it earns the space better than whitespace does. Below sm the two
-          stack, tickets first. */}
-      {isOfficial && hasTicketTiers && (
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
+      {/* Official events sell tickets instead of taking RSVPs — showRsvp is
+          false for them. The panel sits directly under the date/location strip
+          so the tier list and its prices get the first screenful; then the
+          description, then the map, full width like every other event's. */}
+      {showTicketPanel && (
+        <>
           <TicketPurchasePanel
             jamId={jamId}
             isSignedIn={!!userId}
             timezone={jamCardData.timezone}
           />
-          {/* mt-8 clears the "Tickets" heading (20px line-height + the panel's
-              12px space-y-3), so the map frame starts level with the first tier
-              rather than with the heading that labels only the left column.
-              items-stretch then takes the margin off the height, so the frame
-              still ends level with the Buy button. */}
-          <JamMap
-            jam={jamCardData}
-            className="h-52 w-full sm:mt-8 sm:h-auto sm:min-h-52 sm:flex-1"
-          />
-        </div>
+          <JamDescription jam={jamCardData} />
+          <JamMap jam={jamCardData} />
+        </>
       )}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
       {/* Official events that sell here show who's going too. Ticket buyers get

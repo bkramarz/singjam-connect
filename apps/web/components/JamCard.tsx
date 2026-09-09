@@ -77,32 +77,57 @@ export function JamMap({ jam, className = "h-[260px]" }: { jam: JamCardData; cla
 }
 
 /**
+ * The event description. Lives in the card normally, but on a ticketed event
+ * JamView renders it *below* the ticket panel — Sherri asked for the tickets
+ * either side of it and Ben picked above, which puts the price list in the
+ * first screenful and leaves the detail for whoever wants it.
+ */
+export function JamDescription({ jam }: { jam: JamCardData }) {
+  if (!jam.notes) return null;
+  return (
+    <div className="space-y-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
+      <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
+    </div>
+  );
+}
+
+/**
  * The venue line. A link when we have somewhere to point at, plain text
  * otherwise (a TBD venue), so the styling is identical either way and only the
  * affordance appears.
  */
 function LocationText({ query, children }: { query: string | null; children: ReactNode }) {
-  const className = "text-sm font-medium text-zinc-800";
-  if (!query) return <p className={className}>{children}</p>;
+  // The <p> stays put in both branches and the anchor goes *inside* it. Making
+  // the anchor itself the block element shifted every non-ticketed page down a
+  // couple of pixels (an inline box lays out differently from a block one), and
+  // a block anchor would also make the whole row width clickable rather than
+  // just the address.
   return (
-    <a
-      href={query}
-      target="_blank"
-      rel="noopener noreferrer"
-      // Opens a new tab, which a screen reader has no other way to know.
-      aria-label={`Open ${typeof children === "string" ? children : "this location"} in Google Maps (new tab)`}
-      className={`${className} hover:underline`}
-    >
-      {children}
-    </a>
+    <p className="text-sm font-medium text-zinc-800">
+      {query ? (
+        <a
+          href={query}
+          target="_blank"
+          rel="noopener noreferrer"
+          // Opens a new tab, which a screen reader has no other way to know.
+          aria-label={`Open ${typeof children === "string" ? children : "this location"} in Google Maps (new tab)`}
+          className="hover:underline"
+        >
+          {children}
+        </a>
+      ) : (
+        children
+      )}
+    </p>
   );
 }
 
 export default function JamCard({
   jam,
   actions,
-  belowDescription,
   sellsTickets = false,
+  ticketPanelFollows = false,
 }: {
   jam: JamCardData;
   actions?: ReactNode;
@@ -114,11 +139,11 @@ export default function JamCard({
    */
   sellsTickets?: boolean;
   /**
-   * Sits inside the card under the description, on the card's own spacing.
-   * This is where the map used to be hard-coded, and where it still goes for
-   * an event with no ticket column to sit beside.
+   * A ticket panel renders directly after this card, so the description and
+   * the map both move out to sit around it. Everything else keeps them here,
+   * inside the card, on the card's own spacing.
    */
-  belowDescription?: ReactNode;
+  ticketPanelFollows?: boolean;
 }) {
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
@@ -287,16 +312,15 @@ export default function JamCard({
           </div>
         )}
 
-        {/* Description. Last thing in the card on a ticketed event, so the
-            ticket panel follows it directly. */}
-        {jam.notes && (
-          <div className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
-            <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
-          </div>
+        {/* On a ticketed event both of these move out: the description goes
+            below the ticket panel and the map goes beside it. JamView places
+            them. */}
+        {!ticketPanelFollows && (
+          <>
+            <JamDescription jam={jam} />
+            <JamMap jam={jam} />
+          </>
         )}
-
-        {belowDescription}
       </div>
     </div>
   );
