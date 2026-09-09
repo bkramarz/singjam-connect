@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ticketTierAvailability as availability } from "@singjam/core";
 import { coverageFeeCents } from "@/lib/ticketFees";
 import { loadStripe } from "@stripe/stripe-js";
 import { CheckoutElementsProvider } from "@stripe/react-stripe-js/checkout";
@@ -34,14 +35,6 @@ const money = (cents: number, currency: string) =>
 // predictable remainder instead of both fighting over the row.
 const COLUMN = "w-full sm:w-96 sm:shrink-0";
 
-// In the venue's timezone, not the reader's — a door time of "Oct 4" must not
-// say "Oct 3" to someone browsing from Chicago.
-const onSaleDate = (iso: string, timezone?: string | null) =>
-  new Date(iso).toLocaleDateString("en-US", {
-    timeZone: timezone ?? undefined,
-    month: "short",
-    day: "numeric",
-  });
 
 // Buyers can't take the whole allocation in one order by accident, and it keeps
 // the stepper bounded when a tier is uncapped.
@@ -277,6 +270,7 @@ export default function TicketPurchasePanel({
 
       {types.map((t) => {
         const max = Math.min(MAX_PER_TIER, t.remaining ?? MAX_PER_TIER);
+        const note = availability(t, timezone);
         return (
           <div
             key={t.id}
@@ -291,18 +285,7 @@ export default function TicketPurchasePanel({
               {t.description && <p className="truncate text-xs text-zinc-500">{t.description}</p>}
               <p className="text-xs text-zinc-500">
                 {money(t.price_cents, t.currency)}
-                {/* A date answers the question "not yet" raises. */}
-                {t.not_yet_open
-                  ? t.sales_start_at
-                    ? ` · Available ${onSaleDate(t.sales_start_at, timezone)}`
-                    : " · Not on sale yet"
-                  : t.closed
-                  ? " · Sales closed"
-                  : t.remaining === 0
-                  ? " · Sold out"
-                  : t.remaining !== null && t.remaining <= 10
-                  ? ` · ${t.remaining} left`
-                  : ""}
+                {note ? ` · ${note}` : ""}
               </p>
             </div>
 

@@ -14,6 +14,7 @@ export * from './utils/setRoles';
 export * from './utils/singingVoice';
 export * from './utils/songFilters';
 export * from './utils/songJammers';
+export * from './utils/ticketTierLabel';
 export * from './utils/sortRepertoireSearchResults';
 export * from './utils/userSong';
 export * from './utils/username';
