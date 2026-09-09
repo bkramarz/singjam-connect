@@ -224,8 +224,8 @@ describe('jamTicketCta', () => {
     expect(jamTicketCta(null, summary(), { now: NOW })).toEqual({
       label: 'Details and tickets',
       hasTickets: true,
+      externalUrl: null,
     });
-    expect(jamTicketCta('https://x.test', null, { now: NOW }).label).toBe('Details and tickets');
     expect(jamTicketCta(null, summary({ min_price_cents: 0 }), { now: NOW }).label).toBe('Details and tickets');
   });
 
@@ -233,6 +233,7 @@ describe('jamTicketCta', () => {
     expect(jamTicketCta(null, null, { now: NOW })).toEqual({
       label: 'View details',
       hasTickets: false,
+      externalUrl: null,
     });
   });
 
@@ -241,6 +242,7 @@ describe('jamTicketCta', () => {
     expect(jamTicketCta(null, summary({ sold_out: true, on_sale_count: 0 }), { now: NOW })).toEqual({
       label: 'Sold out — view details',
       hasTickets: false,
+      externalUrl: null,
     });
     expect(jamTicketCta(null, summary({ on_sale_count: 0, min_price_cents: null }), { now: NOW }).label)
       .toBe('Sales closed — view details');
@@ -249,5 +251,29 @@ describe('jamTicketCta', () => {
   it('still invites a click while sales are only pending', () => {
     const pending = summary({ on_sale_count: 0, min_price_cents: null, next_sales_start_at: '2026-09-11T17:00:00Z' });
     expect(jamTicketCta(null, pending, { timezone: 'UTC', now: NOW }).label).toBe('Details and tickets');
+  });
+});
+
+// An off-site seller is the one case that earns a second link: the card
+// already covers the detail page, so a lone "Details and tickets" would be
+// pointing at a page that cannot sell.
+describe('jamTicketCta with an external seller', () => {
+  it('splits into a detail label plus an outbound url', () => {
+    expect(jamTicketCta('https://luma.com/abc', null, { now: NOW })).toEqual({
+      label: 'View details',
+      hasTickets: true,
+      externalUrl: 'https://luma.com/abc',
+    });
+  });
+
+  it('lets the external link win over on-site tiers', () => {
+    expect(jamTicketCta('https://luma.com/abc', summary(), { now: NOW }).externalUrl)
+      .toBe('https://luma.com/abc');
+  });
+
+  it('gives no outbound url to any on-site state', () => {
+    for (const s of [summary(), summary({ sold_out: true }), null]) {
+      expect(jamTicketCta(null, s, { now: NOW }).externalUrl).toBeNull();
+    }
   });
 });

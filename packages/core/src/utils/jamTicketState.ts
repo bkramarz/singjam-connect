@@ -159,23 +159,30 @@ export function jamTicketState(
 }
 
 /**
- * The single call-to-action line an official event's listing card shows.
+ * The call-to-action line(s) an official event's listing card shows.
  *
  * Listing cards say what you can do, not what it costs — price and tiers live
  * on the detail page where you actually buy. The one ticket fact worth
  * surfacing in a list is that there is nothing left to buy, because sending
  * someone to a checkout that will refuse them is worse than saying nothing.
- * The caller appends the arrow.
+ *
+ * `ticketsUrl` is the only case that needs a second link: the card already
+ * goes to the detail page, so a separate call to action is only earned when
+ * tickets live somewhere else entirely. Callers append the arrows — `→` for
+ * the detail page, `↗` for the outbound one.
  */
 export function jamTicketCta(
   ticketsUrl: string | null | undefined,
   summary: JamTicketSummary | null | undefined,
   opts: { timezone?: string | null; now?: Date } = {}
-): { label: string; hasTickets: boolean } {
+): { label: string; hasTickets: boolean; externalUrl: string | null } {
   const state = jamTicketState(ticketsUrl, summary, opts);
-  if (!state) return { label: "View details", hasTickets: false };
-  if (state.kind === "unavailable") {
-    return { label: `${state.label} — view details`, hasTickets: false };
+  if (!state) return { label: "View details", hasTickets: false, externalUrl: null };
+  if (state.kind === "external") {
+    return { label: "View details", hasTickets: true, externalUrl: state.url };
   }
-  return { label: "Details and tickets", hasTickets: true };
+  if (state.kind === "unavailable") {
+    return { label: `${state.label} — view details`, hasTickets: false, externalUrl: null };
+  }
+  return { label: "Details and tickets", hasTickets: true, externalUrl: null };
 }

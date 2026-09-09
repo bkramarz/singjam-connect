@@ -169,22 +169,22 @@ export default function JamCard({ jam, myId, onPress, onManage }: {
           </Text>
         ) : null)}
 
-        {/* Off-site ticketing is the one thing the native detail screen cannot
-            reach — no Stripe checkout there, and it never renders tickets_url —
-            so an external event's CTA opens the seller rather than dead-ending. */}
         {cta ? (
-          jam.tickets_url ? (
-            <TouchableOpacity
-              onPress={() => Linking.openURL(jam.tickets_url!)}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Text className="mt-2 text-xs font-medium text-amber-600">{cta.label} ↗</Text>
+          <View className="mt-2 flex-row flex-wrap" style={{ gap: 12 }}>
+            <TouchableOpacity onPress={onPress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text className={`text-xs font-medium ${cta.hasTickets && !cta.externalUrl ? 'text-amber-600' : 'text-zinc-500'}`}>
+                {cta.label} →
+              </Text>
             </TouchableOpacity>
-          ) : (
-            <Text className={`mt-2 text-xs font-medium ${cta.hasTickets ? 'text-amber-600' : 'text-zinc-500'}`}>
-              {cta.label} →
-            </Text>
-          )
+            {cta.externalUrl ? (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(cta.externalUrl!)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text className="text-xs font-medium text-amber-600">Get tickets ↗</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </TouchableOpacity>
