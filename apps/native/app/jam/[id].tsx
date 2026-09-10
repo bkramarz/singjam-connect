@@ -253,7 +253,7 @@ function MaybeMapsLink({ query, children }: { query: string | null; children: Re
   );
 }
 
-function AttendeeAvatar({ attendee, isMe }: { attendee: Attendee; isMe: boolean }) {
+function AttendeeAvatar({ attendee, isMe, extra = 0 }: { attendee: Attendee; isMe: boolean; extra?: number }) {
   const name = attendee.display_name ?? attendee.username ?? '?';
   const initial = name[0]?.toUpperCase() ?? '?';
   return (
@@ -266,7 +266,9 @@ function AttendeeAvatar({ attendee, isMe }: { attendee: Attendee; isMe: boolean 
         </View>
       )}
       <Text className="text-zinc-500 text-xs text-center" numberOfLines={1}>
-        {attendee.username ? `@${attendee.username}` : name}
+        {extra > 0
+          ? `${attendee.username ? `@${attendee.username}` : name} +${extra}`
+          : attendee.username ? `@${attendee.username}` : name}
       </Text>
     </View>
   );
@@ -303,6 +305,10 @@ export default function JamDetailScreen() {
   // Kept apart from `attendees`: that array drives the capacity check and the
   // RSVP prediction, both of which key on user_id, which a guest has not got.
   const [guestAttendees, setGuestAttendees] = useState<GuestAttendee[]>([]);
+  // Tickets an account holder bought beyond their own seat, by user id. Their
+  // RSVP row counts them once however many they hold, so without this a couple
+  // buying two showed as one person going while a guest buying two showed two.
+  const [memberExtras, setMemberExtras] = useState<Record<string, number>>({});
   const [myRsvpStatus, setMyRsvpStatus] = useState<string | null>(null);
   const [myInviteStatus, setMyInviteStatus] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
@@ -398,9 +404,16 @@ export default function JamDetailScreen() {
     // service_role-only, so the app's Supabase client cannot read them. Failing
     // quietly is right: a missing guest row shouldn't blank the whole screen.
     fetch(`${WEB_URL}/api/jam/${id}/attendees/guests`)
-      .then(r => (r.ok ? r.json() : { guests: [] }))
-      .then(d => setGuestAttendees(d.guests ?? []))
-      .catch(() => setGuestAttendees([]));
+      .then(r => (r.ok ? r.json() : { guests: [], members: [] }))
+      .then(d => {
+        setGuestAttendees(d.guests ?? []);
+        setMemberExtras(
+          Object.fromEntries(
+            ((d.members ?? []) as { user_id: string; extra: number }[]).map(m => [m.user_id, m.extra])
+          )
+        );
+      })
+      .catch(() => { setGuestAttendees([]); setMemberExtras({}); });
     const myRsvp = user ? rawRsvps.find(r => r.user_id === user.id) : undefined;
     setMyRsvpStatus(myRsvp?.status ?? null);
     if (user) {
@@ -573,6 +586,10 @@ export default function JamDetailScreen() {
   const attendeeIds = new Set(attendees.map(a => a.user_id));
   // One order can cover several people under a single name, so heads and rows differ.
   const guestHeadcount = guestAttendees.reduce((n, g) => n + 1 + g.extra, 0);
+  // Only for attendees who have a row: inflating the total from someone nobody
+  // can see is how a headcount stops being explainable. Mirrors web's
+  // JamAttendeeList.
+  const memberHeadcount = attendees.reduce((n, a) => n + (memberExtras[a.user_id] ?? 0), 0);
 
   return (
     <>
@@ -799,11 +816,16 @@ export default function JamDetailScreen() {
         {attendees.length + guestAttendees.length > 0 ? (
           <View className="px-4 mb-6">
             <Text className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">
-              Attending ({attendees.length + guestHeadcount})
+              Attending ({attendees.length + guestHeadcount + memberHeadcount})
             </Text>
             <View className="flex-row flex-wrap">
               {attendees.slice(0, 20).map(a => (
-                <AttendeeAvatar key={a.user_id} attendee={a} isMe={a.user_id === myUserId} />
+                <AttendeeAvatar
+                  key={a.user_id}
+                  attendee={a}
+                  isMe={a.user_id === myUserId}
+                  extra={memberExtras[a.user_id] ?? 0}
+                />
               ))}
               {guestAttendees.slice(0, Math.max(0, 20 - attendees.length)).map((g, i) => (
                 <GuestAvatar key={`guest-${i}`} guest={g} />
