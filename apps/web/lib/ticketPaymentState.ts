@@ -55,6 +55,15 @@ export type PaymentSession = {
  * Line names are created as "<event> — <tier>", which is right in a Stripe
  * receipt but repeats the event name down every row here. The prefix is only
  * removed when it matches the event name exactly — no guessing at a separator.
+ *
+ * That match is also how a ticket line is told apart from the processing fee,
+ * which our checkout route never prefixes. Tier names alone read as adjectives
+ * once the event name is gone — a row saying "Advance" above one saying
+ * "Processing fee" is missing its noun — so ticket rows get one. Singular
+ * always: the row renders its own "× 2" where the quantity is more than one,
+ * and "Advance ticket × 2" is the receipt idiom, naming the unit and counting
+ * it rather than pluralising both. A host who already put "ticket" in the tier
+ * name keeps their wording instead of getting "Advance ticket ticket".
  */
 export function summarisePaymentLines(
   items: SessionLineItem[] | null | undefined,
@@ -63,9 +72,11 @@ export function summarisePaymentLines(
   const prefix = eventName ? `${eventName} — ` : null;
   return (items ?? []).map((item) => {
     const raw = (item.description ?? "").trim();
-    const label = prefix && raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+    const isTicketLine = !!prefix && raw.startsWith(prefix);
+    const tier = isTicketLine ? raw.slice(prefix!.length) : raw;
+    const needsNoun = isTicketLine && !!tier && !/\btickets?\b/i.test(tier);
     return {
-      label: label || "Ticket",
+      label: needsNoun ? `${tier} ticket` : tier || "Ticket",
       quantity: item.quantity ?? 1,
       amountCents: item.amount_total ?? 0,
     };

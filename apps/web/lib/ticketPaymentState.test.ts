@@ -119,7 +119,45 @@ describe("summarisePaymentLines", () => {
         [{ description: `${EVENT} — Advance`, quantity: 2, amount_total: 3000 }],
         EVENT
       )
-    ).toEqual([{ label: "Advance", quantity: 2, amountCents: 3000 }]);
+    ).toEqual([{ label: "Advance ticket", quantity: 2, amountCents: 3000 }]);
+  });
+
+  it("gives a bare tier name its noun, and keeps the unit singular", () => {
+    // "Advance" sitting above "Processing fee" reads as an adjective with
+    // nothing to modify. The row renders its own "× 3" for the count, so the
+    // noun names the unit rather than doubling the plural.
+    const one = summarisePaymentLines(
+      [{ description: `${EVENT} — Advance`, quantity: 1, amount_total: 1500 }],
+      EVENT
+    );
+    expect(one[0].label).toBe("Advance ticket");
+
+    const three = summarisePaymentLines(
+      [{ description: `${EVENT} — Day-Of`, quantity: 3, amount_total: 6000 }],
+      EVENT
+    );
+    expect(three[0]).toMatchObject({ label: "Day-Of ticket", quantity: 3 });
+  });
+
+  it("leaves the wording alone when the tier name already says ticket", () => {
+    for (const name of ["Advance Ticket", "advance tickets", "Ticket — early"]) {
+      const lines = summarisePaymentLines(
+        [{ description: `${EVENT} — ${name}`, quantity: 2, amount_total: 3000 }],
+        EVENT
+      );
+      expect(lines[0].label).toBe(name);
+    }
+  });
+
+  it("never adds a noun to the processing fee", () => {
+    const lines = summarisePaymentLines(
+      [
+        { description: `${EVENT} — Advance`, quantity: 1, amount_total: 1500 },
+        { description: "Processing fee", quantity: 1, amount_total: 76 },
+      ],
+      EVENT
+    );
+    expect(lines.map((l) => l.label)).toEqual(["Advance ticket", "Processing fee"]);
   });
 
   it("leaves a line that does not carry the prefix alone", () => {
@@ -165,7 +203,11 @@ describe("summarisePaymentLines", () => {
       ],
       EVENT
     );
-    expect(lines.map((l) => l.label)).toEqual(["Advance", "Supporter", "Processing fee"]);
+    expect(lines.map((l) => l.label)).toEqual([
+      "Advance ticket",
+      "Supporter ticket",
+      "Processing fee",
+    ]);
     expect(lines.reduce((sum, l) => sum + l.amountCents, 0)).toBe(6822);
   });
 });
