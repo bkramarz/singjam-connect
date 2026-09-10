@@ -45,7 +45,7 @@ export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder): 
       .select("name, starts_at, ends_at, timezone, full_address, neighborhood")
       .eq("id", order.jam_id)
       .maybeSingle(),
-    admin.from("tickets").select("qr_token, ticket_types(name)").eq("order_id", order.id),
+    admin.from("tickets").select("qr_token, ticket_types(name, price_cents)").eq("order_id", order.id),
   ]);
 
   // The set is the reason to come back before the day, so the email leads with
@@ -74,6 +74,7 @@ export async function sendTicketEmail(admin: SupabaseClient, order: PaidOrder): 
       tickets: (tickets ?? []).map((t: any) => ({
         tierName: t.ticket_types?.name ?? "Ticket",
         qrToken: t.qr_token,
+        priceCents: t.ticket_types?.price_cents ?? null,
       })),
       amountCents: order.amount_cents,
       currency: order.currency,

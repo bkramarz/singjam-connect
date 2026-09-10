@@ -42,6 +42,13 @@ function calendarUrls({
   };
 }
 
+// "Advance" alone reads as an adjective with nothing to modify, exactly as it
+// did on the payment page. Singular: each row is one ticket. A tier whose name
+// already says "ticket" keeps the host's wording.
+export function ticketLabel(tierName: string) {
+  return /\btickets?\b/i.test(tierName) ? tierName : `${tierName} ticket`;
+}
+
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 
@@ -69,7 +76,7 @@ export function ticketConfirmationHtml({
   endsAt?: string | null;
   timezone?: string | null;
   address?: string | null;
-  tickets: { tierName: string; qrToken: string }[];
+  tickets: { tierName: string; qrToken: string; priceCents?: number | null }[];
   amountCents: number;
   currency: string;
   isGuest?: boolean;
@@ -84,6 +91,21 @@ export function ticketConfirmationHtml({
     : null;
 
   const plural = tickets.length === 1 ? "ticket" : "tickets";
+
+  // Tier prices are face value. The processing fee and any promotion code live
+  // outside them, so the rows will not always sum to what was charged — and an
+  // emailed receipt a buyer cannot add up is worse than no breakdown at all.
+  // One reconciling line closes the gap without needing Stripe here: the order's
+  // amount_cents is already the amount actually collected, written by the
+  // webhook from Stripe's own total.
+  const faceTotal = tickets.reduce((sum, x) => sum + (x.priceCents ?? 0), 0);
+  const knowPrices = tickets.every((x) => typeof x.priceCents === "number");
+  const adjustment = amountCents - faceTotal;
+  const row = (label: string, value: string, bold = false) => `
+    <div style="padding:10px 0;border-top:1px solid #e4e4e7">
+      <span style="font-size:15px;${bold ? "font-weight:600;" : ""}color:#18181b">${label}</span>
+      <span style="float:right;font-size:15px;${bold ? "font-weight:600;" : ""}color:#18181b">${value}</span>
+    </div>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -101,11 +123,18 @@ export function ticketConfirmationHtml({
       .map(
         (t) => `
     <div style="display:block;padding:10px 0;border-top:1px solid #e4e4e7">
-      <span style="font-size:15px;font-weight:500;color:#18181b">${t.tierName}</span>
-      <span style="float:right;font-size:15px;font-family:monospace;letter-spacing:1px;color:#52525b">${ticketCode(t.qrToken)}</span>
+      <span style="font-size:15px;font-weight:500;color:#18181b">${ticketLabel(t.tierName)}</span>
+      ${typeof t.priceCents === "number"
+        ? `<span style="float:right;font-size:15px;color:#18181b">${money(t.priceCents, currency)}</span>`
+        : ""}
+      <div style="font-size:12px;font-family:monospace;letter-spacing:1px;color:#a1a1aa;margin-top:2px">${ticketCode(t.qrToken)}</div>
     </div>`
       )
       .join("")}
+    ${knowPrices && adjustment !== 0
+      ? row(adjustment > 0 ? "Fees" : "Discount", `${adjustment > 0 ? "" : "−"}${money(Math.abs(adjustment), currency)}`)
+      : ""}
+    ${row("Total paid", money(amountCents, currency), true)}
   </div>
 
   ${dateStr ? `
