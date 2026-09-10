@@ -3,13 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ticketTierAvailability as availability } from "@singjam/core";
 import { coverageFeeCents } from "@/lib/ticketFees";
-import { loadStripe } from "@stripe/stripe-js";
-import { CheckoutElementsProvider } from "@stripe/react-stripe-js/checkout";
-import TicketCheckoutForm from "./TicketCheckoutForm";
-
-// Loaded once at module scope, not per render — re-calling loadStripe on every
-// render refetches Stripe.js and drops the mounted Element.
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "");
 
 export type TicketType = {
   id: string;
@@ -105,7 +98,6 @@ export default function TicketPurchasePanel({
 }) {
   const [types, setTypes] = useState<TicketType[] | null>(null);
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guestEmail, setGuestEmail] = useState("");
@@ -196,7 +188,10 @@ export default function TicketPurchasePanel({
       window.location.href = `/jam/${jamId}/tickets/complete?order_id=${json.order_id}`;
       return;
     }
-    setClientSecret(json.client_secret);
+    // Card entry has its own page. Only the order id travels — the secret is
+    // retrieved there, server-side, which is what makes that page reloadable
+    // and keeps the secret out of the URL and out of history.
+    window.location.href = `/jam/${jamId}/tickets/pay?order_id=${json.order_id}`;
   }
 
   async function applyPromo() {
@@ -242,20 +237,6 @@ export default function TicketPurchasePanel({
 
   if (types === null) return <TicketPurchaseSkeleton />;
   if (types.length === 0) return null;
-
-  if (clientSecret) {
-    return (
-      <div className={`space-y-3 ${COLUMN}`}>
-        <h3 className="text-sm font-semibold tracking-wide text-zinc-700">Payment</h3>
-        <CheckoutElementsProvider stripe={stripePromise} options={{ clientSecret }}>
-          <TicketCheckoutForm onBack={() => setClientSecret(null)} />
-        </CheckoutElementsProvider>
-        <p className="text-xs text-zinc-400">
-          Your tickets are held while you pay. Payments are processed by Stripe.
-        </p>
-      </div>
-    );
-  }
 
   // Nothing buyable right now. Kept apart from "sold out" because a tier that
   // is merely outside its sales window still has stock, and telling a buyer an
