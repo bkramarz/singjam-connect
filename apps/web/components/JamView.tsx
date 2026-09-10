@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import JamCard, { type JamCardData } from "@/components/JamCard";
+import JamCard, { JamDescription, JamMap, type JamCardData } from "@/components/JamCard";
 import JamRsvpButton from "@/components/JamRsvpButton";
 import JamInvitePanel, { type NewInviteEntry } from "@/components/JamInvitePanel";
 import JamInviteResponse from "@/components/JamInviteResponse";
@@ -35,6 +35,8 @@ export type JamViewData = {
   attendingCount: number;
   pendingInvite: boolean;
   isOfficial: boolean;
+  /** Whether the event has ticket tiers at all — decides where the map goes. */
+  hasTicketTiers: boolean;
   isHost: boolean;
   isCoHost: boolean;
   hasFullAccess: boolean;
@@ -63,6 +65,7 @@ export default function JamView({
     attendingCount,
     pendingInvite,
     isOfficial,
+    hasTicketTiers,
     isHost,
     isCoHost,
     canManage,
@@ -71,6 +74,36 @@ export default function JamView({
     invitesEnabled,
     alreadyInvitedIds,
   } = data;
+
+  // An official event with no on-site tiers sells through an external link, so
+  // its attendance is recorded over there and this list can never fill. Worse
+  // than useless: the empty state reads "No one yet — be the first", inviting
+  // an RSVP that official events don't offer in the first place.
+  //
+  // Gated on tiers rather than on tickets_url, because those two are not
+  // mutually exclusive in practice however much the copy elsewhere assumes it:
+  // the 2026-07-26 event carries both. Such an event does sell here, so its
+  // host still needs the door list, and keying off tickets_url would take it
+  // away. Also gated on the count, so a stray row stays visible — an event
+  // converted from a community jam would have real attendees on it.
+  const attendanceLandsHere = !isOfficial || hasTicketTiers;
+  const showAttendees = attendanceLandsHere || attendingCount > 0;
+
+  // Whether the ticket panel renders. Drives three placements: the panel row
+  // itself, the map (beside it rather than in the card), and the description
+  // (below it rather than above).
+  const showTicketPanel = isOfficial && hasTicketTiers;
+
+  // Either route to a ticket counts: on our own tiers or off to someone else's
+  // checkout, you still don't have one yet.
+  const sellsTickets = hasTicketTiers || !!jamCardData.tickets_url;
+
+  // Passed as undefined rather than an empty fragment when there is nothing to
+  // put in it: JamCard tests this to decide whether to render the actions row
+  // at all, and a fragment is truthy even when it renders nothing — which would
+  // leave an empty row and its gap behind on a ticketed event, where the
+  // calendar button was the row's only occupant.
+  const hasActions = showRsvp || (!userId && !isOfficial);
 
   const [rsvpStatus, setRsvpStatus] = useState(data.rsvpStatus);
   const [hasFullAccess, setHasFullAccess] = useState(data.hasFullAccess);
@@ -81,7 +114,14 @@ export default function JamView({
       {pendingInvite && rsvpStatus !== "attending" && !isHost && <JamInviteResponse jamId={jamId} />}
       <JamCard
         jam={jamCardData}
+        sellsTickets={sellsTickets}
+        // When no panel follows — a community or private jam, or an official
+        // event selling through tickets_url — the description and the map both
+        // stay inside the card exactly where they have always been: there is no
+        // purchase path here for either of them to have been in the way of.
+        ticketPanelFollows={showTicketPanel}
         actions={
+          hasActions ? (
           <>
             {showRsvp && (
               <JamRsvpButton
@@ -105,18 +145,56 @@ export default function JamView({
               </Link>
             )}
           </>
+          ) : undefined
         }
       />
-      {/* Official events sell tickets instead of taking RSVPs — showRsvp is false
-          for them. The panel renders nothing when the event has no tiers, so an
-          official event using an external tickets_url is unaffected. */}
-      {isOfficial && <TicketPurchasePanel jamId={jamId} isSignedIn={!!userId} />}
+      {/* Official events sell tickets instead of taking RSVPs — showRsvp is
+          false for them. The panel sits directly under the date/location strip
+          either way, so the tier list and its prices get the first screenful.
+          Around it the map and the description trade places by breakpoint:
+
+            wide    tickets | map        narrow   tickets
+                    description                   description
+                                                  map
+
+          The split is at md, not sm: at 640px the map got squeezed to 192px
+          beside the 384px panel, too narrow to show any context.
+
+          One flex container with per-breakpoint `order` does that with a single
+          map in the DOM. Rendering it twice and hiding one would be simpler to
+          read and would cost a second Google Maps load on every desktop view,
+          which is billed. DOM order is the wide one; `order` rewrites it below
+          md. The panel carries no order class, so its implicit 0 keeps it first
+          in both. `basis-full` is what breaks the description onto its own
+          line when the row is wrapping. */}
+      {showTicketPanel && (
+        <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-stretch">
+          <TicketPurchasePanel
+            jamId={jamId}
+            isSignedIn={!!userId}
+            timezone={jamCardData.timezone}
+          />
+          {/* mt-8 clears the "Tickets" heading (20px line-height + the panel's
+              12px space-y-3) so the frame starts level with the first tier
+              rather than the heading, which labels only the ticket column;
+              items-stretch then takes that margin back off the height, so it
+              still ends level with the Buy button. */}
+          <JamMap
+            jam={jamCardData}
+            className="order-3 h-[260px] w-full md:order-2 md:mt-8 md:h-auto md:min-h-52 md:w-auto md:flex-1"
+          />
+          <JamDescription jam={jamCardData} className="order-2 md:order-3 md:basis-full" />
+        </div>
+      )}
       {hasFullAccess && <JamSetList jamId={jamId} jamName={jam.name} canManage={canManage} />}
-      {/* Official events show who's going too. Ticket buyers get an attending
-          RSVP from the Stripe webhook, so the list is populated the same way —
-          guests without an account are the one gap, which is what the sign-up
-          nudge on the completion page is for. */}
-      <JamAttendeeList jamId={jamId} hostId={isOfficial ? null : jam.host_user_id} isHost={isHost} />
+      {/* Official events that sell here show who's going too. Ticket buyers get
+          an attending RSVP from the Stripe webhook, so the list is populated the
+          same way — guests without an account are the one gap, which is what the
+          sign-up nudge on the completion page is for. See showAttendees above for
+          why an externally-ticketed event gets no list at all. */}
+      {showAttendees && (
+        <JamAttendeeList jamId={jamId} hostId={isOfficial ? null : jam.host_user_id} isHost={isHost} />
+      )}
       {canInvite && invitesEnabled && (
         <JamInvitePanel
           jamId={jamId}

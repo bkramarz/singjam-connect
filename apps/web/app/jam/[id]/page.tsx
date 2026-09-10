@@ -70,12 +70,17 @@ export default async function JamPage({
 
   // Jam-scoped reads go through the admin client for the same reason getJam
   // does: the link is the credential. The per-user reads below stay RLS-scoped.
-  const [jam, genresRes, themesRes, countRes, flagRes] = await Promise.all([
+  const [jam, genresRes, themesRes, countRes, flagRes, tierRes] = await Promise.all([
     getJam(id),
     admin.from("jam_genres").select("genres(name)").eq("jam_id", id),
     admin.from("jam_themes").select("themes(name)").eq("jam_id", id),
     admin.from("jam_rsvps").select("id", { count: "exact", head: true }).eq("jam_id", id).eq("status", "attending"),
     supabase.from("feature_flags").select("enabled").eq("key", "jam_invites").maybeSingle(),
+    // Only whether tiers exist, not their availability — the purchase panel
+    // reads that itself. The layout needs the answer on the server: the panel
+    // renders nothing for an event selling through tickets_url, and the map
+    // sits beside it only when there is something for it to sit beside.
+    admin.from("ticket_types").select("id", { count: "exact", head: true }).eq("jam_id", id),
   ]);
 
   if (!jam) return <p className="text-sm text-zinc-500">Jam not found.</p>;
@@ -186,6 +191,7 @@ export default async function JamPage({
         attendingCount,
         pendingInvite,
         isOfficial,
+        hasTicketTiers: (tierRes.count ?? 0) > 0,
         isHost,
         isCoHost,
         hasFullAccess,

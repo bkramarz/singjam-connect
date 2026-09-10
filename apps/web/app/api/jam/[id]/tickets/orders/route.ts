@@ -70,6 +70,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   );
 
   // Members bought without supplying a name, so resolve theirs from profiles.
+  // display_name holds the first name only, so last_name has to be joined on or
+  // a door list of regulars reads as "Ben", "Ben", "Sarah".
   const memberIds = [
     ...new Set(
       tickets.map((t) => t.ticket_orders?.buyer_user_id).filter((v): v is string => !!v)
@@ -79,10 +81,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (memberIds.length) {
     const { data: profiles } = await admin
       .from("profiles")
-      .select("id, display_name, username")
+      .select("id, display_name, last_name, username")
       .in("id", memberIds);
     for (const p of profiles ?? []) {
-      profileNames.set(p.id, (p as any).display_name ?? (p as any).username ?? "");
+      const full = [(p as any).display_name, (p as any).last_name].filter(Boolean).join(" ");
+      profileNames.set(p.id, full || (p as any).username || "");
     }
   }
 

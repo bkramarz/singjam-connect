@@ -119,7 +119,11 @@ describe("GET /api/jam/[id]/tickets/orders", () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
     mockAdminFrom
       .mockReturnValueOnce(chain({ data: { host_user_id: HOST } })) // jam
-      .mockReturnValueOnce(chain({ data: [{ id: "u1", display_name: "Ben K", username: "ben" }] })); // profiles
+      .mockReturnValueOnce(
+        chain({
+          data: [{ id: "u1", display_name: "Ben", last_name: "Kramarz", username: "ben" }],
+        })
+      ); // profiles
 
     mockFetchAllRows.mockResolvedValue([
       ticket({ id: "t1", order_id: "o1" }),
@@ -133,7 +137,40 @@ describe("GET /api/jam/[id]/tickets/orders", () => {
     const json = await (await GET(req(), params)).json();
     const byId = Object.fromEntries(json.guests.map((g: any) => [g.ticket_id, g]));
     expect(byId.t1).toMatchObject({ name: "Jo Guest", is_member: false });
-    expect(byId.t2).toMatchObject({ name: "Ben K", is_member: true });
+    // display_name is the first name only: a door list of "Ben" is unusable.
+    expect(byId.t2).toMatchObject({ name: "Ben Kramarz", is_member: true });
+  });
+
+  it("falls back through last name and username for a sparse profile", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } })) // jam
+      .mockReturnValueOnce(
+        chain({
+          data: [
+            { id: "u1", display_name: "Cher", last_name: null, username: "cher" },
+            { id: "u2", display_name: null, last_name: null, username: "ghost" },
+          ],
+        })
+      ); // profiles
+
+    mockFetchAllRows.mockResolvedValue([
+      ticket({
+        id: "t1",
+        order_id: "o1",
+        order: { id: "o1", buyer_user_id: "u1", buyer_name: null, buyer_email: null },
+      }),
+      ticket({
+        id: "t2",
+        order_id: "o2",
+        order: { id: "o2", buyer_user_id: "u2", buyer_name: null, buyer_email: null },
+      }),
+    ]);
+
+    const json = await (await GET(req(), params)).json();
+    const byId = Object.fromEntries(json.guests.map((g: any) => [g.ticket_id, g]));
+    expect(byId.t1.name).toBe("Cher");
+    expect(byId.t2.name).toBe("ghost");
   });
 
   it("exposes a short door code derived from the ticket token", async () => {

@@ -180,6 +180,50 @@ describe("POST /api/jam/[id]/tickets/types", () => {
     const res = await POST(req("POST", { name: "Free", price_cents: 0 }), params);
     expect(res.status).toBe(200);
   });
+
+  it("rejects a window that ends before it starts, in words not SQL", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: { host_user_id: HOST } }));
+    const res = await POST(
+      req("POST", {
+        name: "Day-Of",
+        price_cents: 2000,
+        sales_start_at: "2026-10-04T07:00:00.000Z",
+        sales_end_at: "2026-10-04T06:00:00.000Z",
+      }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Sales must end after they start");
+  });
+
+  it("rejects an unparseable sales date", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: { host_user_id: HOST } }));
+    const res = await POST(
+      req("POST", { name: "Day-Of", price_cents: 2000, sales_start_at: "tomorrow-ish" }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("valid date");
+  });
+
+  it("accepts a one-sided window — a tier can open with no close", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
+      .mockReturnValueOnce(chain({ data: { id: TYPE_ID } }));
+    const res = await POST(
+      req("POST", {
+        name: "Day-Of",
+        price_cents: 2000,
+        sales_start_at: "2026-10-04T07:00:00.000Z",
+        sales_end_at: null,
+      }),
+      params
+    );
+    expect(res.status).toBe(200);
+  });
 });
 
 describe("PATCH /api/jam/[id]/tickets/types", () => {
@@ -202,6 +246,70 @@ describe("PATCH /api/jam/[id]/tickets/types", () => {
 
     const res = await PATCH(req("PATCH", { id: TYPE_ID, quantity: 20 }), params);
     expect(res.status).toBe(200);
+  });
+
+  it("renames and reprices a tier that already has sales", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    const update = chain({ error: null });
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
+      .mockReturnValueOnce(update);
+
+    const res = await PATCH(
+      req("PATCH", { id: TYPE_ID, name: "  Advance  ", price_cents: 1500 }),
+      params
+    );
+    expect(res.status).toBe(200);
+    // Trimmed on the way in, so a stray space can't become part of the name
+    // buyers see on their ticket.
+    expect(update.update).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Advance", price_cents: 1500 })
+    );
+  });
+
+  it("rejects a blank rename", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: { host_user_id: HOST } }));
+    const res = await PATCH(req("PATCH", { id: TYPE_ID, name: "   " }), params);
+    expect(res.status).toBe(400);
+  });
+
+  it("checks a one-sided window change against the stored other side", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
+      // The row's existing window: opens Oct 4, no close.
+      .mockReturnValueOnce(
+        chain({ data: { sales_start_at: "2026-10-04T07:00:00.000Z", sales_end_at: null } })
+      );
+
+    // Setting only the end, to an instant before the stored start.
+    const res = await PATCH(
+      req("PATCH", { id: TYPE_ID, sales_end_at: "2026-10-01T07:00:00.000Z" }),
+      params
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Sales must end after they start");
+  });
+
+  it("clears a window when a field is nulled", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    const update = chain({ error: null });
+    mockAdminFrom
+      .mockReturnValueOnce(chain({ data: { host_user_id: HOST } }))
+      .mockReturnValueOnce(
+        chain({ data: { sales_start_at: "2026-10-04T07:00:00.000Z", sales_end_at: null } })
+      )
+      .mockReturnValueOnce(update);
+
+    const res = await PATCH(
+      req("PATCH", { id: TYPE_ID, sales_start_at: null, sales_end_at: null }),
+      params
+    );
+    expect(res.status).toBe(200);
+    expect(update.update).toHaveBeenCalledWith(
+      expect.objectContaining({ sales_start_at: null, sales_end_at: null })
+    );
   });
 });
 

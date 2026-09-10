@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { FormattedDate, FormattedTime } from "@/components/FormattedTime";
+import { googleMapsUrl } from "@singjam/core";
 import AddToCalendarButton from "@/components/AddToCalendarButton";
 
 export type JamCardData = {
@@ -26,31 +27,136 @@ export type JamCardData = {
 };
 
 
-function MapEmbed({ query, zoom }: { query: string; zoom: number }) {
+// How much of the address this viewer gets, and what to point the map at.
+// Shared with JamMap below, which renders further down the page than this card
+// and would otherwise have to restate the rules.
+function locationView(jam: JamCardData) {
+  const isTbd = (jam.neighborhood === "TBD" && !jam.full_address) || jam.full_address === "TBD";
+  const showFullAddress =
+    (jam.hasFullAccess || jam.visibility === "private") && !!jam.full_address && !isTbd;
+  return {
+    showFullAddress,
+    mapQuery: isTbd ? null : showFullAddress ? jam.full_address! : jam.neighborhood,
+    mapZoom: showFullAddress ? 16 : 13,
+  };
+}
+
+/**
+ * The venue map. Lifted out of this card so JamView can place it, because on a
+ * ticketed event it belongs beside the ticket column rather than above it — it
+ * used to sit between the description and the tickets, which put a 260px
+ * iframe between reading about the event and being able to buy.
+ *
+ * Everywhere else it keeps its original spot and size, directly below the
+ * description: an event with nothing to buy has no purchase path for it to
+ * block, so there is nothing to fix. The caller sizes it, since the column
+ * beside the tickets is a different shape from the full-width slot.
+ */
+export function JamMap({ jam, className = "h-[260px]" }: { jam: JamCardData; className?: string }) {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
-  if (!key || !query) return null;
-  const src = `https://www.google.com/maps/embed/v1/place?key=${key}&q=${encodeURIComponent(query)}&zoom=${zoom}`;
+  const { mapQuery, mapZoom } = locationView(jam);
+  if (!key || !mapQuery) return null;
+
+  const src = `https://www.google.com/maps/embed/v1/place?key=${key}&q=${encodeURIComponent(
+    mapQuery
+  )}&zoom=${mapZoom}`;
   return (
-    <iframe
-      src={src}
-      width="100%"
-      height="100%"
-      style={{ border: 0 }}
-      allowFullScreen
-      loading="lazy"
-      referrerPolicy="no-referrer-when-downgrade"
-    />
+    <div className={`overflow-hidden rounded-2xl border border-zinc-200 ${className}`}>
+      <iframe
+        src={src}
+        title="Venue map"
+        width="100%"
+        height="100%"
+        style={{ border: 0 }}
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
   );
 }
 
-export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: ReactNode }) {
+/**
+ * The event description. Lives in the card normally, but on a ticketed event
+ * JamView renders it *below* the ticket panel — Sherri asked for the tickets
+ * either side of it and Ben picked above, which puts the price list in the
+ * first screenful and leaves the detail for whoever wants it.
+ */
+export function JamDescription({
+  jam,
+  className = "",
+}: {
+  jam: JamCardData;
+  className?: string;
+}) {
+  if (!jam.notes) return null;
+  return (
+    <div className={`space-y-2 ${className}`}>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
+      <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
+    </div>
+  );
+}
+
+/**
+ * The venue line. A link when we have somewhere to point at, plain text
+ * otherwise (a TBD venue), so the styling is identical either way and only the
+ * affordance appears.
+ */
+function LocationText({ query, children }: { query: string | null; children: ReactNode }) {
+  // The <p> stays put in both branches and the anchor goes *inside* it. Making
+  // the anchor itself the block element shifted every non-ticketed page down a
+  // couple of pixels (an inline box lays out differently from a block one), and
+  // a block anchor would also make the whole row width clickable rather than
+  // just the address.
+  return (
+    <p className="text-sm font-medium text-zinc-800">
+      {query ? (
+        <a
+          href={query}
+          target="_blank"
+          rel="noopener noreferrer"
+          // Opens a new tab, which a screen reader has no other way to know.
+          aria-label={`Open ${typeof children === "string" ? children : "this location"} in Google Maps (new tab)`}
+          className="hover:underline"
+        >
+          {children}
+        </a>
+      ) : (
+        children
+      )}
+    </p>
+  );
+}
+
+export default function JamCard({
+  jam,
+  actions,
+  sellsTickets = false,
+  ticketPanelFollows = false,
+}: {
+  jam: JamCardData;
+  actions?: ReactNode;
+  /**
+   * The event sells tickets, by our own tiers or an external link. Such an
+   * event hides "Add to calendar": you should not be blocking out an evening
+   * you have not got a ticket for yet, and on a ticketed page the button was
+   * the only thing above the tier list, which read as the primary action.
+   */
+  sellsTickets?: boolean;
+  /**
+   * A ticket panel renders directly after this card, so the description and
+   * the map both move out to sit around it. Everything else keeps them here,
+   * inside the card, on the card's own spacing.
+   */
+  ticketPanelFollows?: boolean;
+}) {
   const isOfficial = jam.visibility === "official";
   const tags = [...jam.genres, ...jam.themes];
 
-  const isTbd = jam.neighborhood === "TBD" && !jam.full_address || jam.full_address === "TBD";
-  const showFullAddress = (jam.hasFullAccess || jam.visibility === "private") && jam.full_address && !isTbd;
-  const mapQuery = isTbd ? null : (showFullAddress ? jam.full_address! : jam.neighborhood);
-  const mapZoom = showFullAddress ? 16 : 13;
+  const { showFullAddress, mapQuery } = locationView(jam);
+  const mapsUrl = googleMapsUrl(mapQuery);
+  const showCalendar = !!jam.starts_at && !sellsTickets;
 
   return (
     <div>
@@ -147,15 +253,16 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
                 </svg>
               </div>
               <div className="min-w-0">
-                {showFullAddress ? (
-                  <p className="text-sm font-medium text-zinc-800">{jam.full_address}</p>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-zinc-800">{jam.neighborhood}</p>
-                    {!isOfficial && jam.neighborhood !== "TBD" && (
-                      <p className="text-xs text-zinc-400 mt-0.5">Full address shown after RSVP</p>
-                    )}
-                  </>
+                {/* The location links out to Maps. Pointed at the same mapQuery
+                    the embed uses, so the link and the map can never disagree —
+                    and so a jam that only reveals its address after RSVP links
+                    to the neighbourhood, not the street. Null for a TBD venue,
+                    which falls back to plain text. */}
+                <LocationText query={mapsUrl}>
+                  {showFullAddress ? jam.full_address : jam.neighborhood}
+                </LocationText>
+                {!showFullAddress && !isOfficial && jam.neighborhood !== "TBD" && (
+                  <p className="text-xs text-zinc-400 mt-0.5">Full address shown after RSVP</p>
                 )}
               </div>
             </div>
@@ -185,7 +292,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
         )}
 
         {/* Actions */}
-        {(jam.tickets_url || jam.starts_at || actions) && (
+        {(jam.tickets_url || showCalendar || actions) && (
           <div className="flex flex-wrap gap-3 items-center">
             {jam.tickets_url && (
               <a
@@ -197,7 +304,7 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
                 Get tickets ↗
               </a>
             )}
-            {jam.starts_at && (
+            {jam.starts_at && !sellsTickets && (
               <AddToCalendarButton
                 title={jam.name ?? (isOfficial ? "SingJam event" : "Community jam")}
                 startsAt={jam.starts_at}
@@ -211,19 +318,14 @@ export default function JamCard({ jam, actions }: { jam: JamCardData; actions?: 
           </div>
         )}
 
-        {/* Description */}
-        {jam.notes && (
-          <div className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">About</h2>
-            <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{jam.notes}</p>
-          </div>
-        )}
-
-        {/* Map */}
-        {mapQuery && (
-          <div className="overflow-hidden rounded-2xl border border-zinc-200" style={{ height: 260 }}>
-            <MapEmbed query={mapQuery} zoom={mapZoom} />
-          </div>
+        {/* On a ticketed event both of these move out: the description goes
+            below the ticket panel and the map goes beside it. JamView places
+            them. */}
+        {!ticketPanelFollows && (
+          <>
+            <JamDescription jam={jam} />
+            <JamMap jam={jam} />
+          </>
         )}
       </div>
     </div>
