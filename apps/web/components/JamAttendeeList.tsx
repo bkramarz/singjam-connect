@@ -7,12 +7,15 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { SINGING_LABEL, voiceBadgeClass } from "@/lib/singingVoice";
 
 type GuestAttendee = { name: string; extra: number };
+/** Tickets an account holder bought beyond their own seat. */
+type MemberExtra = { user_id: string; extra: number };
 
 type AttendeeData = {
   profileMap: Map<string, any>;
   attending: any[];
   waitlist: any[];
   guests: GuestAttendee[];
+  memberExtras: Map<string, number>;
   totalGoing: number;
   cohostIds: Set<string>;
 };
@@ -32,7 +35,18 @@ function parseTags(profile: any): { label: string; voice: "lead" | "backup" | nu
   return tags;
 }
 
-function AttendeeRow({ profile, badge, action }: { profile: any; badge: ReactNode; action?: ReactNode }) {
+function AttendeeRow({
+  profile,
+  badge,
+  action,
+  extra = 0,
+}: {
+  profile: any;
+  badge: ReactNode;
+  action?: ReactNode;
+  /** Seats this person bought beyond their own, shown as "+2". */
+  extra?: number;
+}) {
   const fullName = [profile?.display_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "Unknown";
   const tags = parseTags(profile);
   return (
@@ -45,6 +59,11 @@ function AttendeeRow({ profile, badge, action }: { profile: any; badge: ReactNod
           </Link>
         ) : (
           <p className="text-sm font-medium text-zinc-900">{fullName}</p>
+        )}
+        {extra > 0 && (
+          <span className="text-xs font-normal text-zinc-400" title={`Bought ${extra + 1} tickets`}>
+            +{extra}
+          </span>
         )}
         <div className="flex shrink-0 items-center gap-2">
           {badge}
@@ -98,8 +117,8 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
         // Ticket buyers without an account. Served by an API route because
         // tickets is service_role-only, so the browser client can't see them.
         fetch(`/api/jam/${jamId}/attendees/guests`)
-          .then((r) => (r.ok ? r.json() : { guests: [] }))
-          .catch(() => ({ guests: [] })),
+          .then((r) => (r.ok ? r.json() : { guests: [], members: [] }))
+          .catch(() => ({ guests: [], members: [] })),
       ]);
 
       const rsvps = rsvpsRes.data ?? [];
@@ -128,13 +147,28 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
       const guests: GuestAttendee[] = (guestsRes as any)?.guests ?? [];
       const guestHeads = guests.reduce((n, g) => n + 1 + g.extra, 0);
 
+      // A member's RSVP row counts them once however many tickets they hold, so
+      // the seats they bought for other people were counted nowhere — a couple
+      // buying two registered as one person going while a guest buying two
+      // registered as two.
+      const memberExtras = new Map<string, number>(
+        (((guestsRes as any)?.members ?? []) as MemberExtra[]).map((m) => [m.user_id, m.extra])
+      );
+      // Counted only for the people actually on screen, so the number can never
+      // disagree with the list: a buyer whose RSVP is missing has no row to
+      // hang "+2" on, and inflating the total from a row nobody can see is how
+      // a headcount stops being explainable.
+      const shown = [...(hostId ? [hostId] : []), ...attending.map((r: any) => r.user_id)];
+      const memberHeads = shown.reduce((n, id) => n + (memberExtras.get(id) ?? 0), 0);
+
       setData({
         profileMap,
         attending,
         waitlist,
         guests,
+        memberExtras,
         // The host counts as going only when there is a host to count.
-        totalGoing: (hostId ? 1 : 0) + attending.length + guestHeads,
+        totalGoing: (hostId ? 1 : 0) + attending.length + guestHeads + memberHeads,
         cohostIds,
       });
     })();
@@ -161,7 +195,7 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
   }
 
   if (!data) return null;
-  const { profileMap, attending, waitlist, guests, totalGoing, cohostIds } = data;
+  const { profileMap, attending, waitlist, guests, memberExtras, totalGoing, cohostIds } = data;
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-1">
@@ -172,6 +206,7 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
         {hostId && (
           <AttendeeRow
             profile={profileMap.get(hostId)}
+            extra={memberExtras.get(hostId) ?? 0}
             badge={
               <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
                 Host
@@ -185,6 +220,7 @@ export default function JamAttendeeList({ jamId, hostId, isHost }: { jamId: stri
             <AttendeeRow
               key={r.user_id}
               profile={profileMap.get(r.user_id)}
+              extra={memberExtras.get(r.user_id) ?? 0}
               badge={
                 isCohost ? (
                   <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
