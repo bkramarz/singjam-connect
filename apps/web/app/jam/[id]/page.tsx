@@ -179,8 +179,12 @@ export default async function JamPage({
     hasFullAccess,
   };
 
+  // JamView seeds its RSVP state from these props once. Accepting an invite
+  // refreshes the page rather than reporting back, so without the key the view
+  // kept its pre-accept status and offered the new attendee an RSVP button.
   return (
     <JamView
+      key={rsvpStatus ?? "none"}
       jamId={id}
       data={{
         jam: { name: jam.name, capacity: jam.capacity, host_user_id: jam.host_user_id },
