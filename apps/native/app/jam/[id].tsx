@@ -13,6 +13,23 @@ import ContentContainer from '@/components/ContentContainer';
 
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
 
+// RSVP, cancel, invites and invite responses all run the capacity/waitlist
+// rules, set-collaborator linking, notifications, and emails server-side. They
+// live in the web API routes (single source of truth) and are called here with
+// a bearer token instead of being reimplemented against the client.
+async function jamApiFetch(path: string, method: 'POST' | 'DELETE', body?: object) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  return fetch(`${WEB_URL}${path}`, {
+    method,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
 type GuestAttendee = { name: string; extra: number };
 
 type JamDetail = {
@@ -59,13 +76,11 @@ type UserSearchResult = {
 function InviteUsersModal({
   visible,
   jamId,
-  jamName,
   attendeeIds,
   onClose,
 }: {
   visible: boolean;
   jamId: string;
-  jamName: string;
   attendeeIds: Set<string>;
   onClose: () => void;
 }) {
@@ -106,22 +121,13 @@ function InviteUsersModal({
 
   async function handleInvite(userId: string) {
     setPending(userId);
-    const { error } = await supabase
-      .from('jam_invites')
-      .insert({ jam_id: jamId, invited_user_id: userId, status: 'pending' });
-
-    if (error && !error.message.includes('duplicate')) {
-      Alert.alert('Error', error.message);
-    } else {
+    const res = await jamApiFetch(`/api/jam/${jamId}/invite`, 'POST', { inviteeUserId: userId });
+    // 409 means they already have an invite, which is what the button promised.
+    if (res?.ok || res?.status === 409) {
       setSent(prev => new Set([...prev, userId]));
-      if (myUserId) {
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          type: 'jam_invite',
-          title: `You've been invited to ${jamName}`,
-          link: `/jam/${jamId}`,
-        });
-      }
+    } else {
+      const msg = res ? (await res.json().catch(() => null))?.error : null;
+      Alert.alert('Error', msg ?? 'Something went wrong.');
     }
     setPending(null);
   }
@@ -430,23 +436,6 @@ export default function JamDetailScreen() {
     setLoading(false);
   }
 
-  // RSVP, cancel, and invite responses all run the capacity/waitlist rules,
-  // set-collaborator linking, notifications, and emails server-side. They live
-  // in the web API routes (single source of truth) and are called here with a
-  // bearer token instead of being reimplemented against the client.
-  async function jamApiFetch(path: string, method: 'POST' | 'DELETE', body?: object) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-    return fetch(`${WEB_URL}${path}`, {
-      method,
-      headers: {
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-  }
-
   // These three used to block on the write and then on a full reload before
   // anything moved — two round-trips of dead button on the most-tapped control
   // in the app. They now paint the expected outcome first and reconcile after.
@@ -596,7 +585,6 @@ export default function JamDetailScreen() {
       <InviteUsersModal
         visible={inviteModalVisible}
         jamId={jam.id}
-        jamName={jam.name ?? 'this jam'}
         attendeeIds={attendeeIds}
         onClose={() => setInviteModalVisible(false)}
       />
