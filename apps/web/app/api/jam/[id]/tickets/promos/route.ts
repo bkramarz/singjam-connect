@@ -4,11 +4,10 @@ import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { canManageJam } from "@/lib/jamAuthz";
 import { stripe } from "@/lib/stripe";
+import { createPromoCode } from "@/lib/ticketPromoCodes";
 
-// Host management of an event's promotion codes. Creating one makes a Stripe
-// coupon plus promotion code, then records the jam association locally — Stripe
-// codes are account-wide, so the association is what stops a code being
-// redeemable on somebody else's event.
+// Host management of an event's promotion codes. Creation lives in
+// lib/ticketPromoCodes.ts, shared with copying an event's tickets.
 //
 // Note the plural path: ../promo is the buyer-facing preview.
 
@@ -112,88 +111,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Amount must be a positive whole number of cents" }, { status: 400 });
   }
 
-  // Check our own uniqueness first so a duplicate is a clear message rather than
-  // a Stripe error, and so we don't leave an orphaned coupon behind on failure.
-  const { data: clash } = await admin
-    .from("ticket_promo_codes")
-    .select("id, jam_id")
-    .ilike("code", code)
-    .maybeSingle();
-  if (clash) {
-    return NextResponse.json(
-      {
-        error:
-          clash.jam_id === jamId
-            ? "That code already exists for this event"
-            : "That code is already used by another event",
-      },
-      { status: 409 }
-    );
-  }
-
-  // The tier currency, so a fixed-amount coupon matches what tickets are priced in.
-  const { data: tier } = await admin
-    .from("ticket_types")
-    .select("currency")
-    .eq("jam_id", jamId)
-    .limit(1)
-    .maybeSingle();
-  const currency = tier?.currency ?? "usd";
-
-  let couponId: string | null = null;
-  try {
-    const coupon = await stripe().coupons.create(
-      percentOff != null
-        ? { percent_off: percentOff, duration: "once", name: `${code} (${jamId.slice(0, 8)})` }
-        : { amount_off: amountOffCents!, currency, duration: "once", name: `${code} (${jamId.slice(0, 8)})` }
-    );
-    couponId = coupon.id;
-
-    const promo = await stripe().promotionCodes.create({
-      promotion: { type: "coupon", coupon: coupon.id }, // a bare `coupon` param is rejected
-      code,
-    });
-
-    const label =
-      percentOff != null
-        ? `${percentOff}% off`
-        : `${new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: currency.toUpperCase(),
-          }).format(amountOffCents! / 100)} off`;
-
-    const { data: row, error } = await admin
-      .from("ticket_promo_codes")
-      .insert({
-        jam_id: jamId,
-        code,
-        stripe_promotion_code_id: promo.id,
-        stripe_coupon_id: coupon.id,
-        label,
-        created_by: user.id,
-      })
-      .select("id, code, label")
-      .single();
-
-    if (error) {
-      // Our row is what scopes the code to this event. Without it the Stripe code
-      // would exist and be redeemable nowhere — so retire it rather than leaving
-      // an unusable code occupying the name.
-      await stripe().promotionCodes.update(promo.id, { active: false }).catch(() => {});
-      await stripe().coupons.del(coupon.id).catch(() => {});
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ ...row, redeemed: 0 });
-  } catch (e: any) {
-    if (couponId) await stripe().coupons.del(couponId).catch(() => {});
-    // Stripe rejects a duplicate active code even if our table missed it — for
-    // instance one created by hand in the Dashboard.
-    const msg = /already exists|already active/i.test(e?.message ?? "")
-      ? "That code already exists in Stripe"
-      : "Could not create that code";
-    return NextResponse.json({ error: msg }, { status: 400 });
-  }
+  const result = await createPromoCode(admin, {
+    jamId,
+    code,
+    discount: percentOff != null ? { percentOff } : { amountOffCents: amountOffCents! },
+    userId: user.id,
+  });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ ...result.row, redeemed: 0 });
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {

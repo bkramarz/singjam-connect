@@ -31,6 +31,7 @@ export default async function NewJamPage({ searchParams }: { searchParams: Promi
         return `${h}:${m}`;
       };
       initialData = {
+        copyFromId: copy,
         visibility: jam.visibility,
         name: jam.name ?? "",
         notes: jam.notes ?? "",

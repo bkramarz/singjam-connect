@@ -1,4 +1,5 @@
 export * from './utils/fetchProfileSongs';
+export * from './utils/copyEventTickets';
 export * from './utils/deriveNeighborhood';
 export * from './utils/fetchAllRows';
 export * from './utils/formatComposers';

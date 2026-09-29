@@ -11,6 +11,7 @@ import FocalPointPicker from "./FocalPointPicker";
 type LookupItem = { id: string; name: string };
 
 export type NewJamInitialData = {
+  copyFromId: string;
   visibility: "community" | "private" | "official";
   name: string;
   notes: string;
@@ -187,6 +188,23 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jamId }),
     }).catch(() => {});
+
+    if (initialData && visibility === "official") {
+      const res = await fetch(`/api/jam/${jamId}/tickets/copy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: initialData.copyFromId }),
+      }).catch(() => null);
+      const body = await res?.json().catch(() => null);
+      const problems = !res?.ok
+        ? [`Tickets weren't copied: ${body?.error ?? "something went wrong"}`]
+        : (body.skipped as { code: string; reason: string }[]).map((s) => `${s.code}: ${s.reason}`);
+      if (problems.length > 0) window.alert(`The event was created, but:\n\n${problems.join("\n")}`);
+      if (res?.ok && body.tiers > 0) {
+        router.push(`/jam/${jamId}/tickets/manage`);
+        return;
+      }
+    }
 
     router.push(`/jam/${jamId}`);
   }
