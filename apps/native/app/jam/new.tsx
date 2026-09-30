@@ -8,6 +8,8 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
+import { useAddressTimezone } from '@/lib/useAddressTimezone';
+import { zonedInputToIso, pickersToZonedInput, zoneAbbreviation } from '@singjam/core';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 
@@ -202,6 +204,7 @@ export default function NewJamScreen() {
   const [locationTbd, setLocationTbd] = useState(false);
   const [fullAddress, setFullAddress] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
+  const { timezone, resolving: resolvingTimezone } = useAddressTimezone(locationTbd ? null : fullAddress, null, null);
 
   const [genres, setGenres] = useState<LookupItem[]>([]);
   const [themes, setThemes] = useState<LookupItem[]>([]);
@@ -239,17 +242,14 @@ export default function NewJamScreen() {
     setSelectedThemes(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
-  function buildStartsAt(): string {
-    const d = new Date(date);
-    d.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
-    return d.toISOString();
+  // The pickers hold the venue's wall clock; read it in the venue's zone.
+  function buildStartsAt(): string | null {
+    return zonedInputToIso(pickersToZonedInput(date, startTime), timezone);
   }
 
   function buildEndsAt(): string | null {
     if (!endTime) return null;
-    const d = new Date(date);
-    d.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0);
-    return d.toISOString();
+    return zonedInputToIso(pickersToZonedInput(date, endTime), timezone);
   }
 
   async function handleCreate() {
@@ -280,7 +280,7 @@ export default function NewJamScreen() {
       visibility,
       guests_can_invite: guestsCanInvite,
       capacity: capacity ? parseInt(capacity, 10) : null,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone,
       created_at: new Date().toISOString(),
     }).select('id').single();
 
@@ -513,6 +513,11 @@ export default function NewJamScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              <Text className="px-4 pb-3 text-xs text-zinc-400">
+                {resolvingTimezone
+                  ? "Checking the venue's time zone…"
+                  : `Times are in ${zoneAbbreviation(timezone, new Date(buildStartsAt() ?? Date.now()))}`}
+              </Text>
             </View>
 
             {/* Location */}
@@ -612,8 +617,8 @@ export default function NewJamScreen() {
 
             <TouchableOpacity
               onPress={handleCreate}
-              disabled={saving}
-              className="bg-amber-500 rounded-xl py-4 items-center"
+              disabled={saving || resolvingTimezone}
+              className={`bg-amber-500 rounded-xl py-4 items-center ${resolvingTimezone ? 'opacity-50' : ''}`}
             >
               {saving ? (
                 <ActivityIndicator color="#fff" />

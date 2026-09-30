@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockEmailSend, mockFrom, mockGetUserById, mockCanManage, mockNotify } = vi.hoisted(() => ({
+const { mockGetUser, mockBearerGetUser, mockEmailSend, mockFrom, mockGetUserById, mockCanManage, mockNotify, mockJamUpdate } = vi.hoisted(() => ({
+  mockBearerGetUser: vi.fn(),
+  mockJamUpdate: vi.fn(),
   mockCanManage: vi.fn(),
   mockGetUser: vi.fn(),
   mockEmailSend: vi.fn().mockResolvedValue({ id: "email-id" }),
@@ -11,6 +13,10 @@ const { mockGetUser, mockEmailSend, mockFrom, mockGetUserById, mockCanManage, mo
 
 vi.mock("@/lib/supabase/server", () => ({
   supabaseServer: vi.fn().mockResolvedValue({ auth: { getUser: mockGetUser } }),
+}));
+
+vi.mock("@/lib/supabase/bearer", () => ({
+  supabaseFromBearer: vi.fn(() => ({ auth: { getUser: mockBearerGetUser } })),
 }));
 
 vi.mock("@/lib/resend", () => ({
@@ -40,10 +46,11 @@ const storedJam = {
   timezone: "America/Los_Angeles",
 };
 
-function chain(result: { data: unknown; error?: unknown }) {
+function chain(result: { data: unknown; error?: unknown }, onUpdate?: (row: unknown) => void) {
   const resolved = { error: null, ...result };
   const c: any = {
-    select: () => c, eq: () => c, in: () => c, update: () => c, delete: () => c, insert: () => c,
+    select: () => c, eq: () => c, in: () => c, delete: () => c, insert: () => c,
+    update: (row: unknown) => { onUpdate?.(row); return c; },
     maybeSingle: () => Promise.resolve(resolved),
     then: (res: any, rej: any) => Promise.resolve(resolved).then(res, rej),
   };
@@ -52,7 +59,7 @@ function chain(result: { data: unknown; error?: unknown }) {
 
 const params = Promise.resolve({ id: "jam-1" });
 
-function put(overrides: Record<string, unknown>) {
+function put(overrides: Record<string, unknown>, headers: Record<string, string> = {}) {
   const body = {
     name: storedJam.name,
     starts_at: "2026-10-04T21:30:00.000Z",
@@ -61,7 +68,7 @@ function put(overrides: Record<string, unknown>) {
     full_address: storedJam.full_address,
     ...overrides,
   };
-  return PUT(new Request("http://localhost/api/jam/jam-1", { method: "PUT", body: JSON.stringify(body) }), { params });
+  return PUT(new Request("http://localhost/api/jam/jam-1", { method: "PUT", headers, body: JSON.stringify(body) }), { params });
 }
 
 beforeEach(() => {
@@ -70,7 +77,7 @@ beforeEach(() => {
   mockGetUser.mockResolvedValue({ data: { user: { id: "host-id" } } });
   mockGetUserById.mockResolvedValue({ data: { user: { email: "alice@example.com" } } });
   mockFrom.mockImplementation((table: string) => {
-    if (table === "jams") return chain({ data: storedJam });
+    if (table === "jams") return chain({ data: storedJam }, mockJamUpdate);
     if (table === "jam_rsvps") return chain({ data: [{ user_id: "attendee-1" }] });
     if (table === "profiles") return chain({ data: [{ id: "attendee-1", display_name: "Alice" }] });
     return chain({ data: [] });
@@ -95,5 +102,33 @@ describe("PUT /api/jam/[id]", () => {
     const res = await put({ full_address: "Somewhere else" });
     expect(res.status).toBe(200);
     expect(mockEmailSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a native request authenticated with a bearer token", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    mockBearerGetUser.mockResolvedValue({ data: { user: { id: "host-id" } } });
+    const res = await put({}, { Authorization: "Bearer token" });
+    expect(res.status).toBe(200);
+    expect(mockJamUpdate).toHaveBeenCalled();
+  });
+
+  it("returns 401 with neither a session nor a bearer token", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+    const res = await put({});
+    expect(res.status).toBe(401);
+    expect(mockJamUpdate).not.toHaveBeenCalled();
+  });
+
+  it("stores the venue timezone the client resolved", async () => {
+    await put({ timezone: "America/New_York", full_address: "Brooklyn, NY" });
+    expect(mockJamUpdate).toHaveBeenCalledWith(expect.objectContaining({ timezone: "America/New_York" }));
+  });
+
+  it("keeps the stored timezone when none, or an invalid one, is sent", async () => {
+    await put({});
+    await put({ timezone: "Not/AZone" });
+    for (const [row] of mockJamUpdate.mock.calls) {
+      expect(row).toEqual(expect.objectContaining({ timezone: "America/Los_Angeles" }));
+    }
   });
 });

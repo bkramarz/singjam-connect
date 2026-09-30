@@ -8,11 +8,17 @@ import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamCancelledHtml } from "@/emails/jam-cancelled";
 import { jamUpdatedHtml } from "@/emails/jam-updated";
 import { buildIcs } from "@/lib/ics";
+import { isValidTimeZone } from "@singjam/core";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = (await supabase.auth.getUser()).data.user ?? null;
+  if (!user) {
+    // Native app authenticates with a bearer token instead of cookies
+    const bearer = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (bearer) user = (await supabaseFromBearer(bearer).auth.getUser()).data.user ?? null;
+  }
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = supabaseAdmin();
@@ -31,9 +37,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const body = await req.json();
   const {
     name, starts_at, ends_at, neighborhood, full_address, notes, visibility,
-    guests_can_invite, tickets_url, image_url, image_focal_point, capacity, timezone,
+    guests_can_invite, tickets_url, image_url, image_focal_point, capacity,
     genre_ids, theme_ids,
   } = body;
+  // The client converts the typed times using the venue's zone (from /api/timezone),
+  // so store that same zone; anything unusable keeps the event's existing one.
+  const timezone = isValidTimeZone(body.timezone) ? body.timezone : currentJam.timezone;
 
   const { error: updateError } = await admin.from("jams").update({
     name, starts_at, ends_at, neighborhood, full_address, notes, visibility,

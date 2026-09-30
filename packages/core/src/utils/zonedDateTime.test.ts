@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { zonedInputToIso, isoToZonedInput, zoneAbbreviation } from './zonedDateTime';
+import { zonedInputToIso, isoToZonedInput, zoneAbbreviation, isValidTimeZone, pickersToZonedInput, zonedInputToPickerDate } from './zonedDateTime';
 
 const LA = 'America/Los_Angeles';
 
@@ -76,5 +76,31 @@ describe('zoneAbbreviation', () => {
   it('names the zone as of the given instant, so DST is reflected', () => {
     expect(zoneAbbreviation(LA, new Date('2026-10-04T07:00:00Z'))).toBe('PDT');
     expect(zoneAbbreviation(LA, new Date('2026-12-04T07:00:00Z'))).toBe('PST');
+  });
+});
+
+describe('isValidTimeZone', () => {
+  it('accepts IANA zones and rejects anything else', () => {
+    expect(isValidTimeZone(LA)).toBe(true);
+    expect(isValidTimeZone('Not/AZone')).toBe(false);
+    expect(isValidTimeZone('')).toBe(false);
+    expect(isValidTimeZone(null)).toBe(false);
+  });
+});
+
+describe('picker round-trip', () => {
+  it('shows and saves the venue wall clock through device-local picker Dates', () => {
+    const picker = zonedInputToPickerDate(isoToZonedInput('2026-10-04T21:30:00+00:00', LA))!;
+    expect(picker.getHours()).toBe(14);
+    expect(picker.getMinutes()).toBe(30);
+    expect(zonedInputToIso(pickersToZonedInput(picker, picker), LA)).toBe('2026-10-04T21:30:00.000Z');
+  });
+
+  it('takes the day from the date picker and the clock from the time picker', () => {
+    expect(pickersToZonedInput(new Date(2026, 9, 4, 9, 0), new Date(2020, 0, 1, 18, 5))).toBe('2026-10-04T18:05');
+  });
+
+  it('returns null for a malformed value', () => {
+    expect(zonedInputToPickerDate('')).toBeNull();
   });
 });

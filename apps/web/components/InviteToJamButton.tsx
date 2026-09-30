@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import Tooltip from "@/components/Tooltip";
 
-type JamOption = { id: string; name: string | null; starts_at: string | null };
+type JamOption = { id: string; name: string | null; starts_at: string | null; timezone: string | null };
 
-function formatDate(iso: string | null) {
+function formatDate(iso: string | null, timezone: string | null) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", ...(timezone ? { timeZone: timezone } : {}) });
 }
 
 export default function InviteToJamButton({ inviteeUserId, disabled = false }: { inviteeUserId: string; disabled?: boolean }) {
@@ -39,7 +39,7 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
     const [{ data: hosted }, { data: rsvps }, { data: invites }] = await Promise.all([
       supabase
         .from("jams")
-        .select("id, name, starts_at")
+        .select("id, name, starts_at, timezone")
         .eq("host_user_id", user.id)
         .neq("visibility", "official")
         .gte("starts_at", now)
@@ -64,7 +64,7 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
     if (attendingIds.length > 0) {
       const { data } = await supabase
         .from("jams")
-        .select("id, name, starts_at")
+        .select("id, name, starts_at, timezone")
         .in("id", attendingIds)
         .eq("guests_can_invite", true)
         .neq("visibility", "official")
@@ -138,7 +138,7 @@ export default function InviteToJamButton({ inviteeUserId, disabled = false }: {
                   <li key={j.id} className="flex items-center justify-between gap-2 px-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-zinc-900 truncate">{label}</p>
-                      {j.starts_at && <p className="text-xs text-zinc-400">{formatDate(j.starts_at)}</p>}
+                      {j.starts_at && <p className="text-xs text-zinc-400">{formatDate(j.starts_at, j.timezone)}</p>}
                     </div>
                     <button
                       onClick={() => invite(j.id)}
