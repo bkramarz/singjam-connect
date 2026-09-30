@@ -1,0 +1,99 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const { mockGetUser, mockEmailSend, mockFrom, mockGetUserById, mockCanManage, mockNotify } = vi.hoisted(() => ({
+  mockCanManage: vi.fn(),
+  mockGetUser: vi.fn(),
+  mockEmailSend: vi.fn().mockResolvedValue({ id: "email-id" }),
+  mockFrom: vi.fn(),
+  mockGetUserById: vi.fn(),
+  mockNotify: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  supabaseServer: vi.fn().mockResolvedValue({ auth: { getUser: mockGetUser } }),
+}));
+
+vi.mock("@/lib/resend", () => ({
+  resend: { emails: { send: mockEmailSend } },
+  FROM_ADDRESS: "SingJam <hello@singjam.org>",
+}));
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn(() => ({
+    from: mockFrom,
+    auth: { admin: { getUserById: mockGetUserById } },
+  })),
+}));
+
+vi.mock("@/lib/jamAuthz", () => ({ canManageJam: mockCanManage }));
+vi.mock("@/lib/notifications", () => ({ createNotification: mockNotify }));
+
+import { PUT } from "./route";
+
+const storedJam = {
+  host_user_id: "host-id",
+  name: "SingJam at the Starry Plough",
+  starts_at: "2026-10-04T21:30:00+00:00",
+  ends_at: "2026-10-04T23:30:00+00:00",
+  neighborhood: "Berkeley, CA",
+  full_address: "The Starry Plough Pub, Shattuck Avenue, Berkeley, CA, USA",
+  timezone: "America/Los_Angeles",
+};
+
+function chain(result: { data: unknown; error?: unknown }) {
+  const resolved = { error: null, ...result };
+  const c: any = {
+    select: () => c, eq: () => c, in: () => c, update: () => c, delete: () => c, insert: () => c,
+    maybeSingle: () => Promise.resolve(resolved),
+    then: (res: any, rej: any) => Promise.resolve(resolved).then(res, rej),
+  };
+  return c;
+}
+
+const params = Promise.resolve({ id: "jam-1" });
+
+function put(overrides: Record<string, unknown>) {
+  const body = {
+    name: storedJam.name,
+    starts_at: "2026-10-04T21:30:00.000Z",
+    ends_at: "2026-10-04T23:30:00.000Z",
+    neighborhood: storedJam.neighborhood,
+    full_address: storedJam.full_address,
+    ...overrides,
+  };
+  return PUT(new Request("http://localhost/api/jam/jam-1", { method: "PUT", body: JSON.stringify(body) }), { params });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockCanManage.mockResolvedValue(true);
+  mockGetUser.mockResolvedValue({ data: { user: { id: "host-id" } } });
+  mockGetUserById.mockResolvedValue({ data: { user: { email: "alice@example.com" } } });
+  mockFrom.mockImplementation((table: string) => {
+    if (table === "jams") return chain({ data: storedJam });
+    if (table === "jam_rsvps") return chain({ data: [{ user_id: "attendee-1" }] });
+    if (table === "profiles") return chain({ data: [{ id: "attendee-1", display_name: "Alice" }] });
+    return chain({ data: [] });
+  });
+});
+
+describe("PUT /api/jam/[id]", () => {
+  it("does not email attendees when the time is re-saved in a different ISO format", async () => {
+    const res = await put({});
+    expect(res.status).toBe(200);
+    expect(mockEmailSend).not.toHaveBeenCalled();
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
+  it("emails attendees when the start time actually changes", async () => {
+    const res = await put({ starts_at: "2026-10-04T22:00:00.000Z" });
+    expect(res.status).toBe(200);
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("emails attendees when the location actually changes", async () => {
+    const res = await put({ full_address: "Somewhere else" });
+    expect(res.status).toBe(200);
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+  });
+});

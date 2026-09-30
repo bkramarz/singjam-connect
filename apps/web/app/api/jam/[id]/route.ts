@@ -53,7 +53,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     theme_ids?.length > 0 ? admin.from("jam_themes").insert(theme_ids.map((theme_id: string) => ({ jam_id: id, theme_id }))) : Promise.resolve(),
   ]);
 
-  const timeChanged = currentJam.starts_at !== starts_at || currentJam.ends_at !== ends_at;
+  // Postgres returns "+00:00" while clients send toISOString()'s ".000Z", so compare instants, not strings.
+  const sameInstant = (a: string | null, b: string | null) => (a && b ? Date.parse(a) === Date.parse(b) : a === b);
+  const timeChanged = !sameInstant(currentJam.starts_at, starts_at) || !sameInstant(currentJam.ends_at, ends_at);
   const locationChanged = currentJam.neighborhood !== neighborhood || currentJam.full_address !== full_address;
 
   if (!timeChanged && !locationChanged) return NextResponse.json({ ok: true });
