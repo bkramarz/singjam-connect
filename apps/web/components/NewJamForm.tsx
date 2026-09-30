@@ -7,6 +7,9 @@ import LocationAutocomplete, { type LocationValue } from "./LocationAutocomplete
 import TagCombobox from "./TagCombobox";
 import JamCard from "./JamCard";
 import FocalPointPicker from "./FocalPointPicker";
+import JamTimezoneNote from "./JamTimezoneNote";
+import { useAddressTimezone } from "@/lib/useAddressTimezone";
+import { zonedInputToIso } from "@singjam/core";
 
 type LookupItem = { id: string; name: string };
 
@@ -26,6 +29,7 @@ export type NewJamInitialData = {
   selectedThemeIds: string[];
   startTime: string;
   endTime: string;
+  timezone: string | null;
 };
 
 function Label({ text, required, optional }: { text: string; required?: boolean; optional?: boolean }) {
@@ -64,6 +68,7 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
     neighborhood: initialData?.neighborhood ?? "",
   });
   const [locationTbd, setLocationTbd] = useState(false);
+  const { timezone, resolving: resolvingTimezone } = useAddressTimezone(locationTbd ? null : location.fullAddress, initialData?.fullAddress ?? null, initialData?.timezone ?? null);
   const [capacity, setCapacity] = useState(initialData?.capacity ?? "");
   const [description, setDescription] = useState(initialData?.notes ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -103,8 +108,8 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
   }
 
   function toIso(d: string, t: string) {
-    if (!d || !t) return null;
-    return new Date(`${d}T${t}`).toISOString();
+    if (!d || !t || !timezone) return null;
+    return zonedInputToIso(`${d}T${t}`, timezone);
   }
 
   function validate() {
@@ -163,7 +168,7 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
       image_url: imageUrl,
       image_focal_point: imageUrl ? focalPoint : null,
       capacity: capacity ? parseInt(capacity, 10) : null,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone,
       created_at: new Date().toISOString(),
     }).select("id").single();
 
@@ -238,6 +243,7 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
             themes: previewThemeNames,
             host: displayName,
             capacity: capacity ? parseInt(capacity, 10) : null,
+            timezone,
             hasFullAccess: true, // show full address in preview
           }}
           actions={
@@ -250,7 +256,7 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
               </button>
               <button
                 onClick={publish}
-                disabled={busy}
+                disabled={busy || resolvingTimezone || !timezone}
                 className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
               >
                 {busy ? "Publishing…" : "Publish jam"}
@@ -345,6 +351,7 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
             <input className="w-full appearance-none rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
+        <JamTimezoneNote timezone={timezone} resolving={resolvingTimezone} startsAt={toIso(date, startTime)} />
       </div>
 
       {/* Location */}
@@ -458,7 +465,8 @@ export default function NewJamForm({ initialData }: { initialData?: NewJamInitia
 
       <button
         onClick={goToPreview}
-        className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
+        disabled={resolvingTimezone || !timezone}
+        className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
       >
         Preview
       </button>

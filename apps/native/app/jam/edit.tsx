@@ -8,6 +8,10 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
+import { useAddressTimezone } from '@/lib/useAddressTimezone';
+import {
+  isoToZonedInput, zonedInputToIso, zonedInputToPickerDate, pickersToZonedInput, zoneAbbreviation,
+} from '@singjam/core';
 
 const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://singjam.org';
@@ -188,10 +192,6 @@ function formatTimeDisplay(d: Date): string {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-function isoToDate(iso: string | null): Date {
-  return iso ? new Date(iso) : new Date();
-}
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function EditJamScreen() {
@@ -203,7 +203,7 @@ export default function EditJamScreen() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [visibility, setVisibility] = useState<'community' | 'private'>('community');
+  const [visibility, setVisibility] = useState<'community' | 'private' | 'official'>('community');
   const [capacity, setCapacity] = useState('');
   const [guestsCanInvite, setGuestsCanInvite] = useState(false);
 
@@ -213,6 +213,10 @@ export default function EditJamScreen() {
   const [locationTbd, setLocationTbd] = useState(false);
   const [fullAddress, setFullAddress] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
+  const [savedLocation, setSavedLocation] = useState<{ address: string | null; timezone: string | null }>({ address: null, timezone: null });
+  const { timezone, resolving: resolvingTimezone } = useAddressTimezone(
+    locationTbd ? null : fullAddress, savedLocation.address, savedLocation.timezone
+  );
 
   const [genres, setGenres] = useState<LookupItem[]>([]);
   const [themes, setThemes] = useState<LookupItem[]>([]);
@@ -247,20 +251,24 @@ export default function EditJamScreen() {
       const j = jamResult.data as any;
       setName(j.name ?? '');
       setDescription(j.notes ?? '');
-      setVisibility(j.visibility === 'private' ? 'private' : 'community');
+      setVisibility(j.visibility);
       setCapacity(j.capacity?.toString() ?? '');
       setGuestsCanInvite(j.guests_can_invite ?? false);
 
-      const startsAt = j.starts_at ? new Date(j.starts_at) : new Date();
-      const endsAt = j.ends_at ? new Date(j.ends_at) : null;
+      // The pickers show the venue's wall clock, not the device's.
+      const tz = j.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const startsAt = zonedInputToPickerDate(isoToZonedInput(j.starts_at, tz)) ?? new Date();
+      const endsAt = zonedInputToPickerDate(isoToZonedInput(j.ends_at, tz));
       setDate(startsAt);
       setStartTime(startsAt);
       setEndTime(endsAt);
 
       const isTbd = j.neighborhood === 'TBD' && !j.full_address;
+      const address = isTbd ? '' : (j.full_address ?? j.neighborhood ?? '');
       setLocationTbd(isTbd);
-      setFullAddress(isTbd ? '' : (j.full_address ?? j.neighborhood ?? ''));
+      setFullAddress(address);
       setNeighborhood(isTbd ? '' : (j.neighborhood ?? ''));
+      setSavedLocation({ address: isTbd ? null : address, timezone: tz });
 
       setExistingImageUrl(j.image_url ?? null);
       setGenres((genreResult.data as LookupItem[]) ?? []);
@@ -280,17 +288,13 @@ export default function EditJamScreen() {
     setSelectedThemes(prev => prev.includes(itemId) ? prev.filter(x => x !== itemId) : [...prev, itemId]);
   }
 
-  function buildStartsAt(): string {
-    const d = new Date(date);
-    d.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
-    return d.toISOString();
+  function buildStartsAt(): string | null {
+    return zonedInputToIso(pickersToZonedInput(date, startTime), timezone);
   }
 
   function buildEndsAt(): string | null {
     if (!endTime) return null;
-    const d = new Date(date);
-    d.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0);
-    return d.toISOString();
+    return zonedInputToIso(pickersToZonedInput(date, endTime), timezone);
   }
 
   async function handleSave() {
@@ -298,33 +302,37 @@ export default function EditJamScreen() {
     if (!locationTbd && !fullAddress) { setError('Add a location or mark it as TBD.'); return; }
 
     setSaving(true);
-    const { error: updateError } = await supabase.from('jams').update({
-      name: name.trim() || null,
-      starts_at: buildStartsAt(),
-      ends_at: buildEndsAt(),
-      neighborhood: locationTbd ? 'TBD' : (neighborhood || fullAddress || null),
-      full_address: locationTbd ? null : (fullAddress || null),
-      notes: description.trim() || null,
-      visibility,
-      guests_can_invite: guestsCanInvite,
-      capacity: capacity ? parseInt(capacity, 10) : null,
-    }).eq('id', id);
+    // Saved through the web API (as web's EditJamForm does) so attendees are
+    // notified of a time or location change and the rules live in one place.
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${WEB_URL}/api/jam/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        name: name.trim() || null,
+        starts_at: buildStartsAt(),
+        ends_at: buildEndsAt(),
+        neighborhood: locationTbd ? 'TBD' : (neighborhood || fullAddress || null),
+        full_address: locationTbd ? null : (fullAddress || null),
+        notes: description.trim() || null,
+        visibility,
+        guests_can_invite: guestsCanInvite,
+        capacity: capacity ? parseInt(capacity, 10) : null,
+        timezone,
+        genre_ids: selectedGenres,
+        theme_ids: selectedThemes,
+      }),
+    });
 
-    if (updateError) { setError(updateError.message); setSaving(false); return; }
-
-    await Promise.all([
-      supabase.from('jam_genres').delete().eq('jam_id', id),
-      supabase.from('jam_themes').delete().eq('jam_id', id),
-    ]);
-
-    await Promise.all([
-      selectedGenres.length > 0
-        ? supabase.from('jam_genres').insert(selectedGenres.map(genre_id => ({ jam_id: id, genre_id })))
-        : Promise.resolve(),
-      selectedThemes.length > 0
-        ? supabase.from('jam_themes').insert(selectedThemes.map(theme_id => ({ jam_id: id, theme_id })))
-        : Promise.resolve(),
-    ]);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? 'Something went wrong saving this jam.');
+      setSaving(false);
+      return;
+    }
 
     if (coverAsset) {
       const ext = coverAsset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
@@ -579,6 +587,11 @@ export default function EditJamScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              <Text className="px-4 pb-3 text-xs text-zinc-400">
+                {resolvingTimezone
+                  ? "Checking the venue's time zone…"
+                  : `Times are in ${zoneAbbreviation(timezone, new Date(buildStartsAt() ?? Date.now()))}`}
+              </Text>
             </View>
 
             {/* Location */}
@@ -608,6 +621,9 @@ export default function EditJamScreen() {
             <View className="bg-white rounded-xl border border-zinc-100 overflow-hidden mb-4">
               <View className="px-4 py-3 border-b border-zinc-100">
                 <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-3">Visibility</Text>
+                {visibility === 'official' ? (
+                  <Text className="text-sm font-semibold text-amber-600">Official SingJam event</Text>
+                ) : (
                 <View className="flex-row gap-2">
                   {VISIBILITY_OPTIONS.map(opt => (
                     <TouchableOpacity
@@ -619,6 +635,7 @@ export default function EditJamScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                )}
               </View>
               <View className="px-4 py-3 border-b border-zinc-100">
                 <Text className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-1.5">Capacity (optional)</Text>
@@ -675,8 +692,8 @@ export default function EditJamScreen() {
 
             <TouchableOpacity
               onPress={handleSave}
-              disabled={saving}
-              className="bg-amber-500 rounded-xl py-4 items-center mb-3"
+              disabled={saving || resolvingTimezone}
+              className={`bg-amber-500 rounded-xl py-4 items-center mb-3 ${resolvingTimezone ? 'opacity-50' : ''}`}
             >
               {saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-semibold text-base">Save changes</Text>}
             </TouchableOpacity>

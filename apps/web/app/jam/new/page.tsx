@@ -46,6 +46,7 @@ export default async function NewJamPage({ searchParams }: { searchParams: Promi
         selectedThemeIds: ((themesRes.data ?? []) as any[]).map((r) => r.theme_id as string),
         startTime: fmt(jam.starts_at),
         endTime: fmt(jam.ends_at),
+        timezone: jam.timezone ?? null,
       };
     }
   }

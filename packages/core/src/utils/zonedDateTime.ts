@@ -109,3 +109,31 @@ export function zoneAbbreviation(timeZone: string, at: Date = new Date()): strin
     .find((p) => p.type === "timeZoneName");
   return part?.value ?? timeZone;
 }
+
+/** Whether `tz` is an IANA zone this runtime can format in ("America/New_York"). */
+export function isValidTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== 'string' || !tz) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Native date/time pickers hand back Dates in the device's zone. These carry an
+ * event's wall clock through them: the picker shows the venue's time because the
+ * Date's *local* fields hold it, whatever zone the device is in.
+ */
+export function pickersToZonedInput(date: Date, time: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(time.getHours())}:${pad(time.getMinutes())}`;
+}
+
+export function zonedInputToPickerDate(value: string): Date | null {
+  const m = INPUT.exec(value.trim());
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m;
+  return new Date(+y, +mo - 1, +d, +h, +mi);
+}

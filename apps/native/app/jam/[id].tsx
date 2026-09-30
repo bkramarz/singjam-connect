@@ -621,13 +621,13 @@ export default function JamDetailScreen() {
         ) : jam.starts_at ? (
           <View className="bg-amber-50 items-center justify-center py-10">
             <Text className="text-amber-400 text-sm font-medium uppercase tracking-wide mb-1">
-              {new Date(jam.starts_at).toLocaleString('en', { weekday: 'long' })}
+              {new Date(jam.starts_at).toLocaleString('en', { weekday: 'long', ...(jam.timezone ? { timeZone: jam.timezone } : {}) })}
             </Text>
             <Text className="text-amber-700 text-5xl font-bold">
-              {new Date(jam.starts_at).getDate()}
+              {new Date(jam.starts_at).toLocaleString('en', { day: 'numeric', ...(jam.timezone ? { timeZone: jam.timezone } : {}) })}
             </Text>
             <Text className="text-amber-500 text-lg font-medium">
-              {new Date(jam.starts_at).toLocaleString('en', { month: 'long', year: 'numeric' })}
+              {new Date(jam.starts_at).toLocaleString('en', { month: 'long', year: 'numeric', ...(jam.timezone ? { timeZone: jam.timezone } : {}) })}
             </Text>
           </View>
         ) : null}

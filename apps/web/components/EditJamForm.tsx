@@ -7,6 +7,9 @@ import LocationAutocomplete, { type LocationValue } from "./LocationAutocomplete
 import TagCombobox from "./TagCombobox";
 import JamCard from "./JamCard";
 import FocalPointPicker from "./FocalPointPicker";
+import JamTimezoneNote from "./JamTimezoneNote";
+import { useAddressTimezone } from "@/lib/useAddressTimezone";
+import { isoToZonedInput, zonedInputToIso } from "@singjam/core";
 
 type LookupItem = { id: string; name: string };
 
@@ -24,6 +27,7 @@ type JamData = {
   image_focal_point: string | null;
   capacity: number | null;
   guests_can_invite: boolean;
+  timezone: string | null;
 };
 
 function Label({ text, required, optional }: { text: string; required?: boolean; optional?: boolean }) {
@@ -34,20 +38,6 @@ function Label({ text, required, optional }: { text: string; required?: boolean;
       {optional && <span className="ml-1.5 text-xs font-normal text-zinc-400">optional</span>}
     </label>
   );
-}
-
-function isoToDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function isoToTime(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toTimeString().slice(0, 5);
 }
 
 export default function EditJamForm({
@@ -76,15 +66,17 @@ export default function EditJamForm({
   const [guestsCanInvite, setGuestsCanInvite] = useState(jam.guests_can_invite ?? false);
   const [name, setName] = useState(jam.name ?? "");
   const [ticketsUrl, setTicketsUrl] = useState(jam.tickets_url ?? "");
-  const [date, setDate] = useState(isoToDate(jam.starts_at));
-  const [startTime, setStartTime] = useState(isoToTime(jam.starts_at));
-  const [endTime, setEndTime] = useState(isoToTime(jam.ends_at));
+  const [initialTimezone] = useState(() => jam.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [date, setDate] = useState(isoToZonedInput(jam.starts_at, initialTimezone).slice(0, 10));
+  const [startTime, setStartTime] = useState(isoToZonedInput(jam.starts_at, initialTimezone).slice(11));
+  const [endTime, setEndTime] = useState(isoToZonedInput(jam.ends_at, initialTimezone).slice(11));
   const isInitiallyTbd = jam.neighborhood === "TBD" && !jam.full_address;
   const [locationTbd, setLocationTbd] = useState(isInitiallyTbd);
   const [location, setLocation] = useState<LocationValue>({
     fullAddress: isInitiallyTbd ? "" : (jam.full_address ?? jam.neighborhood ?? ""),
     neighborhood: isInitiallyTbd ? "" : (jam.neighborhood ?? ""),
   });
+  const { timezone, resolving: resolvingTimezone } = useAddressTimezone(locationTbd ? null : location.fullAddress, isInitiallyTbd ? null : (jam.full_address ?? jam.neighborhood ?? ""), initialTimezone);
   const [capacity, setCapacity] = useState(jam.capacity?.toString() ?? "");
   const [description, setDescription] = useState(jam.notes ?? "");
 
@@ -126,8 +118,8 @@ export default function EditJamForm({
   }
 
   function toIso(d: string, t: string) {
-    if (!d || !t) return null;
-    return new Date(`${d}T${t}`).toISOString();
+    if (!d || !t || !timezone) return null;
+    return zonedInputToIso(`${d}T${t}`, timezone);
   }
 
   function validate() {
@@ -191,7 +183,7 @@ export default function EditJamForm({
         image_url: imageUrl,
         image_focal_point: newFocalPoint,
         capacity: capacity ? parseInt(capacity, 10) : null,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezone,
         genre_ids: selectedGenres,
         theme_ids: selectedThemes,
       }),
@@ -236,6 +228,7 @@ export default function EditJamForm({
             themes: previewThemeNames,
             host: displayName,
             capacity: capacity ? parseInt(capacity, 10) : null,
+            timezone,
             hasFullAccess: true,
           }}
         />
@@ -249,7 +242,7 @@ export default function EditJamForm({
           </button>
           <button
             onClick={save}
-            disabled={busy}
+            disabled={busy || resolvingTimezone || !timezone}
             className="rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
           >
             {busy ? "Saving…" : "Save changes"}
@@ -332,6 +325,7 @@ export default function EditJamForm({
             <input className="w-full appearance-none rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
+        <JamTimezoneNote timezone={timezone} resolving={resolvingTimezone} startsAt={toIso(date, startTime)} />
       </div>
 
       {/* Location */}
@@ -412,7 +406,7 @@ export default function EditJamForm({
         </ul>
       )}
 
-      <button onClick={goToPreview} className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 transition-colors">
+      <button onClick={goToPreview} disabled={resolvingTimezone || !timezone} className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors">
         Preview changes
       </button>
     </div>
