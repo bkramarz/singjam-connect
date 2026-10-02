@@ -33,6 +33,8 @@ export type JamViewData = {
   rsvpStatus: "attending" | "waitlist" | "cancelled" | null;
   waitlistPosition: number | null;
   attendingCount: number;
+  /** Ticket buyers without an account; only computed for those who can manage. */
+  guestBuyerCount: number;
   pendingInvite: boolean;
   isOfficial: boolean;
   /** Whether the event has ticket tiers at all — decides where the map goes. */
@@ -63,6 +65,7 @@ export default function JamView({
     userId,
     waitlistPosition,
     attendingCount,
+    guestBuyerCount,
     pendingInvite,
     isOfficial,
     hasTicketTiers,
@@ -205,7 +208,7 @@ export default function JamView({
         />
       )}
       {canManage && <JamInviteList jamId={jamId} invites={inviteList} />}
-      {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
+      {canManage && <JamHostActions jamId={jamId} isHost={isHost} isOfficial={isOfficial} attendingCount={attendingCount + guestBuyerCount} pendingInviteCount={inviteList.filter((inv) => inv.status === "pending").length} />}
     </div>
   );
 }
