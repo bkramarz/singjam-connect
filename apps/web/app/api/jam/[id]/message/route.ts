@@ -5,6 +5,7 @@ import { canManageJam } from "@/lib/jamAuthz";
 import { resend, FROM_ADDRESS } from "@/lib/resend";
 import { jamHostMessageHtml } from "@/emails/jam-host-message";
 import { isJamCohost } from "@/lib/jamCohosts";
+import { guestTicketBuyers } from "@/lib/jamGuestBuyers";
 
 export async function POST(
   req: Request,
@@ -71,10 +72,14 @@ export async function POST(
       ]);
       const email = authData.user?.email;
       if (email) {
-        recipientMap.set(email, (profile as any)?.display_name ?? (profile as any)?.username ?? null);
+        recipientMap.set(email.toLowerCase(), (profile as any)?.display_name ?? (profile as any)?.username ?? null);
       }
     })
   );
+
+  for (const [email, name] of await guestTicketBuyers(admin, jamId)) {
+    if (!recipientMap.has(email)) recipientMap.set(email, name);
+  }
 
   // If "all_invited", also include pending invitees
   if (audience === "all_invited") {
@@ -91,12 +96,12 @@ export async function POST(
             admin.from("profiles").select("display_name, username").eq("id", inv.invited_user_id).single(),
             admin.auth.admin.getUserById(inv.invited_user_id),
           ]);
-          const email = authData.user?.email;
+          const email = authData.user?.email?.toLowerCase();
           if (email && !recipientMap.has(email)) {
             recipientMap.set(email, (profile as any)?.display_name ?? (profile as any)?.username ?? null);
           }
-        } else if (inv.invitee_email && !recipientMap.has(inv.invitee_email)) {
-          recipientMap.set(inv.invitee_email, null);
+        } else if (inv.invitee_email && !recipientMap.has(inv.invitee_email.toLowerCase())) {
+          recipientMap.set(inv.invitee_email.toLowerCase(), null);
         }
       })
     );

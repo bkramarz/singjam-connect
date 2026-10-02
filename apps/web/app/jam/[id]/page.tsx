@@ -4,6 +4,7 @@ import { getServerSupabase, getServerUser } from "@/lib/supabase/cached";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { claimJamInvite } from "@/lib/claimJamInvite";
 import { canManageJam } from "@/lib/jamAuthz";
+import { guestTicketBuyers } from "@/lib/jamGuestBuyers";
 import { formatJamDate } from "@/lib/formatJamTime";
 import JamView, { type InviteEntry } from "@/components/JamView";
 import { type JamCardData } from "@/components/JamCard";
@@ -122,9 +123,11 @@ export default async function JamPage({
   const canInvite = !!userId && !isOfficial && (canManage || (isAttending && jam.guests_can_invite));
 
   let inviteList: InviteEntry[] = [];
+  let guestBuyerCount = 0;
   let alreadyInvitedIds: string[] = [];
 
   if (canManage) {
+    guestBuyerCount = (await guestTicketBuyers(admin, id)).size;
     const { data: rawInvites } = await supabase
       .from("jam_invites")
       .select("id, invited_user_id, invitee_email, status")
@@ -193,6 +196,7 @@ export default async function JamPage({
         rsvpStatus,
         waitlistPosition,
         attendingCount,
+        guestBuyerCount,
         pendingInvite,
         isOfficial,
         hasTicketTiers: (tierRes.count ?? 0) > 0,
