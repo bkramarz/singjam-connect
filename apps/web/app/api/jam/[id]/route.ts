@@ -4,7 +4,8 @@ import { canManageJam } from "@/lib/jamAuthz";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { createNotification } from "@/lib/notifications";
-import { resend, FROM_ADDRESS } from "@/lib/resend";
+import { FROM_ADDRESS } from "@/lib/resend";
+import { sendBulkEmail } from "@/lib/sendBulkEmail";
 import { jamCancelledHtml } from "@/emails/jam-cancelled";
 import { jamUpdatedHtml } from "@/emails/jam-updated";
 import { buildIcs } from "@/lib/ics";
@@ -99,33 +100,34 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { data: profiles } = await admin.from("profiles").select("id, display_name, username").in("id", uniqueMemberIds);
   const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
-  await Promise.allSettled([
-    ...uniqueMemberIds.map(async (uid: string) => {
+  const memberEmails = await Promise.all(
+    uniqueMemberIds.map(async (uid: string) => {
       const profile = profileMap.get(uid);
-      const { data: authData } = await admin.auth.admin.getUserById(uid);
-      const email = authData.user?.email;
-      const recipientName = profile?.display_name ?? profile?.username ?? null;
-
-      await Promise.allSettled([
-        createNotification({ userId: uid, type: "jam_updated", title: `${jamName ?? "A jam"} has been updated`, link: `/jam/${id}` }),
-        email ? resend.emails.send({
-          from: FROM_ADDRESS,
-          to: email,
-          subject: `Update: ${jamName ?? "A jam you're attending"}`,
-          html: jamUpdatedHtml({ name: recipientName, jamName, jamUrl, timeChanged, locationChanged, newStartsAt: starts_at, newLocation, timezone }),
-          attachments: icsAttachment,
-        }) : Promise.resolve(),
+      const [{ data: authData }] = await Promise.all([
+        admin.auth.admin.getUserById(uid),
+        createNotification({ userId: uid, type: "jam_updated", title: `${jamName ?? "A jam"} has been updated`, link: `/jam/${id}` }).catch(() => {}),
       ]);
-    }),
-    ...nonMemberEmails.map((email: string) =>
-      resend.emails.send({
+      return { email: authData.user?.email, name: profile?.display_name ?? profile?.username ?? null };
+    })
+  );
+
+  await sendBulkEmail([
+    ...memberEmails
+      .filter((m) => m.email)
+      .map((m) => ({
         from: FROM_ADDRESS,
-        to: email,
-        subject: `Update: ${jamName ?? "A jam you're invited to"}`,
-        html: jamUpdatedHtml({ name: null, jamName, jamUrl, timeChanged, locationChanged, newStartsAt: starts_at, newLocation, timezone }),
+        to: m.email!,
+        subject: `Update: ${jamName ?? "A jam you're attending"}`,
+        html: jamUpdatedHtml({ name: m.name, jamName, jamUrl, timeChanged, locationChanged, newStartsAt: starts_at, newLocation, timezone }),
         attachments: icsAttachment,
-      })
-    ),
+      })),
+    ...nonMemberEmails.map((email: string) => ({
+      from: FROM_ADDRESS,
+      to: email,
+      subject: `Update: ${jamName ?? "A jam you're invited to"}`,
+      html: jamUpdatedHtml({ name: null, jamName, jamUrl, timeChanged, locationChanged, newStartsAt: starts_at, newLocation, timezone }),
+      attachments: icsAttachment,
+    })),
   ]);
 
   return NextResponse.json({ ok: true });
@@ -179,28 +181,30 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
-  await Promise.allSettled(allNotifyIds.map(async (uid: string) => {
+  const recipients = await Promise.all(allNotifyIds.map(async (uid: string) => {
     const isHost = uid === user.id;
     const profile = profileMap.get(uid);
-    const { data: authData } = await admin.auth.admin.getUserById(uid);
-    const email = authData.user?.email;
-    const name = profile?.display_name ?? profile?.username ?? null;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://singjam.org";
-
-    await Promise.allSettled([
+    const [{ data: authData }] = await Promise.all([
+      admin.auth.admin.getUserById(uid),
       isHost ? Promise.resolve() : createNotification({
         userId: uid,
         type: "jam_cancelled",
         title: `${jam.name ?? "A jam you were attending"} has been cancelled`,
-      }),
-      email ? resend.emails.send({
-        from: FROM_ADDRESS,
-        to: email,
-        subject: `${jam.name ?? "A jam"} has been cancelled`,
-        html: jamCancelledHtml({ name, jamName: jam.name, startsAt: jam.starts_at, timezone: (jam as any).timezone, isHost }),
-      }) : Promise.resolve(),
+      }).catch(() => {}),
     ]);
+    return { email: authData.user?.email, name: profile?.display_name ?? profile?.username ?? null, isHost };
   }));
+
+  await sendBulkEmail(
+    recipients
+      .filter((r) => r.email)
+      .map((r) => ({
+        from: FROM_ADDRESS,
+        to: r.email!,
+        subject: `${jam.name ?? "A jam"} has been cancelled`,
+        html: jamCancelledHtml({ name: r.name, jamName: jam.name, startsAt: jam.starts_at, timezone: (jam as any).timezone, isHost: r.isHost }),
+      }))
+  );
 
   return NextResponse.json({ ok: true });
 }
