@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { canManageJam } from "@/lib/jamAuthz";
-import { resend, FROM_ADDRESS } from "@/lib/resend";
+import { FROM_ADDRESS } from "@/lib/resend";
+import { sendBulkEmail } from "@/lib/sendBulkEmail";
 import { jamHostMessageHtml } from "@/emails/jam-host-message";
 import { isJamCohost } from "@/lib/jamCohosts";
 import { guestTicketBuyers } from "@/lib/jamGuestBuyers";
@@ -107,16 +108,17 @@ export async function POST(
     );
   }
 
-  await Promise.all(
-    Array.from(recipientMap.entries()).map(([email, name]) =>
-      resend.emails.send({
-        from: FROM_ADDRESS,
-        to: email,
-        subject: `[${jamName}] ${subject}`,
-        html: jamHostMessageHtml({ recipientName: name, hostName, jamName, jamUrl, subject, body: message }),
-      })
-    )
+  const { sent, failed } = await sendBulkEmail(
+    Array.from(recipientMap.entries()).map(([email, name]) => ({
+      from: FROM_ADDRESS,
+      to: email,
+      subject: `[${jamName}] ${subject}`,
+      html: jamHostMessageHtml({ recipientName: name, hostName, jamName, jamUrl, subject, body: message }),
+    }))
   );
 
-  return NextResponse.json({ sent: recipientMap.size });
+  if (sent === 0 && failed > 0) {
+    return NextResponse.json({ error: "Your message couldn't be sent. Please try again." }, { status: 502 });
+  }
+  return NextResponse.json({ sent, failed });
 }

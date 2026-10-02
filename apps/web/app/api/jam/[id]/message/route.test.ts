@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockEmailSend, mockFrom, mockGetUserById, mockCanManage } = vi.hoisted(() => ({
+const { mockGetUser, mockEmailSend, mockBatchSend, mockFrom, mockGetUserById, mockCanManage } = vi.hoisted(() => ({
+  mockBatchSend: vi.fn(),
   mockCanManage: vi.fn(),
   mockGetUser: vi.fn(),
   mockEmailSend: vi.fn().mockResolvedValue({ id: "email-id" }),
@@ -15,7 +16,12 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/resend", () => ({
-  resend: { emails: { send: mockEmailSend } },
+  resend: {
+    emails: { send: mockEmailSend },
+    batch: {
+      send: (emails: object[]) => mockBatchSend(emails),
+    },
+  },
   FROM_ADDRESS: "SingJam <hello@singjam.org>",
 }));
 
@@ -42,6 +48,10 @@ const params = Promise.resolve({ id: "test-jam-id" });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockBatchSend.mockImplementation(async (emails: object[]) => {
+    emails.forEach((e) => mockEmailSend(e));
+    return { data: { data: emails.map(() => ({ id: "email-id" })) }, error: null };
+  });
   mockCanManage.mockResolvedValue(true);
 });
 
@@ -221,6 +231,20 @@ describe("POST /api/jam/[id]/message", () => {
     expect(body.sent).toBe(2);
     const recipients = mockEmailSend.mock.calls.map((c) => c[0].to).sort();
     expect(recipients).toEqual(["guest@example.com", "member@example.com"]);
+  });
+
+  it("reports an error instead of success when every send fails", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "host-id" } } });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "jams") return jamRow("host-id");
+      if (table === "profiles") return profileRow("Alice");
+      if (table === "tickets") return ticketRows([guestTicket("guest@example.com", "Gina")]);
+      return emptyTable();
+    });
+    mockBatchSend.mockResolvedValueOnce({ data: null, error: { name: "application_error", message: "down" } });
+
+    const res = await POST(makeRequest({ subject: "Hey", message: "Hi" }), { params });
+    expect(res.status).toBe(502);
   });
 });
 
