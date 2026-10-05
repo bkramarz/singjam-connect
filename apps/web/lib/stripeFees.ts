@@ -13,9 +13,18 @@ export type FeeOrder = {
 const CONCURRENCY = 8;
 
 async function lookupFee(paymentIntentId: string): Promise<number | null> {
-  const pi = await stripe().paymentIntents.retrieve(paymentIntentId, {
-    expand: ["latest_charge.balance_transaction"],
-  });
+  let pi: Stripe.PaymentIntent;
+  try {
+    pi = await stripe().paymentIntents.retrieve(paymentIntentId, {
+      expand: ["latest_charge.balance_transaction"],
+    });
+  } catch (e) {
+    // A test-mode payment written to the production database while testing
+    // checkout locally. The live account never charged it, so its fee is zero —
+    // retrying would flag the total as incomplete on every load, forever.
+    if ((e as Stripe.errors.StripeError)?.code === "resource_missing") return 0;
+    throw e;
+  }
   const charge = pi.latest_charge as Stripe.Charge | null;
   const bt = charge?.balance_transaction as Stripe.BalanceTransaction | null | undefined;
   return bt && typeof bt === "object" ? bt.fee : null;
