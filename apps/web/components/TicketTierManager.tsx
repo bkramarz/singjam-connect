@@ -59,6 +59,9 @@ type Summary = {
   tickets_sold: number;
   orders: number;
   gross_cents: number;
+  fee_cents: number;
+  net_cents: number;
+  fees_pending: number;
   currency: string;
   checked_in: number;
 };
@@ -197,12 +200,18 @@ function TierFields({
   );
 }
 
+// Counts on the first row, money on the second. Two up on a phone with net
+// across the full width: at three, a gross of $1,234.00 ran straight into the
+// next tile.
+const STAT_GRID = "grid grid-cols-2 gap-3 sm:grid-cols-6";
+const STAT_SPANS = ["sm:col-span-3", "sm:col-span-3", "sm:col-span-2", "sm:col-span-2", "col-span-2 sm:col-span-2"];
+
 export function TicketManagerSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true">
-      <div className="grid grid-cols-3 gap-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-xl border border-zinc-200 p-3">
+      <div className={STAT_GRID}>
+        {STAT_SPANS.map((span, i) => (
+          <div key={i} className={`rounded-xl border border-zinc-200 p-3 ${span}`}>
             <div className="h-3 w-16 animate-pulse rounded bg-zinc-100" />
             <div className="mt-2 h-6 w-12 animate-pulse rounded bg-zinc-200" />
           </div>
@@ -415,32 +424,35 @@ export default function TicketTierManager({
   return (
     <div className="space-y-6">
       {summary && (
-        // Two up on a phone: at three, a gross of $1,234.00 ran straight into
-        // the next tile.
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-zinc-200 p-3">
-            <p className="text-xs font-medium tracking-wide text-zinc-500">Tickets sold</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">{summary.tickets_sold}</p>
+        <div className="space-y-2">
+          <div className={STAT_GRID}>
+            {[
+              { label: "Tickets sold", value: String(summary.tickets_sold) },
+              { label: "Checked in", value: `${summary.checked_in}/${summary.tickets_sold}` },
+              { label: "Gross", value: money(summary.gross_cents, summary.currency) },
+              { label: "Stripe fees", value: money(summary.fee_cents, summary.currency) },
+              { label: "Net", value: money(summary.net_cents, summary.currency) },
+            ].map((stat, i) => (
+              <div key={stat.label} className={`rounded-xl border border-zinc-200 p-3 ${STAT_SPANS[i]}`}>
+                <p className="text-xs font-medium tracking-wide text-zinc-500">{stat.label}</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">{stat.value}</p>
+              </div>
+            ))}
           </div>
-          <div className="rounded-xl border border-zinc-200 p-3">
-            <p className="text-xs font-medium tracking-wide text-zinc-500">Gross</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">
-              {money(summary.gross_cents, summary.currency)}
+          {summary.fees_pending > 0 ? (
+            <p className="text-xs text-amber-700">
+              Stripe hasn&apos;t settled the fee on {summary.fees_pending}{" "}
+              {summary.fees_pending === 1 ? "order" : "orders"} yet, so net may be a little high. Reload
+              later to update it.
             </p>
-          </div>
-          <div className="rounded-xl border border-zinc-200 p-3">
-            <p className="text-xs font-medium tracking-wide text-zinc-500">Checked in</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums text-zinc-900 sm:text-2xl">
-              {summary.checked_in}/{summary.tickets_sold}
-            </p>
-          </div>
+          ) : (
+            summary.fee_cents > 0 && (
+              <p className="text-xs text-zinc-400">
+                Fees include any Stripe kept on refunded orders. Payouts are in the Stripe Dashboard.
+              </p>
+            )
+          )}
         </div>
-      )}
-
-      {summary && summary.gross_cents > 0 && (
-        <p className="text-xs text-zinc-400">
-          Gross before Stripe fees. Payouts and fees are in the Stripe Dashboard.
-        </p>
       )}
 
       <section className="space-y-3">

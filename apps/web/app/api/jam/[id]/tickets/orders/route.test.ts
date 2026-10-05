@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockGetUser, mockAdminFrom, mockFetchAllRows, mockCanManage } = vi.hoisted(() => ({
+const { mockGetUser, mockAdminFrom, mockFetchAllRows, mockCanManage, mockResolveFees } = vi.hoisted(() => ({
   mockCanManage: vi.fn(),
+  mockResolveFees: vi.fn(),
   mockGetUser: vi.fn(),
   mockAdminFrom: vi.fn(),
   mockFetchAllRows: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@singjam/core", () => ({ fetchAllRows: mockFetchAllRows }));
 
 vi.mock("@/lib/jamAuthz", () => ({ canManageJam: mockCanManage }));
+vi.mock("@/lib/stripeFees", () => ({ resolveStripeFees: mockResolveFees }));
 
 import { GET } from "./route";
 
@@ -68,6 +70,7 @@ beforeEach(() => {
   mockAdminFrom.mockReset();
   mockCanManage.mockResolvedValue(true);
   mockFetchAllRows.mockResolvedValue([]);
+  mockResolveFees.mockResolvedValue({ feeCents: 0, pending: 0 });
 });
 
 describe("GET /api/jam/[id]/tickets/orders", () => {
@@ -186,7 +189,23 @@ describe("GET /api/jam/[id]/tickets/orders", () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
     mockAdminFrom.mockReturnValueOnce(chain({ data: { host_user_id: HOST } }));
     await GET(req(), params);
-    // A door list that silently truncates would leave paying attendees off it.
-    expect(mockFetchAllRows).toHaveBeenCalledTimes(1);
+    // A door list that silently truncates would leave paying attendees off it,
+    // and a capped fee lookup would overstate the net.
+    expect(mockFetchAllRows).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports Stripe fees and the net after them", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: HOST } } });
+    mockAdminFrom.mockReturnValueOnce(chain({ data: { host_user_id: HOST } }));
+    mockFetchAllRows
+      .mockResolvedValueOnce([ticket({ id: "t1", order_id: "o1" })])
+      .mockResolvedValueOnce([{ id: "o1", stripe_payment_intent_id: "pi_1", stripe_fee_cents: null }]);
+    mockResolveFees.mockResolvedValue({ feeCents: 117, pending: 1 });
+
+    const json = await (await GET(req(), params)).json();
+    expect(mockResolveFees).toHaveBeenCalledWith(expect.anything(), [
+      { id: "o1", stripe_payment_intent_id: "pi_1", stripe_fee_cents: null },
+    ]);
+    expect(json.summary).toMatchObject({ gross_cents: 3000, fee_cents: 117, net_cents: 2883, fees_pending: 1 });
   });
 });
