@@ -4,6 +4,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseFromBearer } from "@/lib/supabase/bearer";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { canManageJam } from "@/lib/jamAuthz";
+import { resolveStripeFees, type FeeOrder } from "@/lib/stripeFees";
 
 // The host's guest list and sales summary. Host or co-host only — this exposes
 // buyer names, emails and amounts paid.
@@ -119,12 +120,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
   const grossCents = [...orderTotals.values()].reduce((sum, o) => sum + o.amount, 0);
 
+  // Refunded orders count too: Stripe keeps its fee when a charge is refunded,
+  // so leaving them out would overstate the net.
+  const feeOrders = await fetchAllRows<FeeOrder>(
+    (from, to) =>
+      admin
+        .from("ticket_orders")
+        .select("id, stripe_payment_intent_id, stripe_fee_cents")
+        .eq("jam_id", jamId)
+        .in("status", ["paid", "refunded"])
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: FeeOrder[] | null; error?: any }>
+  );
+  const { feeCents, pending: feesPending } = await resolveStripeFees(admin, feeOrders);
+
   return NextResponse.json({
     guests,
     summary: {
       tickets_sold: guests.length,
       orders: orderTotals.size,
       gross_cents: grossCents,
+      fee_cents: feeCents,
+      net_cents: grossCents - feeCents,
+      fees_pending: feesPending,
       currency: [...orderTotals.values()][0]?.currency ?? "usd",
       checked_in: guests.filter((g) => g.checked_in_at).length,
     },
