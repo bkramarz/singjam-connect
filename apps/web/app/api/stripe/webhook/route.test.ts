@@ -306,9 +306,11 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(mockSyncContact).toHaveBeenCalledTimes(1);
     // Checkout has one Name field, so it is split rather than dumped into first.
+    // No account, so no SingJam App User tag.
     expect(mockSyncContact.mock.calls[0]).toEqual([
       "buyer@example.com",
       { firstName: "Ada", lastName: "Lovelace" },
+      { tag: false },
     ]);
   });
 

@@ -65,22 +65,28 @@ const GENRE_MAP: Record<string, string> = {
   "Spiritual": "Non-denominational sacred music",
 };
 
+// AC occasionally rejects a single call with a 429 or 5xx in the middle of an
+// otherwise healthy sync, so those are retried before being reported as failures.
+const RETRY_DELAYS_MS = [1000, 3000];
+
 async function acFetch(path: string, options: RequestInit) {
   if (!AC_API_URL || !AC_API_KEY) return null;
-  const res = await fetch(`${AC_API_URL}/api/3${path}`, {
-    ...options,
-    headers: {
-      "Api-Token": AC_API_KEY,
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
-  const text = await res.text();
-  if (!res.ok) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${AC_API_URL}/api/3${path}`, {
+      ...options,
+      headers: {
+        "Api-Token": AC_API_KEY,
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+    const text = await res.text();
+    if (res.ok) return text ? JSON.parse(text) : {};
+    const retryable = res.status === 429 || res.status >= 500;
     console.error(`[ActiveCampaign] ${options.method ?? "GET"} ${path} → ${res.status}`, text);
-    return null;
+    if (!retryable || attempt >= RETRY_DELAYS_MS.length) return null;
+    await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
   }
-  return text ? JSON.parse(text) : {};
 }
 
 export interface ContactProfile {
@@ -94,8 +100,14 @@ export interface ContactProfile {
 
 // Upserts the contact, subscribes to all lists, applies the SingJam App User tag,
 // and syncs any profile fields provided. Safe to call on every signup and profile save.
+// Pass `tag: false` for people without an account (guest ticket buyers who opted
+// in) — the tag means "has a SingJam account".
 // Returns an array of failure descriptions — empty means fully successful.
-export async function syncContact(email: string, profile: ContactProfile = {}): Promise<string[]> {
+export async function syncContact(
+  email: string,
+  profile: ContactProfile = {},
+  { tag = true }: { tag?: boolean } = {}
+): Promise<string[]> {
   if (!AC_API_URL || !AC_API_KEY) return [];
 
   const fieldValues: { field: string; value: string }[] = [];
@@ -174,7 +186,9 @@ export async function syncContact(email: string, profile: ContactProfile = {}): 
     subscribeIfAllowed("1"),
     subscribeIfAllowed("4"),
     subscribeIfAllowed("9"),
-    acFetch("/contactTags", { method: "POST", body: JSON.stringify({ contactTag: { contact: contactId, tag: TAG_ID } }) }),
+    tag
+      ? acFetch("/contactTags", { method: "POST", body: JSON.stringify({ contactTag: { contact: contactId, tag: TAG_ID } }) })
+      : Promise.resolve(true),
   ]);
 
   const failed = [
