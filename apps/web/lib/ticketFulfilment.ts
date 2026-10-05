@@ -145,7 +145,7 @@ export async function fulfilPendingOrder(
       await syncContact(updated.buyer_email, {
         ...(firstName ? { firstName } : {}),
         ...(rest.length ? { lastName: rest.join(" ") } : {}),
-      });
+      }, { tag: false });
     } catch (e) {
       console.error("mailing list sync failed", updated.id, e);
     }
