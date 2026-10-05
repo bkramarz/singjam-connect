@@ -62,6 +62,16 @@ describe("resolveStripeFees", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("caches a zero fee for a payment the live account never made", async () => {
+    const { admin, update } = adminMock();
+    mockRetrieve.mockRejectedValue(Object.assign(new Error("No such payment_intent"), { code: "resource_missing" }));
+    const out = await resolveStripeFees(admin, [
+      { id: "o1", stripe_payment_intent_id: "pi_test", stripe_fee_cents: null },
+    ]);
+    expect(out).toEqual({ feeCents: 0, pending: 0 });
+    expect(update).toHaveBeenCalledWith({ stripe_fee_cents: 0 });
+  });
+
   it("counts a failed lookup as pending instead of failing the page", async () => {
     const { admin } = adminMock();
     mockRetrieve.mockRejectedValueOnce(new Error("rate limited")).mockResolvedValueOnce(pi(75));
